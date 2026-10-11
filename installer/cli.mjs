@@ -3,10 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Agents, Detect } from './agents.mjs';
-import { Cmd, Hint, Install, Opt } from './constants.mjs';
+import { Cmd, Hint, Install, Opt, Policy } from './constants.mjs';
 import { Files } from './files.mjs';
 import { Runtime } from './runtime.mjs';
 import { Browser } from './browser.mjs';
+import { PolicyFile } from './policy.mjs';
 
 export class Cli {
   static ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,12 +15,17 @@ export class Cli {
     const command = args[0]?.startsWith('--') ? 'help' : args.shift() || 'help';
     if (!Install.COMMANDS.includes(command)) throw new Error(`Unknown command: ${command}`);
     const options = { scope: 'project', project: process.cwd(), browser: 'chrome', language: Intl.DateTimeFormat().resolvedOptions().locale.startsWith('zh') ? 'zh-CN' : 'en' };
+    const policy = command === Cmd.POLICY;
+    if (policy && args[0] && !args[0].startsWith('--')) options.action = args.shift();
+    if (options.action === Policy.ACTION.DEFAULT && args[0] && !args[0].startsWith('--')) options.value = args.shift();
+    const values = policy ? [...Install.VALUES, ...Policy.VALUES] : Install.VALUES;
+    const flags = policy ? [...Install.FLAGS, ...Policy.FLAGS] : Install.FLAGS;
     while (args.length) {
       const token = args.shift();
       if (!token.startsWith('--')) throw new Error(`Unexpected argument: ${token}`);
       const key = token.slice(2);
-      if (Install.FLAGS.includes(key)) options[key] = true;
-      else if (Install.VALUES.includes(key) && args[0] && !args[0].startsWith('--')) options[key] = args.shift();
+      if (flags.includes(key)) options[key] = true;
+      else if (values.includes(key) && args[0] && !args[0].startsWith('--')) options[key] = args.shift();
       else throw new Error(`Unknown or missing option: --${key}`);
     }
     if (!['project', 'user'].includes(options.scope)) throw new Error('Scope must be project or user');
@@ -29,10 +35,10 @@ export class Cli {
   }
   static help(language) {
     if (language === 'zh-CN') {
-      console.log(`Tether 安装器（Windows、Node 22+、Python 3.10+）\n\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [选项]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n\n选项：\n  --agent LIST|auto      省略或 auto：检测本机已安装的 Agent 并全部配置\n  --scope project|user   默认项目范围\n  --project PATH         项目配置/Skill 目录（默认当前目录）\n  --home PATH            持久安装目录（默认 LOCALAPPDATA/Tether）\n  --runtime PATH         复用已配置的 prototype 目录\n  --python PATH          创建独立环境的 Python 解释器\n  --language en|zh-CN    MCP 描述及初始化提示语言\n  --no-register          跳过 HKCU 原生主机注册\n  --open-browser         打开扩展管理页。install 默认会打开，除非 --no-open\n  --no-open              install 成功后不打开浏览器\n  --dry-run              只预览路径，不写入或启动进程\n\n已有冲突的 MCP/Skill 会保留并报告。\n扩展需要手动启用开发者模式并加载已解压的扩展程序。\n安装器不会启动 Broker。根包尚未发布到 npm 公共仓库。\nupgrade 替换运行目录源码并保留 .local 与 .venv，不修改 Agent 配置，也不重新生成凭据。\ninstall 遇到旧版本运行目录时不会覆盖，请运行 tether upgrade。`);
+      console.log(`Tether 安装器（Windows、Node 22+、Python 3.10+）\n\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [选项]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n  tether policy list|add|remove|default|reset|path [选项]\n\n选项：\n  --agent LIST|auto      省略或 auto：检测本机已安装的 Agent 并全部配置\n  --scope project|user   默认项目范围\n  --project PATH         项目配置/Skill 目录（默认当前目录）\n  --home PATH            持久安装目录（默认 LOCALAPPDATA/Tether）\n  --runtime PATH         复用已配置的 prototype 目录\n  --python PATH          创建独立环境的 Python 解释器\n  --language en|zh-CN    MCP 描述及初始化提示语言\n  --no-register          跳过 HKCU 原生主机注册\n  --open-browser         打开扩展管理页。install 默认会打开，除非 --no-open\n  --no-open              install 成功后不打开浏览器\n  --dry-run              只预览路径，不写入或启动进程\n\n策略（<runtime>/.local/policy.json，Broker 热加载，无需重启）：\n  tether policy list [--runtime PATH | --home PATH]                查看当前策略，未配置时输出默认并注明全放行\n  tether policy add --effect allow|deny|ask --actions a,b|* [--origin URL] [--client ID] [--id ID] [--first]\n  tether policy remove --id ID                                     删除规则\n  tether policy default allow|deny                                 设置默认效果\n  tether policy reset                                              删除策略文件，恢复全放行\n  tether policy path                                               打印策略文件路径\n\n已有冲突的 MCP/Skill 会保留并报告。\n扩展需要手动启用开发者模式并加载已解压的扩展程序。\n安装器不会启动 Broker。根包尚未发布到 npm 公共仓库。\nupgrade 替换运行目录源码并保留 .local 与 .venv，不修改 Agent 配置，也不重新生成凭据。\ninstall 遇到旧版本运行目录时不会覆盖，请运行 tether upgrade。`);
       return;
     }
-    console.log(`Tether installer (Windows, Node 22+, Python 3.10+)\n\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [options]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n\nOptions:\n  --agent LIST|auto      Omit or auto: detect and configure every installed agent\n  --scope project|user   Default: project\n  --project PATH         Project config/skill destination (default: current directory)\n  --home PATH            Durable installation home (default: LOCALAPPDATA/Tether)\n  --runtime PATH         Reuse an already configured prototype directory\n  --python PATH          Python executable for a fresh isolated venv\n  --language en|zh-CN    MCP descriptions and setup messages\n  --no-register          Skip HKCU Native Messaging registration\n  --open-browser         Open the extension manager. Install does this unless --no-open\n  --no-open              Do not open the browser after install\n  --dry-run              Print paths/plan without writes or processes\n\nExisting conflicting MCP entries/skills are preserved and reported.\nBrowser extension loading needs Developer mode + Load unpacked.\nInstallation never starts Broker. npm registry publication is not yet available.\nupgrade replaces runtime source, keeps .local and .venv, and does not change agent config or regenerate credentials.\ninstall does not overwrite an older runtime; run tether upgrade.`);
+    console.log(`Tether installer (Windows, Node 22+, Python 3.10+)\n\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [options]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n  tether policy list|add|remove|default|reset|path [options]\n\nOptions:\n  --agent LIST|auto      Omit or auto: detect and configure every installed agent\n  --scope project|user   Default: project\n  --project PATH         Project config/skill destination (default: current directory)\n  --home PATH            Durable installation home (default: LOCALAPPDATA/Tether)\n  --runtime PATH         Reuse an already configured prototype directory\n  --python PATH          Python executable for a fresh isolated venv\n  --language en|zh-CN    MCP descriptions and setup messages\n  --no-register          Skip HKCU Native Messaging registration\n  --open-browser         Open the extension manager. Install does this unless --no-open\n  --no-open              Do not open the browser after install\n  --dry-run              Print paths/plan without writes or processes\n\nPolicy (<runtime>/.local/policy.json, hot-reloaded by the Broker, no restart needed):\n  tether policy list [--runtime PATH | --home PATH]                Show the current policy; prints the default when unset\n  tether policy add --effect allow|deny|ask --actions a,b|* [--origin URL] [--client ID] [--id ID] [--first]\n  tether policy remove --id ID                                     Delete a rule\n  tether policy default allow|deny                                 Set the default effect\n  tether policy reset                                              Delete the policy file (allow everything)\n  tether policy path                                               Print the policy file path\n\nExisting conflicting MCP entries/skills are preserved and reported.\nBrowser extension loading needs Developer mode + Load unpacked.\nInstallation never starts Broker. npm registry publication is not yet available.\nupgrade replaces runtime source, keeps .local and .venv, and does not change agent config or regenerate credentials.\ninstall does not overwrite an older runtime; run tether upgrade.`);
   }
   static resolve(options, find = Detect.find) {
     const raw = options.agent;
@@ -84,10 +90,48 @@ export class Cli {
     console.log(JSON.stringify({ runtime, valid, checks, broker: 'not-probed-or-started', browser: Browser.plan(options.browser, runtime) }, null, 2));
     return valid ? 0 : 1;
   }
+  static policy(runtime, options) {
+    const zh = options.language === 'zh-CN';
+    const action = options.action;
+    if (!Policy.COMMANDS.includes(action)) throw new Error(`Unknown policy action: ${action ?? '(missing)'}. Use ${Policy.COMMANDS.join('|')}`);
+    const file = PolicyFile.file(runtime);
+    if (!fs.existsSync(path.dirname(file))) throw new Error(zh ? `运行目录未安装：${path.dirname(file)}。请先运行 ${Hint.INSTALL}。` : `Runtime is not installed: ${path.dirname(file)}. Run ${Hint.INSTALL} first.`);
+    if (action === Policy.ACTION.PATH) { console.log(file); return 0; }
+    if (action === Policy.ACTION.LIST) {
+      const missing = !fs.existsSync(file);
+      console.log(JSON.stringify(PolicyFile.load(file), null, 2));
+      if (missing) console.log(zh ? '未配置，默认全放行。' : 'Not configured; everything is allowed by default.');
+      return 0;
+    }
+    if (action === Policy.ACTION.RESET) {
+      PolicyFile.reset(file);
+      console.log(zh ? '已删除策略文件，恢复全放行。' : 'Policy file removed; everything is allowed.');
+      return 0;
+    }
+    const data = PolicyFile.load(file);
+    if (action === Policy.ACTION.ADD) {
+      const rule = PolicyFile.rule(options, PolicyFile.nextId(data));
+      PolicyFile.save(file, PolicyFile.add(data, rule, Boolean(options[Policy.KEY.FIRST])));
+      console.log(zh ? `已添加规则 ${rule[Policy.KEY.ID]}` : `Added rule ${rule[Policy.KEY.ID]}`);
+      return 0;
+    }
+    if (action === Policy.ACTION.REMOVE) {
+      if (!options[Policy.KEY.ID]) throw new Error(zh ? '缺少 --id。' : 'Missing --id.');
+      PolicyFile.save(file, PolicyFile.remove(data, options[Policy.KEY.ID]));
+      console.log(zh ? `已删除规则 ${options[Policy.KEY.ID]}` : `Removed rule ${options[Policy.KEY.ID]}`);
+      return 0;
+    }
+    if (action !== Policy.ACTION.DEFAULT) throw new Error(`Unknown policy action: ${action}`);
+    if (!Policy.DEFAULTS.includes(options.value)) throw new Error(zh ? `默认效果只能是 allow 或 deny，收到：${options.value ?? '(空)'}` : `Default effect must be allow or deny, got: ${options.value ?? '(missing)'}`);
+    PolicyFile.save(file, { ...data, [Policy.KEY.DEFAULT]: options.value });
+    console.log(zh ? `默认效果已设为 ${options.value}` : `Default effect set to ${options.value}`);
+    return 0;
+  }
   static async main(args) {
     const { command, options } = Cli.parse([...args]);
     if (command === 'help') { Cli.help(options.language); return 0; }
     const runtime = Cli.root(options);
+    if (command === Cmd.POLICY) return Cli.policy(runtime, options);
     if (command === 'doctor') return Cli.doctor(runtime, options);
     if (command === 'extension') {
       if (!fs.existsSync(path.join(runtime, 'extension', 'manifest.json'))) throw new Error('Extension not installed. Run install first or provide --runtime.');

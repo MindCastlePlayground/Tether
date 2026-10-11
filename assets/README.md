@@ -1,5 +1,7 @@
 # Tether identity
 
+[简体中文](README.zh-CN.md) · [Brand verification](branding-verification.md) / [品牌验收](branding-verification.zh-CN.md)
+
 Tether connects agents and scripts to the browser people already use. The mark folds a teal tether around a navy stem, forming a lowercase **t**. Its gap represents a connection between two distinct sides.
 
 - Name: **Tether**

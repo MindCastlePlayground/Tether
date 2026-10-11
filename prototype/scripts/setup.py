@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import ipaddress
 import json
+import locale
 import secrets
 import os
 import subprocess
@@ -18,6 +19,18 @@ class Setup:
     DESCRIPTION = 'Tether local browser connection'
     ROOT = Path(__file__).resolve().parents[1]
     LOCAL = ROOT / '.local'
+    TEXT = {
+        'en': {'exists': 'Configuration already exists.', 'created': 'Configuration created; extension ID: '},
+        'zh-CN': {'exists': '配置已存在。', 'created': '配置已创建；扩展程序 ID：'},
+    }
+
+    @staticmethod
+    def language():
+        selected = os.environ.get('BB_LANGUAGE')
+        if selected is not None:
+            return selected if selected in ('en', 'zh-CN') else 'en'
+        system = locale.getlocale()[0] or ''
+        return 'zh-CN' if system.lower().startswith('zh') else 'en'
 
     @classmethod
     def run(cls):
@@ -26,7 +39,7 @@ class Setup:
         subprocess.run(['icacls', str(cls.LOCAL), '/inheritance:r', '/grant:r',
                         f'{identity}:(OI)(CI)F', 'SYSTEM:(OI)(CI)F'], check=True, stdout=subprocess.DEVNULL)
         if (cls.LOCAL / 'broker.json').exists():
-            print('configuration_exists')
+            print(cls.TEXT[cls.language()]['exists'])
             return
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cls.NAME)])
@@ -64,7 +77,7 @@ class Setup:
         (cls.LOCAL/'broker.json').write_text(json.dumps(broker),encoding='utf-8')
         manifest = {'name':'com.freebird.browser_bridge','description':cls.DESCRIPTION,'path':str(cls.LOCAL/'host.exe'),'type':'stdio','allowed_origins':[f'chrome-extension://{ext_id}/']}
         (cls.LOCAL/'native-host.json').write_text(json.dumps(manifest),encoding='utf-8')
-        print('configuration_created; extension_id='+ext_id)
+        print(cls.TEXT[cls.language()]['created']+ext_id)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,6 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
+$language = if ($null -ne $env:BB_LANGUAGE) { if ($env:BB_LANGUAGE -ceq 'zh-CN') { 'zh-CN' } else { 'en' } } elseif ([Globalization.CultureInfo]::CurrentCulture.Name.StartsWith('zh')) { 'zh-CN' } else { 'en' }
+$text = @{ en = 'Launchers created.'; 'zh-CN' = '启动器已创建。' }
 $root = Split-Path $PSScriptRoot -Parent
 $node = (Get-Command node.exe).Source
 $local = Join-Path $root '.local'
@@ -27,7 +29,7 @@ class Launch {
     p.UseShellExecute=false; p.CreateNoWindow=true;
     p.RedirectStandardInput=true; p.RedirectStandardOutput=true; p.RedirectStandardError=true;
     p.EnvironmentVariables.Clear();
-    foreach(var name in new[]{"SystemRoot","WINDIR","TEMP","TMP","USERPROFILE","LOCALAPPDATA","APPDATA"}) {
+    foreach(var name in new[]{"SystemRoot","WINDIR","TEMP","TMP","USERPROFILE","LOCALAPPDATA","APPDATA","BB_LANGUAGE"}) {
       var value=Environment.GetEnvironmentVariable(name); if(value!=null)p.EnvironmentVariables[name]=value;
     }
     p.EnvironmentVariables["BB_CLIENT_CONFIG"]=@"$client";
@@ -48,4 +50,4 @@ class Launch {
 "@
   Add-Type -TypeDefinition $source -OutputAssembly $out -OutputType ConsoleApplication
 }
-Write-Output 'launchers_created'
+Write-Output $text[$language]

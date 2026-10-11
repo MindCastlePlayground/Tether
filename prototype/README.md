@@ -2,9 +2,13 @@
 
 <p align="center"><img src="../assets/logo.png" alt="Tether" width="160"></p>
 
-[简体中文](README.zh-CN.md) · [Project overview](../README.md)
+[简体中文](README.zh-CN.md) · [Project overview](../README.md) · [Internationalization](../docs/I18N.md)
 
 This guide covers the current local prototype. The evidence boundary and remaining gaps are recorded in [VERIFICATION.md](VERIFICATION.md).
+
+Language and contributor references: [M0 plan](PLAN.md) / [简体中文计划](PLAN.zh-CN.md), [verification](VERIFICATION.md) / [简体中文验收记录](VERIFICATION.zh-CN.md), and [internationalization guide](../docs/I18N.md) / [国际化指南](../docs/I18N.zh-CN.md).
+
+The popup uses Chrome locale messages for English and Simplified Chinese, follows the browser language until the user chooses a language, and stores that choice locally. See the [internationalization guide](../docs/I18N.md) for the locale and translation workflow.
 
 ## What is implemented
 
@@ -125,3 +129,5 @@ node scripts/lan-smoke.mjs
 ```
 
 `native-smoke.mjs` uses the real native executable with a simulated extension peer; run it only while the real extension is disconnected. Tests do not bypass real toolbar authorization. `network-sample.ps1` takes a small number of TCP endpoint snapshots; it is not packet capture or proof of zero external traffic. See [VERIFICATION.md](VERIFICATION.md) for the dated acceptance results and their limits.
+
+MCP tool descriptions and setup/register/launcher status messages also support `BB_LANGUAGE=en` or `BB_LANGUAGE=zh-CN`; see the internationalization guide for configuration.

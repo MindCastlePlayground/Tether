@@ -18,23 +18,32 @@
     label{display:flex;align-items:flex-start;gap:8px;font-weight:600}input{accent-color:var(--teal);margin-top:5px;flex-shrink:0}
     .label{font-size:12px;color:var(--muted);margin-bottom:5px}.url{font-weight:600;margin:5px 0 10px}
     button{border:1px solid transparent;border-radius:8px;padding:8px 11px;cursor:pointer;font:600 13px/1.4 "Segoe UI",sans-serif}
-    button:focus-visible,input:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
+    button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
     .approve{background:var(--teal);color:white}.approve:hover{background:#00696c}
     .deny{background:#edf3f5;color:var(--ink);margin-left:6px}.deny:hover{border-color:#b8cdd3}
     .tab{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);margin:6px 0}
     .tab:hover{border-color:var(--teal)}
     .tab strong,.tab span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .tab span{font-size:12px;color:var(--muted);margin-top:3px}.hint{font-size:12px;line-height:1.55;color:var(--muted);margin:8px 0}
+    .locale{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    select{max-width:210px;border:1px solid var(--line);border-radius:6px;padding:6px;color:var(--ink);background:white;font:inherit}
     footer{font-size:11px;color:var(--muted);margin-top:20px;padding-top:12px;border-top:1px solid var(--line)}
   </style>
 </head>
 <body>
   <header>
     <img src="icons/icon-128.png" alt="" width="48" height="48">
-    <div><h1>Tether</h1><p>Your browser. Connected.</p></div>
+    <div><h1>Tether</h1><p data-i18n="tagline">Your browser. Connected.</p></div>
   </header>
-  <main id="items"><div class="empty">Checking for access requests…</div></main>
-  <footer>Manage who can use your browser tabs.</footer>
+  <div class="locale"><label for="language" data-i18n="language">Language</label>
+    <select id="language">
+      <option value="auto" data-i18n="auto">Follow browser</option>
+      <option value="en" data-i18n="english">English</option>
+      <option value="zh-CN" data-i18n="chinese">简体中文</option>
+    </select>
+  </div>
+  <main id="items"><div class="empty" data-i18n="loading">Checking for access requests…</div></main>
+  <footer data-i18n="footer">Manage who can use your browser tabs.</footer>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

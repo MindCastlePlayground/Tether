@@ -2,9 +2,13 @@
 
 <p align="center"><img src="../assets/logo.png" alt="Tether 标志" width="160"></p>
 
-[English](README.md) · [项目介绍](../README.zh-CN.md)
+[English](README.md) · [项目介绍](../README.zh-CN.md) · [国际化指南](../docs/I18N.zh-CN.md)
 
-最小原型已经实现。最终验收状态见 [VERIFICATION.md](VERIFICATION.md)；`evidence/` 分开保存模拟测试、真实协议测试和真实浏览器测试，失败记录不会算作通过。
+最小原型已经实现。最终验收状态见 [VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)；`evidence/` 分开保存模拟测试、真实协议测试和真实浏览器测试，失败记录不会算作通过。
+
+语言与协作文档：[M0 计划](PLAN.zh-CN.md) / [English plan](PLAN.md)、[验收记录](VERIFICATION.zh-CN.md) / [English verification](VERIFICATION.md)，以及[国际化指南](../docs/I18N.zh-CN.md) / [Internationalization guide](../docs/I18N.md)。
+
+弹窗使用 Chrome 语言消息支持英文和简体中文；用户未手动选择时跟随浏览器语言，手动选择保存在本机。语言目录和翻译流程见[国际化指南](../docs/I18N.zh-CN.md)。
 
 ## 实现内容
 
@@ -125,3 +129,5 @@ node scripts/lan-smoke.mjs
 ```
 
 `native-smoke.mjs` 使用真实 native exe 和模拟扩展对端；仅在真实扩展未连接时运行。测试不绕过真实工具栏授权。`network-sample.ps1` 只做少量 TCP 端点采样，不是抓包或零外传证明。验收日期、结果和证据限制见 [VERIFICATION.md](VERIFICATION.md)。
+
+MCP 工具说明和初始化、注册、启动器生成提示也支持 `BB_LANGUAGE=en` 或 `BB_LANGUAGE=zh-CN`；配置方法见国际化指南。

@@ -1,5 +1,7 @@
 # M0 implementation and verification
 
+[简体中文](PLAN.zh-CN.md) · [Prototype guide](README.md)
+
 Scope: existing Chrome/Edge only, MV3 Native Messaging extension, local TLS WebSocket broker/host, isolated workspace grants, TypeScript/Python clients and stdio MCP. No launched browser/profile; no browser download. Live checks only use local synthetic test pages. This prototype is not the complete M1.
 
 Stages: implement → local security/integration tests → register native host and load extension in existing browser → user popup approval → live tab/group/action/isolation tests → report exact evidence and remaining gates.

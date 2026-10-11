@@ -1,45 +1,47 @@
-# M0 验收记录
+# M0 Verification Record
 
-日期：2026-10-11。此文件随真实浏览器测试更新；构建和模拟通过不代表端到端通过。
+[简体中文](VERIFICATION.zh-CN.md) · [Prototype guide](README.md)
 
-| 项目 | 当前证据 | 结论 |
+Date: 2026-10-11. This record accompanies real-browser testing; a passing build or simulation does not establish end-to-end success. The results below are historical evidence from that date. The documentation internationalization changes add no new test evidence.
+
+| Area | Evidence | Result |
 |---|---|---|
-| 构建 | TypeScript 编译成功 | 通过 |
-| Node 综合测试 | `evidence/node-tests.txt`，30/30；包括 fake Chrome 授权测试、默认自动新建/接管/开关/撤销、真实 TLS、限帧、请求去重、传输异步回复 | 通过，部分为模拟 |
-| Python SDK | `evidence/python-tests.json`，5/5；真实 Broker 连续调用、坏凭据、发送 HTTP 前校验证书 pin、代理绕过 | 通过 |
-| MCP | `evidence/mcp.json`；真实 `.local/mcp.exe` + 官方 MCP Client，列出 12 工具并调用 capabilities；下述真实页面流程也通过 | 通过 |
-| Native Messaging 可执行程序 | `evidence/native.json`；真实 EXE、长度前缀分片、往返、EOF 退出、错误来源拒绝；扩展对端模拟 | 传输通过 |
-| 现有 Chrome 扩展连接 | 用户加载扩展后，真实 Broker 返回 `browserConnected: true`；没有启动浏览器或 profile；自动接管原有标签成功 | 通过 |
-| 新建标签组 / 已有标签 / MCP 页面控制 | `evidence/live-{newGroup,attachExisting}-{node,mcp}.json`；4 条流程均成功：默认自动授权、读取、填表、点击并检查保存文本、附加页创建/关闭、释放 | 真实 Chrome 通过 |
-| 已有页面生命周期 | 两个 attachExisting 实测均保留原分组；释放后同一 tabId 仍存在 | 通过 |
-| 授权隔离 | 真实 Chrome 拒绝其他 client 使用本会话/page，拒绝另一个 client 同时接管已占用 tab，释放后观察拒绝；模拟另覆盖组迁移、popup 来源、断线、租约和工具栏撤销 | 真实核心隔离通过；部分边界仅模拟 |
-| LAN 接口 | `evidence/lan.json`；本机经 `192.168.3.7:18450` 调用成功，错误源 CIDR、LAN 上的 Native Host 角色拒绝 | 同机 LAN 路径通过；第二台机器未验 |
-| 无预期外传 | `evidence/network-sample.json`；4 次原型 Broker/Host/SDK TCP 快照，回环外连接为 0；同时检查扩展 CSP、数字内网地址、证书 pin、禁代理/重定向 | 有限证据通过；完整零外传未验收 |
+| Build | TypeScript compilation succeeded | Passed |
+| Node integration tests | `evidence/node-tests.txt`, 30/30; includes FakeChrome authorization tests, default automatic creation/attachment/toggle/revocation, real TLS, frame limits, request deduplication, and asynchronous transport replies | Passed; some tests are simulated |
+| Python SDK | `evidence/python-tests.json`, 5/5; sequential calls to the real Broker, invalid credentials, certificate pin checked before HTTP bytes are sent, and proxy bypass | Passed |
+| MCP | `evidence/mcp.json`; real `.local/mcp.exe` with the official MCP Client listed 12 tools and called capabilities; the live page flows below also passed | Passed |
+| Native Messaging executable | `evidence/native.json`; real EXE, length-prefixed frames, round trip, EOF exit, and rejection of invalid origins; extension peer simulated | Transport passed |
+| Existing Chrome extension connection | After the user loaded the extension, the real Broker returned `browserConnected: true`; no browser or profile was launched; attaching to an existing tab succeeded | Passed |
+| New group / existing tab / MCP page control | `evidence/live-{newGroup,attachExisting}-{node,mcp}.json`; all 4 flows succeeded: default automatic authorization, read, fill, click and verify saved text, create/close attached page, and release | Passed in real Chrome |
+| Existing page lifecycle | Both attachExisting runs preserved the original group; the same tabId remained after release | Passed |
+| Authorization isolation | Real Chrome rejected another client using the session/page, rejected a second client attaching to an occupied tab, and rejected observation after release. Simulations also covered group migration, popup origin, disconnect, lease, and toolbar revocation | Core isolation passed in real Chrome; some boundaries simulated only |
+| LAN endpoint | `evidence/lan.json`; local calls through `192.168.3.7:18450` succeeded; invalid source CIDR and the Native Host role over LAN were rejected | Same-machine LAN path passed; a second machine was not tested |
+| No unexpected egress | `evidence/network-sample.json`; four TCP endpoint snapshots of the prototype Broker/Host/SDK showed zero non-loopback connections. Extension CSP, numeric private-network addresses, certificate pinning, and proxy/redirect restrictions were also inspected | Limited evidence passed; complete zero-egress behavior was not verified |
 
-## 实测发现并修复
+## Findings fixed during testing
 
-1. Node SDK 每次请求关闭连接会导致授权随即丢失：改成持久连接。
-2. TLS pin 必须在发送 Authorization 前校验：Node/Python 均已验证失败 pin 不产生 HTTP 字节/upgrade。
-3. Python TLS 重复包装：已修复并真实往返测试。
-4. Windows .NET 启动器在 stdin 管道前写入 UTF-8 BOM，MCP 无法解析：设置无 BOM 编码、二进制流转发并刷新；真实 EXE 握手通过。
-5. popup sender 取值、重复批准、组迁移、撤销时序、断连重连：已修复并模拟验证。
-6. Chrome debugger 不支持 Browser domain：版本改取扩展环境 userAgent，未知 revision/jsVersion 留空，需要重新加载扩展才能用于真实验收。
-7. 实际创建标签组成功后，Playwright 因同步 transport 回复先于内部回调登记而断言退出。改为 microtask 异步分发，回归和最终真实页面操作均通过。
-8. Playwright 点击前需要 `DOM.scrollIntoViewIfNeeded`：加入页面级白名单。
-9. `noDefaults` 关闭了 Playwright 默认页面焦点模拟，后台页点击等待稳定性超时：在已授权页面显式设置 `Emulation.setFocusEmulationEnabled`，四条真实浏览器流程随后通过。未启用浏览器全局默认配置，未使用 force 点击绕过检查。
+1. The Node SDK closed the connection after each request, immediately losing authorization; it now keeps a persistent connection.
+2. The TLS pin must be checked before sending Authorization; Node and Python both verified that an invalid pin sends no HTTP bytes or upgrade request.
+3. Duplicate Python TLS wrapping was fixed and tested with a real round trip.
+4. The Windows .NET launcher wrote a UTF-8 BOM before the stdin pipe, preventing MCP parsing. BOM-free encoding, binary stream forwarding, and flushing fixed the real EXE handshake.
+5. Popup sender handling, duplicate approval, group migration, revocation timing, and disconnect/reconnect were fixed and simulation-tested.
+6. Chrome debugger does not support the Browser domain. Version metadata now comes from the extension userAgent; unknown revision/jsVersion fields remain empty. Reloading the extension is required for real acceptance.
+7. After a tab group was successfully created, Playwright asserted because the synchronous transport reply arrived before its internal callback was registered. Microtask-based asynchronous dispatch fixed it; regression and final live page actions passed.
+8. Playwright requires `DOM.scrollIntoViewIfNeeded` before clicking; it was added to the page-scoped allowlist.
+9. `noDefaults` disabled Playwright's default page-focus emulation, causing a stability timeout on background-page clicks. Explicit `Emulation.setFocusEmulationEnabled` on authorized pages fixed all four real browser flows. Browser-wide defaults were not enabled and force-click was not used to bypass checks.
 
-第 6、7 项修复均已随最终真实浏览器测试复验通过。新建及已有标签默认放行是用户明确更新的策略，仍要求有效客户端凭据；关闭开关会停止自动批准及标签枚举，但不会自动撤销已有会话。M0 开关未持久化，扩展重新加载恢复默认开启。
+Fixes 6 and 7 were rechecked with the final real-browser tests. Automatically allowing new groups and specified existing tabs was an explicit user policy update and still requires valid client credentials. Turning the switch off stops automatic approval and tab enumeration, but does not revoke existing sessions. The M0 switch was not persisted; reloading the extension restores automatic approval by default.
 
-## 不算已验证的内容
+## Not verified
 
-- Python SDK 已通过真实 Broker 安全/连续调用测试；Python 直接执行页面动作尚未单独验收。页面动作验收入口为 Node SDK 和官方 MCP Client。
-- 没有通过另一台 LAN 主机实测，没有修改防火墙，没有公网监听。
-- TCP 采样不是抓包，未覆盖短暂连接、UDP、所有依赖内部路径或浏览器本体同步/上报。不能据此承诺整个现有浏览器 profile 严格零外传。
-- 未验证真实 Edge、Chrome 重启/扩展 service worker 崩溃残留、真实拖入拖出、Debugger 争用、工具栏手动关闭开关及撤销的完整真实 UI 流程、OOPIF；M0 不开放 OOPIF 自动连接、文件和弹窗自动授权。
-- 没有向真实模型发送测试网页内容；“Agent 调用”当前指实际 MCP 工具协议调用。其模型侧外传策略由 Agent 部署方式决定。
+- The Python SDK passed real-Broker security and sequential-call tests; direct page actions through Python were not separately accepted. Node SDK and the official MCP Client were used for page-action acceptance.
+- No second LAN machine was tested. No firewall changes or public listener were used.
+- TCP snapshots are not packet capture. They do not cover brief connections, UDP, every dependency's internal paths, or browser sync/reporting. They do not support a claim of strict zero egress for the entire existing browser profile.
+- Real Edge, Chrome restart/service-worker crash residue, real drag-in/drag-out, debugger contention, the complete toolbar toggle/revocation UI flow, and OOPIF were not verified. M0 does not implement automatic OOPIF attachment, file transfer, or automatic popup authorization.
+- Test page content was not sent to a real model. “Agent call” here means an actual MCP tool-protocol call. The model-side egress policy depends on the Agent deployment.
 
-## 复跑与安全
+## Reruns and security
 
-见 README。所有浏览器自动测试只操作本地合成页 `http://127.0.0.1:18444/`。按用户更新要求，新建组及指定已有页默认自动批准；测试代码不直接调用批准函数。真实标签枚举只用于在客户端内找到合成页，不将其他页面列表写入证据。FakeChrome 单元测试里的批准不会影响真实浏览器。
+See the [prototype guide](README.md). All automated browser tests operate only on the local synthetic page at `http://127.0.0.1:18444/`. Under the updated user policy, new groups and specified existing pages are automatically approved; test code does not call the approval function directly. Real tab enumeration is used only within the client to find the synthetic page; other page lists are not written to evidence. Approval in FakeChrome unit tests does not affect the real browser.
 
-本目录 `.local/` 含凭据和私钥，只保留本机当前用户/SYSTEM ACL。报告与日志没有凭据；证据仅含合成数据及操作状态。
+The `.local/` directory contains credentials and private keys and is restricted to the current local user/SYSTEM ACL. Reports and logs contain no credentials; evidence contains only synthetic data and operation status.

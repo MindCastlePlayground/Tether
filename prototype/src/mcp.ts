@@ -4,6 +4,7 @@ import { z } from "zod";
 import { BridgeClient, loadConfig } from "./client.js";
 import { Rpc } from "./client-constants.js";
 import { Brand } from "./protocol.js";
+import { I18n, McpText } from "./i18n.js";
 
 class McpTools {
   static readonly EMPTY = z.object({});
@@ -38,19 +39,20 @@ async function main(): Promise<void> {
   if (!path) throw new Error("missingConfigPath");
   const client = new BridgeClient(await loadConfig(path));
   const server = new Server({ name: Brand.Name, version: Brand.Version }, { capabilities: { tools: {} } });
+  const descriptions = McpText.TOOLS[I18n.language()];
   const tools = [
-    ["requestSession", "Request a session under the extension policy; specify tabId to attach an existing tab", McpTools.SESSION],
-    ["approvalStatus", "Check a pending session request", McpTools.APPROVAL],
-    ["listTabs", "List session tabs", McpTools.TABS],
-    ["createTab", "Create a tab in the session", McpTools.CREATE],
-    ["closeTab", "Close a session-created tab", McpTools.PAGE],
-    ["release", "Release a browser session", McpTools.RELEASE],
-    ["observe", "Read the visible page state", McpTools.OBSERVE],
-    ["fill", "Fill a selector with text", McpTools.FILL],
-    ["click", "Click a selector", McpTools.CLICK],
-    ["navigate", "Navigate a session page", McpTools.NAVIGATE],
-    ["capabilities", "Get supported bridge capabilities", McpTools.EMPTY],
-    ["availableTabs", "List existing HTTP(S) tabs when automatic access is enabled", McpTools.EMPTY],
+    ["requestSession", descriptions.requestSession, McpTools.SESSION],
+    ["approvalStatus", descriptions.approvalStatus, McpTools.APPROVAL],
+    ["listTabs", descriptions.listTabs, McpTools.TABS],
+    ["createTab", descriptions.createTab, McpTools.CREATE],
+    ["closeTab", descriptions.closeTab, McpTools.PAGE],
+    ["release", descriptions.release, McpTools.RELEASE],
+    ["observe", descriptions.observe, McpTools.OBSERVE],
+    ["fill", descriptions.fill, McpTools.FILL],
+    ["click", descriptions.click, McpTools.CLICK],
+    ["navigate", descriptions.navigate, McpTools.NAVIGATE],
+    ["capabilities", descriptions.capabilities, McpTools.EMPTY],
+    ["availableTabs", descriptions.availableTabs, McpTools.EMPTY],
   ] as const;
   server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).ListToolsRequestSchema, async () => ({ tools: tools.map(([name, description], i) => ({ name, description, inputSchema: McpTools.SCHEMAS[i] })) }));
   server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).CallToolRequestSchema, async request => {

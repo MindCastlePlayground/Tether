@@ -1,10 +1,25 @@
 {
-  "at": "2026-10-11T05:27:24.177Z",
+  "at": "2026-10-11T05:47:58.024Z",
   "fixture": "mock extension runtime; no Native Host or Broker",
-  "title": "Tether",
+  "languages": [
+    "en",
+    "zh-CN"
+  ],
+  "states": [
+    "empty",
+    "auto-approval",
+    "pending",
+    "sessions",
+    "tab chooser",
+    "no tabs",
+    "error"
+  ],
+  "persistence": "reload passed",
+  "systemLanguage": "en-US and zh-TW passed",
+  "invalidPreference": "falls back to browser",
+  "localeKeys": 29,
   "logo": "128px loaded",
   "overflow": false,
-  "toggle": "passed",
   "keyboardFocus": "passed",
   "pageErrors": []
 }

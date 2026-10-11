@@ -6,9 +6,11 @@
 
 <p align="center"><strong>连接你的浏览器。</strong></p>
 
-[English](README.md) · [完整原型指南（英文）](prototype/README.md) · [完整原型指南（简体中文）](prototype/README.zh-CN.md) · [验收记录](prototype/VERIFICATION.md)
+[English](README.md) · [完整原型指南（英文）](prototype/README.md) · [完整原型指南（简体中文）](prototype/README.zh-CN.md) · [验收记录](prototype/VERIFICATION.zh-CN.md) · [品牌资源](assets/README.zh-CN.md)
 
 Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的本地客户端控制已运行 Chrome 中明确授予的页面。它不会启动浏览器，也不要求使用独立浏览器 profile。
+
+扩展弹窗通过 Chrome 语言目录支持英文和简体中文。默认跟随浏览器语言；选择项保存在本机。机制及新增语言步骤见[国际化指南](docs/I18N.zh-CN.md) / [英文版](docs/I18N.md)。
 
 ## 功能
 
@@ -43,9 +45,9 @@ npm run build
 
 ## 品牌
 
-Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源](assets/README.md)包含透明原图和扩展图标。
+Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源](assets/README.zh-CN.md)包含透明原图和扩展图标。
 
-<img src="assets/popup-preview.png" alt="使用模拟扩展数据渲染的 Tether 授权弹窗" width="380">
+<img src="assets/popup-preview.zh-CN.png" alt="使用模拟扩展数据渲染的 Tether 授权弹窗" width="380">
 
 *弹窗预览使用模拟数据，不连接运行中的 Broker。*
 
@@ -55,7 +57,11 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 - `prototype/` — 当前扩展、Broker、SDK、MCP 服务、初始化脚本和验收证据。
 - `prototype/README.md` — 完整英文操作指南。
 - `prototype/README.zh-CN.md` — 完整简体中文操作指南。
+- [国际化指南](docs/I18N.zh-CN.md) / [Internationalization guide](docs/I18N.md) — 弹窗语言、语言偏好和翻译流程。
+- [M0 计划](prototype/PLAN.zh-CN.md) / [M0 plan](prototype/PLAN.md)、[验收记录](prototype/VERIFICATION.zh-CN.md) / [verification](prototype/VERIFICATION.md)，以及[品牌验收](assets/branding-verification.zh-CN.md) / [brand verification](assets/branding-verification.md)。
 
 ## 状态
 
-仓库包含可运行原型，以及构建、模拟、协议和真实 Chrome 验收记录。具体通过项与未验证项见[验收记录](prototype/VERIFICATION.md)。Edge、第二台局域网机器和若干 M0 项仍未验收或未实现；现有证据不足以证明整个浏览器 profile 完全没有外部流量。
+仓库包含可运行原型，以及构建、模拟、协议和真实 Chrome 验收记录。具体通过项与未验证项见[验收记录](prototype/VERIFICATION.zh-CN.md)。Edge、第二台局域网机器和若干 M0 项仍未验收或未实现；现有证据不足以证明整个浏览器 profile 完全没有外部流量。
+
+MCP 工具说明和初始化、注册、启动器生成提示也支持 `BB_LANGUAGE=en` 或 `BB_LANGUAGE=zh-CN`；配置方法见国际化指南。

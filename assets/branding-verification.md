@@ -1,6 +1,10 @@
 # Tether branding verification
 
+[简体中文](branding-verification.zh-CN.md) · [Brand assets](README.md)
+
 Date: 2026-10-11.
+
+This is the historical branding verification record. The documentation internationalization changes do not add new test evidence.
 
 - TypeScript build: passed (`npm run build`).
 - Extension behavior: 18 existing FakeChrome simulation tests passed (`node --test --test-reporter=dot test/extension.test.mjs`).

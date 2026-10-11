@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Tether",
+  "name": "__MSG_appName__",
   "version": "0.1.0",
-  "description": "Connect agents and scripts to your existing browser tabs with local, scoped access.",
+  "description": "__MSG_appDescription__",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -13,14 +13,15 @@
     "debugger",
     "nativeMessaging",
     "tabs",
-    "tabGroups"
+    "tabGroups",
+    "storage"
   ],
   "background": {
     "service_worker": "service-worker.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Tether — Browser access",
+    "default_title": "__MSG_title__",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png"
@@ -30,5 +31,6 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAll2ECU+6mupaXXMWI00vn68nIM2WyaqCDnvutZ0o0zDL1B+1fCY5tROhvQncmHycSaL56+R/PI0JeaezuZSIKS+X9NddCYcCIMdHzXk2upfExOUMGxh3tuUzolgn+tEA53fQnqwvxxu0Q5bDr+2Zu2jcw0yC8E3cW2AQi5lLlmGfPzha/T7d0FAyyCdthubaJy4Tza+n4gKRzfy+PCpKrYItjFKJXMDQ3kwNJqA6njNXRDLO7Hsx4wjXCbugWnMHivlZEb0bdu6abV6ZKQ2XIUT2pWexGWS7ISFEerBSrUzs6m82613fECqpSRcH8GSQ5nT95wO9Phr/Ri6+ZS/2uQIDAQAB",
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'"
-  }
+  },
+  "default_locale": "en"
 }

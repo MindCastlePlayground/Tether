@@ -6,10 +6,10 @@ import test from 'node:test';
 import { parse } from 'jsonc-parser';
 import { Cli } from '../installer/cli.mjs';
 import { Files } from '../installer/files.mjs';
-import { Install } from '../installer/constants.mjs';
+import { Cmd, Hint, Install, Opt, Probe } from '../installer/constants.mjs';
 import { Runtime } from '../installer/runtime.mjs';
 import { Browser } from '../installer/browser.mjs';
-import { Agents } from '../installer/agents.mjs';
+import { Agents, Detect } from '../installer/agents.mjs';
 
 class Fixture {
   static root() { return fs.mkdtempSync(path.join(os.tmpdir(), 'tether-install-')); }
@@ -133,6 +133,175 @@ test('setup-time skill edits abort before registration and config mutation', asy
     assert.equal(registrations,0);
     assert.ok(!fs.existsSync(path.join(options.project,'.codex','config.toml')));
   } finally {Runtime.prepare=prepare;Runtime.register=register;}
+});
+
+test('agent detection uses PATH, PATHEXT, and home directories', () => {
+  const home = Fixture.root();
+  const bin = path.join(home, 'bin');
+  const alt = path.join(home, 'alt');
+  const exists = file => files.has(file);
+  let files = new Set();
+  const env = { [Probe.PATH]: [bin, alt].join(path.delimiter), [Probe.PATHEXT]: '.EXE;.CMD;.PS1' };
+  assert.deepEqual(Detect.find(env, home, exists), []);
+  files.add(path.join(bin, Probe.BIN.codex) + '.CMD');
+  files.add(path.join(home, Probe.HOME.claude));
+  files.add(path.join(home, Probe.HOME.cursor));
+  files.add(path.join(home, Probe.HOME.config, Probe.HOME.opencode));
+  files.add(path.join(alt, Probe.BIN.gemini) + '.PS1');
+  assert.deepEqual(Detect.find(env, home, exists), Agents.names);
+  files = new Set([path.join(bin, 'cursor') + '.EXE']);
+  assert.deepEqual(Detect.find(env, home, exists), []);
+  files = new Set([path.join(bin, Probe.BIN.codex) + '.cmd']);
+  assert.deepEqual(Detect.find({ ...env, [Probe.PATHEXT]: '.EXE' }, home, exists), []);
+  const codexHome = path.join(home, 'codex-home');
+  files = new Set([codexHome]);
+  assert.deepEqual(Detect.find({ [Probe.PATH]: '', [Probe.CODEX_HOME]: codexHome }, home, exists), ['codex']);
+  const xdg = path.join(home, 'xdg');
+  files = new Set([path.join(xdg, Probe.HOME.opencode)]);
+  assert.deepEqual(Detect.find({ [Probe.PATH]: '', [Probe.CONFIG_HOME]: xdg }, home, exists), ['opencode']);
+  files = new Set([path.join(bin, Probe.BIN.opencode)]);
+  assert.deepEqual(Detect.find({ [Probe.PATH]: bin, [Probe.PATHEXT]: '' }, home, exists), ['opencode']);
+});
+
+test('parse accepts auto, no-open, and upgrade', () => {
+  const none = Cli.parse(['install', '--dry-run']);
+  assert.equal(none.options.agent, undefined);
+  assert.equal(none.options[Opt.NO_OPEN], undefined);
+  const auto = Cli.parse(['install', '--agent', Opt.AUTO, '--no-open', '--open-browser']);
+  assert.equal(auto.options.agent, Opt.AUTO);
+  assert.equal(auto.options[Opt.NO_OPEN], true);
+  assert.equal(auto.options[Install.OPTION.OPEN], true);
+  assert.equal(Cli.parse([Cmd.UPGRADE, '--language', 'zh-CN']).command, Cmd.UPGRADE);
+  assert.deepEqual(Cli.resolve({ agent: Opt.AUTO, language: 'en' }, () => ['codex', 'opencode']).names, ['codex', 'opencode']);
+  assert.equal(Cli.resolve({ agent: 'codex,claude', language: 'en' }, () => []).detected, false);
+  assert.throws(() => Cli.resolve({ language: 'en' }, () => []), new RegExp(Opt.AGENT));
+  const lines = [];
+  const log = console.log;
+  console.log = text => lines.push(text);
+  try { Cli.help('en'); Cli.help('zh-CN'); }
+  finally { console.log = log; }
+  const help = lines.join('\n');
+  assert.match(help, new RegExp(Cmd.UPGRADE));
+  assert.match(help, new RegExp(Opt.NO_OPEN));
+  assert.match(help, /auto/);
+  assert.match(help, /检测到 Agent|省略或 auto/);
+});
+
+test('install opens the browser unless no-open or dry-run, and a missing browser does not fail', async () => {
+  const root = Fixture.root();
+  const project = path.join(root, 'project');
+  const runtime = path.join(root, 'runtime');
+  const prepare = Runtime.prepare;
+  const register = Runtime.register;
+  const open = Browser.open;
+  const calls = [];
+  const log = console.log;
+  const logs = [];
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    Runtime.prepare = () => {};
+    Runtime.register = () => {};
+    Browser.open = async plan => { calls.push(plan.url); };
+    const args = ['install', '--agent', 'codex', '--project', project, '--runtime', runtime, '--language', 'en'];
+    assert.equal(await Cli.main(args), 0);
+    assert.equal(calls.length, 1);
+    assert.equal(await Cli.main([...args, '--open-browser']), 0);
+    assert.equal(calls.length, 2);
+    assert.equal(await Cli.main([...args, '--no-open', '--open-browser']), 0);
+    assert.equal(calls.length, 2);
+    assert.equal(await Cli.main([...args, '--dry-run']), 0);
+    assert.equal(calls.length, 2);
+    Browser.open = async () => { throw new Error('Browser executable not found. Open chrome://extensions/ manually'); };
+    assert.equal(await Cli.main(args), 0);
+    assert.match(logs.join('\n'), /Browser executable not found/);
+  } finally {
+    Runtime.prepare = prepare;
+    Runtime.register = register;
+    Browser.open = open;
+    console.log = log;
+  }
+});
+
+test('dry-run without --agent prints detected agents and writes nothing', async () => {
+  const root = Fixture.root();
+  const find = Detect.find;
+  const log = console.log;
+  const logs = [];
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    Detect.find = () => ['codex', 'claude', 'opencode'];
+    const code = await Cli.main(['install', '--dry-run', '--project', path.join(root, 'project'), '--home', path.join(root, 'home'), '--language', 'en']);
+    assert.equal(code, 0);
+    assert.match(logs.join('\n'), /Detected agents: codex, claude, opencode/);
+    assert.deepEqual(fs.readdirSync(root), []);
+  } finally {
+    Detect.find = find;
+    console.log = log;
+  }
+});
+
+test('upgrade replaces source, keeps local and venv, and mocks npm and python', () => {
+  const root = Fixture.root();
+  const runtime = path.join(root, 'runtime');
+  const source = path.join(root, 'source');
+  const dirs = new Set(['src', 'extension', 'python']);
+  const seed = (base, text) => {
+    for (const name of Install.SOURCE) {
+      const dest = path.join(base, name);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      if (dirs.has(name)) {
+        fs.mkdirSync(dest, { recursive: true });
+        fs.writeFileSync(path.join(dest, 'mark.txt'), text);
+      } else fs.writeFileSync(dest, text);
+    }
+  };
+  seed(source, 'new');
+  seed(runtime, 'old');
+  fs.writeFileSync(path.join(runtime, 'src', 'stale.js'), 'stale');
+  fs.mkdirSync(path.join(runtime, '.local'), { recursive: true });
+  fs.mkdirSync(path.join(runtime, '.venv'), { recursive: true });
+  fs.writeFileSync(path.join(runtime, '.local', 'broker.json'), 'secret');
+  fs.writeFileSync(path.join(runtime, Install.KEY), JSON.stringify({ id: 'x', key: 'K' }));
+  fs.writeFileSync(path.join(source, Install.MANIFEST), JSON.stringify({ name: 'n' }));
+  fs.writeFileSync(path.join(runtime, '.venv', 'pyvenv.cfg'), 'keep');
+  fs.writeFileSync(path.join(runtime, Install.MARKER), `${JSON.stringify({ version: '0.0.1', ready: true })}\n`);
+  const npm = Runtime.npm;
+  const run = Runtime.run;
+  const calls = [];
+  try {
+    Runtime.npm = (args, cwd) => calls.push(['npm', args, cwd]);
+    Runtime.run = (command, args, cwd) => calls.push(['run', command, args, cwd]);
+    Runtime.upgrade(runtime, source, { language: 'en' });
+    assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'new');
+    assert.equal(Files.read(path.join(runtime, 'README.md')), 'new');
+    assert.equal(fs.existsSync(path.join(runtime, 'src', 'stale.js')), false);
+    assert.equal(Files.read(path.join(runtime, '.local', 'broker.json')), 'secret');
+    assert.equal(Files.read(path.join(runtime, '.venv', 'pyvenv.cfg')), 'keep');
+    assert.equal(Files.json(path.join(runtime, Install.MARKER)).version, Install.VERSION);
+    assert.deepEqual(Files.json(path.join(runtime, Install.MANIFEST)), { name: 'n', key: 'K' });
+    fs.writeFileSync(path.join(source, 'src', 'mark.txt'), 'newer');
+    Runtime.upgrade(runtime, source, { language: 'en' });
+    assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'newer');
+    assert.equal(Files.read(path.join(runtime, '.local', 'broker.json')), 'secret');
+    assert.equal(calls.filter(item => item[0] === 'npm').length, 4);
+    const runs = calls.filter(item => item[0] === 'run').map(item => item[2].join(' '));
+    assert.equal(runs.filter(item => item.includes('pip')).length, 2);
+    assert.equal(runs.filter(item => item.includes('setup.py')).length, 2);
+    assert.ok(calls.every(item => item[0] !== 'run' || item[3] === runtime));
+  } finally {
+    Runtime.npm = npm;
+    Runtime.run = run;
+  }
+  assert.throws(() => Runtime.upgrade(path.join(root, 'missing'), source, {}), new RegExp(Hint.INSTALL));
+  assert.throws(() => Runtime.upgrade(path.join(root, 'empty'), source, {}), new RegExp(Hint.INSTALL));
+  fs.mkdirSync(path.join(root, 'bare'));
+  assert.throws(() => Runtime.upgrade(path.join(root, 'bare'), source, {}), new RegExp(Hint.INSTALL));
+});
+
+test('install refuses an older runtime and points at upgrade', () => {
+  const root = Fixture.root();
+  fs.writeFileSync(path.join(root, Install.MARKER), JSON.stringify({ version: '0.0.0', ready: true }));
+  assert.throws(() => Runtime.prepare(root, root, {}), new RegExp(Hint.UPGRADE));
 });
 
 test('native registration respects opt-out and targets the chosen runtime script', () => {

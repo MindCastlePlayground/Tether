@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Files } from './files.mjs';
-import { Install } from './constants.mjs';
+import { Hint, Install } from './constants.mjs';
 
 export class Runtime {
   static shell() { return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'); }
@@ -28,8 +28,10 @@ export class Runtime {
     if (options.runtime) { Runtime.check(root); return; }
     const marker = path.join(root, Install.MARKER);
     if (fs.existsSync(root)) {
-      if (!fs.existsSync(marker) || Files.json(marker).version !== Install.VERSION) throw new Error(`Runtime directory already exists: ${root}. Use --runtime for a configured checkout, or choose a new --home.`);
-      if (!Files.json(marker).ready) Runtime.finish(root, options);
+      if (!fs.existsSync(marker)) throw new Error(`Runtime directory already exists: ${root}. Use --runtime for a configured checkout, or choose a new --home.`);
+      const meta = Files.json(marker);
+      if (meta.version !== Install.VERSION) throw new Error(`Runtime ${root} is version ${meta.version}. Run ${Hint.UPGRADE}.`);
+      if (!meta.ready) Runtime.finish(root, options);
       Runtime.check(root);
       return;
     }
@@ -39,18 +41,50 @@ export class Runtime {
     for (const name of Install.SOURCE) Files.copy(path.join(source, name), path.join(root, name));
     Runtime.finish(root, options);
   }
-  static finish(root, options) {
+  static py(root) { return path.join(root, '.venv', 'Scripts', 'python.exe'); }
+  static deps(root) {
     Runtime.npm(['ci', '--no-audit', '--no-fund', '--offline=false', `--cache=${path.join(root, '.npm-cache')}`], root);
     Runtime.npm(['run', 'build'], root);
-    const venv = path.join(root, '.venv');
-    Runtime.run(options.python || 'python', ['-m', 'venv', venv], root);
-    const python = path.join(venv, 'Scripts', 'python.exe');
-    Runtime.run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', path.join(root, 'python', 'requirements.txt')], root);
+  }
+  static pip(root) { Runtime.run(Runtime.py(root), ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', path.join(root, 'python', 'requirements.txt')], root); }
+  static swap(root, source) {
+    for (const name of Install.SOURCE) {
+      if (Install.EXCLUDE.includes(path.basename(name))) continue;
+      const dest = path.join(root, name);
+      fs.rmSync(dest, { recursive: true, force: true });
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      Files.copy(path.join(source, name), dest);
+    }
+  }
+  // Keep the extension ID stable: the fresh manifest lacks the key generated at first setup.
+  static key(root) {
+    const pub = path.join(root, Install.KEY);
+    if (!fs.existsSync(pub)) return;
+    const file = path.join(root, Install.MANIFEST);
+    fs.writeFileSync(file, `${JSON.stringify({ ...Files.json(file), key: Files.json(pub).key }, null, 2)}\n`);
+  }
+  static finish(root, options) {
+    Runtime.deps(root);
+    Runtime.run(options.python || 'python', ['-m', 'venv', path.join(root, '.venv')], root);
+    Runtime.pip(root);
     const env = { ...process.env, BB_LANGUAGE: options.language };
-    Runtime.run(python, [path.join(root, 'scripts', 'setup.py')], root, env);
+    Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
     Runtime.ps(path.join(root, 'scripts', 'launchers.ps1'), root, env);
     Runtime.check(root);
     Files.write(path.join(root, Install.MARKER), `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
+  }
+  static upgrade(root, source, options) {
+    if (!fs.existsSync(root)) throw new Error(`Runtime not found: ${root}. Run ${Hint.INSTALL} first.`);
+    const marker = path.join(root, Install.MARKER);
+    if (!fs.existsSync(marker)) throw new Error(`Runtime ${root} has no install marker. Run ${Hint.INSTALL} first.`);
+    Runtime.swap(root, source);
+    Runtime.key(root);
+    Runtime.deps(root);
+    Runtime.pip(root);
+    // setup.py returns immediately when .local/broker.json already exists.
+    const env = { ...process.env, BB_LANGUAGE: options.language };
+    Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+    Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
   }
   static register(root, options) {
     if (!options[Install.OPTION.NO_REGISTER]) Runtime.ps(path.join(root, 'scripts', 'register.ps1'), root, { ...process.env, BB_LANGUAGE: options.language });

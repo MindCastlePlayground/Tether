@@ -3,6 +3,7 @@ import path from 'node:path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml } from 'smol-toml';
 import { isDeepStrictEqual } from 'node:util';
+import { Probe } from './constants.mjs';
 
 class Names {
   static all = ['codex', 'claude', 'cursor', 'opencode', 'gemini'];
@@ -70,6 +71,36 @@ class Config {
     const proposed = `${text}${text && !text.endsWith('\n') ? '\n' : ''}${text.trim() ? '\n' : ''}${lines.join('\n')}\n`;
     try { parseToml(proposed); } catch { throw new Error('Cannot append Tether entry to TOML'); }
     return proposed;
+  }
+}
+
+export class Detect {
+  static onPath(bin, env, exists) {
+    const dirs = String(env[Probe.PATH] || '').split(path.delimiter).filter(Boolean);
+    const exts = String(env[Probe.PATHEXT] || '').split(';').map(item => item.trim()).filter(Boolean);
+    for (const dir of dirs) {
+      const base = path.join(dir, bin);
+      if (exists(base)) return true;
+      for (const ext of exts) {
+        const suffix = ext.startsWith('.') ? ext : `.${ext}`;
+        if (exists(base + suffix)) return true;
+      }
+    }
+    return false;
+  }
+  static find(env, home, exists) {
+    const hit = bin => Detect.onPath(bin, env, exists);
+    const has = (...parts) => exists(path.join(home, ...parts));
+    const [codex, claude, cursor, opencode, gemini] = Names.all;
+    const names = [];
+    const codexHome = env[Probe.CODEX_HOME];
+    const configHome = env[Probe.CONFIG_HOME];
+    if (hit(Probe.BIN.codex) || (codexHome && exists(codexHome)) || has(Probe.HOME.codex)) names.push(codex);
+    if (hit(Probe.BIN.claude) || has(Probe.HOME.claude)) names.push(claude);
+    if (has(Probe.HOME.cursor)) names.push(cursor);
+    if (hit(Probe.BIN.opencode) || (configHome && exists(path.join(configHome, Probe.HOME.opencode))) || has(Probe.HOME.config, Probe.HOME.opencode)) names.push(opencode);
+    if (hit(Probe.BIN.gemini) || has(Probe.HOME.gemini)) names.push(gemini);
+    return names;
   }
 }
 

@@ -19,19 +19,19 @@ The MCP host normally launches `.local/mcp.exe` using an absolute path. For host
 }
 ```
 
-Replace the example path. `BB_LANGUAGE` supports `en` and `zh-CN`; omitted means system locale. The launcher loads `.local/agent.json`. New launchers forward the language variable; older ones must be regenerated as described in `<checkout>/docs/I18N.md` (or `I18N.zh-CN.md`). Starting MCP alone does not start Broker.
+Replace the example path. `BB_LANGUAGE` supports `en` and `zh-CN`; omitted means system locale. The launcher loads `.local/agent.json`. New launchers forward the language variable; older ones must be regenerated as described in `<checkout>/docs/I18N.md` (or `I18N.zh-CN.md`). The MCP server auto-starts Broker when it is not already listening; set `BB_BROKER_AUTOSTART=0` to disable that and manage Broker manually.
 
-With startup authorized, check whether the configured Broker already listens (default loopback port 18443). Start only a missing instance, hidden, from the prototype directory:
+To start Broker yourself instead, check whether the configured instance already listens (default loopback port 18443). Start only a missing instance, hidden, from the prototype directory:
 
 ```powershell
 Start-Process -FilePath (Join-Path (Get-Location) '.local\broker.exe') -WindowStyle Hidden
 ```
 
-If the user asked to keep it stopped, do not run this command. Do not kill another listener or start a duplicate. Open/pin the installed Tether extension; Native Host is started by the extension. After installation or extension source changes the user may need to load/reload it on `chrome://extensions` or `edge://extensions`. Re-check `capabilities` for `browserConnected` after connecting.
+If the user asked to keep it stopped, set `BB_BROKER_AUTOSTART=0` and do not run this command. Do not kill another listener or start a duplicate. Open/pin the installed Tether extension; Native Host is started by the extension. After installation or extension source changes the user may need to load/reload it on `chrome://extensions` or `edge://extensions`. Re-check `capabilities` for `browserConnected` after connecting.
 
 ## Fresh Windows installation
 
-For supported agent setup, prefer the repository root's installer; see [agent installation](install.md). Fresh installation requires Windows, Node.js 22+, and Python 3.10+. The installer keeps Broker stopped. The manual commands below remain available for direct prototype setup or recovery; they do not configure agent MCP entries.
+For supported agent setup, prefer the repository root's installer; see [agent installation](install.md). Fresh installation requires Windows, Node.js 22+, and Python 3.10+. The installer itself keeps Broker stopped; the MCP server auto-starts it on demand (`BB_BROKER_AUTOSTART=0` disables). The manual commands below remain available for direct prototype setup or recovery; they do not configure agent MCP entries.
 
 Requirements: Node.js, Windows PowerShell, Python 3.12, and an existing Chrome/Edge browser. Dependency installation requires registry access. When manual setup is needed:
 

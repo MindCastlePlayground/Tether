@@ -4,6 +4,8 @@
 
 Scope: existing Chrome/Edge only, MV3 Native Messaging extension, local TLS WebSocket broker/host, isolated workspace grants, TypeScript/Python clients and stdio MCP. No launched browser/profile; no browser download. Live checks only use local synthetic test pages. This prototype is not the complete M1.
 
+**Current behavior update:** The implementation also exposes `availableTabs`. To attach to an existing page, a client uses it to find the intended tab and calls `requestSession({mode:'attachExisting',tabId})`. Authenticated clients are automatically approved by default; the toolbar can disable auto-approval, which makes new requests require manual approval and rejects `availableTabs`. Reloading the extension restores the default enabled state. The original approval flow below records the initial plan.
+
 Stages: implement → local security/integration tests → register native host and load extension in existing browser → user popup approval → live tab/group/action/isolation tests → report exact evidence and remaining gates.
 
 Ownership: main agent owns shared protocol, broker/host, installation, Playwright engine adaptation and final integration. Extension agent owns extension/ and extension tests only. Client agent owns src/client.ts, src/mcp.ts, python/, examples/client.ts and client tests only.

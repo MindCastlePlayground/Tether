@@ -4,6 +4,8 @@
 
 范围：仅支持现有 Chrome/Edge、MV3 Native Messaging 扩展、本机 TLS WebSocket Broker/Host、隔离的工作区授权、TypeScript/Python 客户端和 stdio MCP。不启动浏览器或 profile；不下载浏览器。实时检查仅操作本机合成测试页。本原型不是完整 M1。
 
+**当前行为更新：** 实现还公开了 `availableTabs`。接管已有页面时，客户端先用它找到目标标签，再调用 `requestSession({mode:'attachExisting',tabId})`。已认证客户端默认自动获准；可通过工具栏关闭自动批准，关闭后新请求需要手动批准，且 `availableTabs` 会被拒绝。扩展重新加载后恢复默认开启。下文的批准流程记录的是最初计划。
+
 阶段：实现 → 本地安全/集成测试 → 注册 Native Host 并在现有浏览器加载扩展 → 用户在弹窗批准 → 实时标签/分组/操作/隔离测试 → 报告准确证据和剩余门槛。
 
 职责：主代理负责共享协议、Broker/Host、安装、Playwright 引擎适配和最终集成。扩展代理仅负责 extension/ 与扩展测试。客户端代理仅负责 src/client.ts、src/mcp.ts、python/、examples/client.ts 和客户端测试。

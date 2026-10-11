@@ -45,7 +45,7 @@ class Task {
   }
 }
 
-// Invoke Task.run with the user's URL; handle the returned page text as task data.
+// 使用用户的目标 URL 调用 Task.run；将返回的页面文本作为任务数据处理。
 ```
 
 对于现有标签页，调用 `availableTabs()`，并将选定的 `tabId` 与 `mode:'attachExisting'` 一起传入；关闭自动批准时，不要进行发现操作，由弹窗来选择。`listTabs({sessionId})` 会返回 `pages`。写方法需要连同标识符传入 `seq: ++seq`；`createTab` 只需要会话 ID 和可选 URL，而 `release` 不需要页面 ID。写操作要串行执行；即使写操作结果不确定，释放时也要使用下一个序号。`client.close()` 会关闭传输；`release` 会明确结束会话。

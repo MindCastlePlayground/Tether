@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { BlockList } from 'node:net';
 import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { Policy } from './policy.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Config } from './config.js';
 import { Engine } from './engine.js';
-import { Method, Limit, Wire, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
+import { Method, Limit, Wire, Action, Effect, PolicyKey, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
 
 interface Pending {resolve:(v:any)=>void;reject:(e:Error)=>void;timer:NodeJS.Timeout;}
 interface Ledger {high:number; records:Map<number,{body:string,result:Promise<any>,at:number}>; tail:Promise<any>;}
@@ -16,7 +18,8 @@ export class Broker {
   private engine=new Engine((m,p)=>this.forward(m,p));
   private servers:Server[]=[];private sockets=new Set<WebSocket>();
   private timer?:NodeJS.Timeout;
-  constructor(private cfg:any){}
+  private policy:Policy;
+  constructor(private cfg:any,file?:string){this.policy=new Policy(cfg.policyFile??join(file?dirname(file):process.cwd(),PolicyKey.File));}
   async start():Promise<void>{
     const binds=[{ip:'127.0.0.1',port:this.cfg.port,cidrs:['127.0.0.1/32']}];
     if(this.cfg.lan){if(!Config.privateIP(this.cfg.lan.ip)||this.cfg.lan.ip==='127.0.0.1'||!this.cfg.lan.cidrs?.length)throw Error('invalid_lan');binds.push(this.cfg.lan);}
@@ -67,9 +70,24 @@ export class Broker {
   }
   async handle(clientId:string,msg:RPC):Promise<any>{
     if(msg.jsonrpc!==Wire.Version||msg.id===undefined||!msg.method||!PUBLIC.has(msg.method)||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)||Object.hasOwn(msg.params,'clientId'))throw Error('invalid_request');
-    if(msg.method===Method.Capabilities)return {prototype:'M0',browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC],unsupported:['oopif','autoPopup','files','rawCDP','chunks','fullRefProtocol']};
+    if(msg.method===Method.Capabilities)return {prototype:'M0',browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC],unsupported:['oopif','autoPopup','files','rawCDP','chunks','fullRefProtocol'],policy:this.policy.summary()};
     const params:Params={...msg.params,clientId};
-    if(!WRITES.has(msg.method))return this.run(msg.method,params);
+    this.policy.check(clientId,null,null);
+    const action=msg.method===Method.Request?Action.Session:Object.values(Action).find(a=>a===msg.method)??null;
+    let origin:string|null=null;let pages:Params[]|undefined;
+    if(action===Action.Navigate||action===Action.Create||(action===Action.Session&&params.mode===PolicyKey.New))origin=params.url??null;
+    else if([Action.Observe,Action.Fill,Action.Click,Action.Close].includes(action as Action)||(action===Action.Session&&params.mode===PolicyKey.Attach)){
+      try{
+        const tabs=await this.forward(action===Action.Session?Method.Available:Method.Tabs,{clientId,sessionId:params.sessionId});
+        pages=Array.isArray(tabs)?tabs:(tabs?.pages??tabs?.tabs??[]);
+        origin=pages?.find(v=>action===Action.Session?v.tabId===params.tabId:v.pageId===params.pageId)?.url??null;
+      }catch{}
+    }
+    const effect=this.policy.check(clientId,action,origin);
+    if(effect===Effect.Deny)throw Error(PolicyKey.Denied);
+    delete params[PolicyKey.Ask];if(effect===Effect.Ask)params[PolicyKey.Ask]=true;
+    if(!WRITES.has(msg.method))return this.run(msg.method,params,pages);
+    // Writes re-read pages inside the queue so earlier writes in the session are reflected.
     if(typeof params.sessionId!=='string'||!Number.isSafeInteger(params.seq)||params.seq<=0)throw Error('invalid_seq');
     const key=`${clientId}/${params.sessionId}`;let l=this.ledger.get(key);
     if(!l){l={high:0,records:new Map(),tail:Promise.resolve()};this.ledger.set(key,l);}
@@ -80,12 +98,13 @@ export class Broker {
     const result=l.tail.catch(()=>{}).then(()=>{if(!this.clients.has(clientId))throw Error('client_disconnected');return this.run(msg.method!,params);});
     l.tail=result;l.records.set(params.seq,{body,result,at:Date.now()});return result;
   }
-  private async run(method:string,p:Params):Promise<any>{
+  private async run(method:string,p:Params,known?:Params[]):Promise<any>{
     if([Method.Observe,Method.Fill,Method.Click].includes(method as Method)){
-      // Ask authority on every request, even when reusing an engine.
-      const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});
-      const pages=Array.isArray(tabs)?tabs:(tabs.pages??tabs.tabs??[]);
-      if(!pages.some((v:Params)=>v.pageId===p.pageId))throw Error('page_forbidden');
+      // Ask authority on every request, even when reusing an engine. Queued writes re-check policy on fresh state.
+      let pages:Params[]=known??[];
+      if(!known||WRITES.has(method)){const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});pages=Array.isArray(tabs)?tabs:(tabs.pages??tabs.tabs??[]);}
+      const page=pages.find((v:Params)=>v.pageId===p.pageId);if(!page)throw Error('page_forbidden');
+      if(this.policy.check(p.clientId,method as Action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
       if(method!==Method.Observe&&(typeof p.selector!=='string'||p.selector.length>2000||typeof(p.value??'')!=='string'||(p.value??'').length>16000))throw Error('invalid_params');
       try{return await this.engine.run(method,p);}catch{if(method===Method.Observe)throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
     }
@@ -96,6 +115,6 @@ export class Broker {
   async stop():Promise<void>{if(this.timer)clearInterval(this.timer);this.engine.drop();for(const ws of this.sockets)ws.terminate();await Promise.all(this.servers.map(s=>new Promise<void>(r=>s.close(()=>r()))));}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
-  const app=new Broker(Config.load(process.argv[2]));app.start().then(()=>process.stderr.write('broker_ready\n')).catch(()=>{process.stderr.write('broker_start_failed\n');process.exitCode=1;});
+  const app=new Broker(Config.load(process.argv[2]),process.argv[2]);app.start().then(()=>process.stderr.write('broker_ready\n')).catch(()=>{process.stderr.write('broker_start_failed\n');process.exitCode=1;});
   process.on('SIGINT',()=>void app.stop());process.on('SIGTERM',()=>void app.stop());
 }

@@ -12,7 +12,7 @@ node bin/tether.mjs install --agent codex --scope project --project PATH --dry-r
 node bin/tether.mjs install --agent codex --scope project --project PATH
 ```
 
-选择用户使用的宿主：`codex`、`claude`、`cursor`、`opencode` 或 `gemini`；逗号分隔可安装多个。项目范围只修改目标项目；`--scope user` 跨项目安装。不要因为支持所有宿主就替用户全选。`--runtime PATH` 复用已配置的原型。否则 Windows 安装器会在 `%LOCALAPPDATA%\Tether\runtime` 准备持久运行目录、构建 MCP/Native Host 启动器、创建独立 Python 环境，并注册 Chrome/Edge Native Messaging。它不会启动 Broker。已有配置项或 Skill 文件冲突时停止；保留用户改动并解决具体冲突。
+`--agent` 可省略或设为 `auto`，自动检测并配置已安装的宿主（`codex`、`claude`、`cursor`、`opencode`、`gemini`）；也可用逗号分隔的名称限定范围。项目范围只修改目标项目；`--scope user` 跨项目安装。不要因为支持所有宿主就替用户全选。`--runtime PATH` 复用已配置的原型。否则 Windows 安装器会在 `%LOCALAPPDATA%\Tether\runtime` 准备持久运行目录、构建 MCP/Native Host 启动器、创建独立 Python 环境，并注册 Chrome/Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭。安装器本身不会启动 Broker；MCP 服务会在需要时自动拉起，`BB_BROKER_AUTOSTART=0` 可关闭自动拉起。检测到旧版本 runtime 时会提示运行 `tether upgrade`，升级会替换源码并保留 `.local` 和扩展 ID。已有配置项或 Skill 文件冲突时停止；保留用户改动并解决具体冲突。
 
 根包尚未发布到 npm。在已安装 CLI 依赖的检出仓库内，`npm pack --pack-destination work` 会生成 `work/mindcastleplayground-tether-0.1.0.tgz`。npx 用法：
 
@@ -28,4 +28,4 @@ npx --yes --package ./work/mindcastleplayground-tether-0.1.0.tgz tether install 
 node bin/tether.mjs extension --runtime PATH --browser chrome --open-browser
 ```
 
-此处 `PATH` 为已安装 runtime。用户启用开发者模式，点击**加载已解压的扩展程序**并选择其 `extension` 目录。命令可能启动所选浏览器，仅在用户要求配置浏览器时使用。扩展加载与 MCP 工具发现不能证明实时连接成功。遵守保持 Broker 关闭的要求；否则按照[连接设置](setup.zh-CN.md)执行单独获准的启动和 `capabilities` 验证。
+此处 `PATH` 为已安装 runtime。用户启用开发者模式，点击**加载已解压的扩展程序**并选择其 `extension` 目录。命令可能启动所选浏览器，仅在用户要求配置浏览器时使用。扩展加载与 MCP 工具发现不能证明实时连接成功。仅在用户明确要求保持 Broker 停止时设置 `BB_BROKER_AUTOSTART=0`；否则 MCP 服务会在需要时自动拉起 Broker。`capabilities` 验证或手动启动见[连接设置](setup.zh-CN.md)。

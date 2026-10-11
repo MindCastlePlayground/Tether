@@ -19,19 +19,19 @@ MCP 宿主通常通过绝对路径启动 `.local/mcp.exe`。对于接受 `mcpSer
 }
 ```
 
-替换示例路径。`BB_LANGUAGE` 支持 `en` 和 `zh-CN`；省略时使用系统区域设置。启动器会加载 `.local/agent.json`。新启动器会转发语言变量；旧启动器必须按照 `<checkout>/docs/I18N.md`（或 `I18N.zh-CN.md`）中的说明重新生成。仅启动 MCP 不会启动 Broker。
+替换示例路径。`BB_LANGUAGE` 支持 `en` 和 `zh-CN`；省略时使用系统区域设置。启动器会加载 `.local/agent.json`。新启动器会转发语言变量；旧启动器必须按照 `<checkout>/docs/I18N.md`（或 `I18N.zh-CN.md`）中的说明重新生成。Broker 尚未监听时，MCP 服务会自动拉起；设置 `BB_BROKER_AUTOSTART=0` 可关闭自动拉起，改为手动管理 Broker。
 
-在已获准启动的前提下，检查配置的 Broker 是否已在监听（默认环回端口为 18443）。仅当实例未运行时，从原型目录在隐藏窗口中启动：
+如需自行启动，检查配置的 Broker 是否已在监听（默认环回端口为 18443）。仅当实例未运行时，从原型目录在隐藏窗口中启动：
 
 ```powershell
 Start-Process -FilePath (Join-Path (Get-Location) '.local\broker.exe') -WindowStyle Hidden
 ```
 
-如果用户要求保持停止，请勿运行此命令。不要终止其他监听进程，也不要启动重复实例。打开/固定已安装的 Tether 扩展；Native Host 会由扩展启动。安装后或修改扩展源代码后，用户可能需要在 `chrome://extensions` 或 `edge://extensions` 中加载/重新加载扩展。连接后再次检查 `capabilities` 中的 `browserConnected`。
+如果用户要求保持停止，请设置 `BB_BROKER_AUTOSTART=0` 且不要运行此命令。不要终止其他监听进程，也不要启动重复实例。打开/固定已安装的 Tether 扩展；Native Host 会由扩展启动。安装后或修改扩展源代码后，用户可能需要在 `chrome://extensions` 或 `edge://extensions` 中加载/重新加载扩展。连接后再次检查 `capabilities` 中的 `browserConnected`。
 
 ## 全新 Windows 安装
 
-配置支持的 Agent 时，优先使用仓库根目录的安装器，详见[Agent 安装](install.zh-CN.md)。全新安装需要 Windows、Node.js 22+ 和 Python 3.10+；安装器会保持 Broker 停止。下方手动命令仍可用于直接初始化原型或恢复，但不会配置 Agent MCP 项。
+配置支持的 Agent 时，优先使用仓库根目录的安装器，详见[Agent 安装](install.zh-CN.md)。全新安装需要 Windows、Node.js 22+ 和 Python 3.10+；安装器本身会保持 Broker 停止，MCP 服务会在需要时自动拉起（`BB_BROKER_AUTOSTART=0` 可关闭）。下方手动命令仍可用于直接初始化原型或恢复，但不会配置 Agent MCP 项。
 
 要求：Node.js、Windows PowerShell、Python 3.12，以及现有的 Chrome/Edge 浏览器。安装依赖需要访问软件包注册表。需要手动初始化时执行：
 

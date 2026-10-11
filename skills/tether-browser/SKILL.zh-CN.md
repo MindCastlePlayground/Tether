@@ -9,17 +9,17 @@
 - 优先使用已配置的 Tether MCP 工具。工具前缀取决于智能体宿主；请根据下方方法名发现工具，不要假定某个前缀。
 - 缺少安装/配置时，先查看[Agent 安装](references/install.zh-CN.md)。已安装技能可能包含 `installation.json`；若存在，使用其中的 `runtime`、`mcpCommand` 和 `configFile` 定位已安装组件。复制的技能可能位于其他位置：不要根据技能目录推断检出目录，也不要硬编码开发者的盘符路径。
 - 阅读[连接设置](references/setup.zh-CN.md)以排查连接问题或使用手动安装备用流程。仅在 MCP 不可用或用户要求编写代码时阅读[SDK 用法](references/sdk.zh-CN.md)。
-- 调用 `capabilities({})`；浏览器操作需要 `browserConnected: true`。MCP 初始化成功或工具枚举成功，并不能证明 Broker、Native Host 和扩展均已连接。
-- 遵守明确要求保持 Broker 停止的指示。在这种情况下，仅处理配置、文档或离线检查，并说明无法进行实时浏览器控制。不要仅仅因为连接失败就启动它。
+- 调用 `capabilities({})`；浏览器操作需要 `browserConnected: true`。它还会返回 `policy` 摘要（`default`、`rules`、`valid`）。MCP 初始化成功或工具枚举成功，并不能证明 Broker、Native Host 和扩展均已连接。
+- 仅在用户明确要求时保持 Broker 停止；此时为 MCP 启动器设置 `BB_BROKER_AUTOSTART=0`。否则 MCP 服务会在需要时自动拉起 Broker。Broker 停止期间，仅处理配置、文档或离线检查，并说明无法进行实时浏览器控制。不要仅仅因为连接失败就启动它。
 
 ## 获取目标页面
 
 1. 新任务使用 `newGroup`。用用户提供的目标 URL 调用 `requestSession({mode:"newGroup",url:"https://..."})`；只有在空白任务页面有用时才省略 `url`。
 2. 用户指定已有标签页时使用 `attachExisting`。启用自动访问后，调用 `availableTabs({})` 并选择标题/URL 匹配的标签页。将其数字 `tabId` 传给 `requestSession({mode:"attachExisting",tabId})`。如果可能有多个匹配项，先确认用户指的是哪一个，再操作。
-3. 每个请求都会返回 `pendingId`，即使请求已自动批准也是如此。调用 `approvalStatus({pendingId})`；只有 `status:"approved"` 后，才能使用返回的 `sessionId` 和 `pages[].pageId`。浏览器的 `tabId` 与不透明的 `pageId` 是不同标识符。
-4. 如果状态为 `pending`，请告知用户打开 Tether 工具栏弹窗并批准/选择标签页，然后按适合任务的有限等待时间轮询。请求会在 120 秒后过期。用户拒绝后，请求即告结束；不要悄悄重新请求来绕过拒绝。过期后，仅在用户仍希望访问时续请求。
+3. 自动批准生效时，`requestSession` 会直接返回 `status:"approved"` 及 `sessionId`、`pages`、`groupId`；直接使用这些标识符，无需轮询 `approvalStatus`（轮询仍然兼容）。浏览器的 `tabId` 与不透明的 `pageId` 是不同标识符。
+4. 结果为 `pending` 时，请告知用户打开 Tether 工具栏弹窗并批准/选择标签页，然后按适合任务的有限等待时间轮询 `approvalStatus({pendingId})`。请求会在 120 秒后过期。用户拒绝后，请求即告结束；不要悄悄重新请求来绕过拒绝。过期后，仅在用户仍希望访问时续请求。
 
-自动批准默认启用：已认证客户端可以创建任务组并附加到指定的现有 HTTP(S) 标签页。关闭弹窗开关后，`availableTabs` 禁止使用，必须在弹窗中选择现有页面。扩展后台重新加载时该开关会重置为启用。关闭开关不会撤销活动会话；可在弹窗中单独撤销会话。公开的 MCP/SDK 方法无法批准请求或更改此策略。
+自动批准默认启用：已认证客户端可以创建任务组并附加到指定的现有 HTTP(S) 标签页。关闭弹窗开关后，`availableTabs` 禁止使用，必须在弹窗中选择现有页面。开关保存在 `chrome.storage.local`，扩展后台重新加载后仍保持原值。关闭开关不会撤销活动会话；可在弹窗中单独撤销会话。公开的 MCP/SDK 方法无法批准请求或更改此策略。
 
 ## 阅读、操作并验证
 
@@ -50,6 +50,6 @@ MCP 工具结果会在文本内容中包含 JSON。使用标识符/状态前先�
 
 用下一个 `seq` 释放活动会话，然后在此任务拥有 SDK/MCP 连接时关闭它。不要断开由宿主管理、与其他任务共享的 MCP 服务器。仅在用户要求或适当时关闭本会话创建的任务页面；附加的用户页面不能通过 `closeTab` 关闭。释放/断开连接会保留未关闭的页面。
 
-权限按客户端/会话/页面限定，而非按组内所有标签页限定。手动重新分组、撤销权限、浏览器/调试器限制、断开连接和租约过期都可能使标识符失效。遇到 `not_authorized` 时，重新检查会话/页面状态；仅在用户仍希望访问时重新请求授权。遇到 `debugger_busy` 时，说明冲突，不要打断另一个调试器。不要将 `.local` 令牌、私钥和完整配置放入聊天、日志或提交中。不要为了修复连接而关闭 TLS 验证或 SPKI 固定校验。
+权限按客户端/会话/页面限定，而非按组内所有标签页限定。手动重新分组、撤销权限、浏览器/调试器限制、断开连接和租约过期都可能使标识符失效。遇到 `not_authorized` 时，重新检查会话/页面状态；仅在用户仍希望访问时重新请求授权。遇到 `debugger_busy` 时，说明冲突，不要打断另一个调试器。遇到 `policy_denied` 时，表示 Broker 访问规则拒绝了该请求：不得绕过，应向用户说明被拒的操作。遇到 `policy_invalid` 时，表示 Broker 策略文件损坏或非法（fail-closed）：提示用户修复或移除 `<runtime>/.local/policy.json`。不要将 `.local` 令牌、私钥和完整配置放入聊天、日志或提交中。不要为了修复连接而关闭 TLS 验证或 SPKI 固定校验。
 
 当前限制：每个会话最多 10 个任务页面，协议消息上限 512 KiB，不支持通用文件上传/下载，不会自动授权 OOPIF/弹出窗口，也不会自动续期证书。Chrome 已记录实时验收；Edge 和直接使用 Python 执行页面操作的证据较有限。具体边界请参阅 `<checkout>/prototype/VERIFICATION.md`（或 `VERIFICATION.zh-CN.md`）。

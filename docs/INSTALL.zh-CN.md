@@ -8,16 +8,22 @@
 
 ## 从检出目录安装
 
-在仓库根目录安装 CLI 依赖，并选择一个或多个 Agent：
+在仓库根目录一条命令安装（默认自动检测 Agent）：
 
 ```powershell
 npm ci
-node bin/tether.mjs install --agent codex,claude,cursor,opencode,gemini --scope project --project . --language zh-CN --browser chrome
+node bin/tether.mjs install
 ```
 
-必须提供 `--agent`，值为 `codex`、`claude`、`cursor`、`opencode`、`gemini` 中一个或多个逗号分隔名称。默认 `--scope project`，`--project` 默认当前目录。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。它不会启动 Broker。
+`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`，`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；MCP 服务会在需要时自动拉起（见下文）。
 
-安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。若发现冲突的 Tether 配置项或已有技能文件，安装器会停止；没有强制覆盖或升级选项。同一版本重复安装是幂等的。升级支持完成前，安装新版本时请指定新的 `--home`。
+安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。若发现冲突的 Tether 配置项或已有技能文件，安装器会停止；没有强制覆盖选项。同一版本重复安装是幂等的。检测到旧版本 runtime 时，安装器会提示运行 `tether upgrade`：
+
+```powershell
+node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
+```
+
+升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
 
 传入 `--runtime PATH` 可复用已配置的原型目录。此时跳过 runtime 复制、依赖安装、构建、Python 初始化和凭据生成；除非提供 `--no-register`，仍会注册 Native Messaging。`--no-register` 跳过 HKCU 注册。`--python PATH` 指定全新隔离环境使用的 Python，`--language en|zh-CN` 设置 MCP 描述与初始化提示语言。
 
@@ -55,7 +61,41 @@ node bin/tether.mjs extension --runtime "$env:LOCALAPPDATA\Tether\runtime" --bro
 
 启用开发者模式，选择**加载已解压的扩展程序**，再选择显示的扩展目录。这一步需要在浏览器中手动完成；Tether 不会静默安装扩展，也不会发布到浏览器商店。`--browser chrome|edge` 选择打开哪个管理页。
 
-安装后重启/重新加载 Agent，并打开 Tether 工具栏弹窗。Broker 会保持停止，需另行启动。连接故障排查和有意保留的手动配置备用流程见[设置参考](../skills/tether-browser/references/setup.zh-CN.md)和[原型指南](../prototype/README.zh-CN.md)。
+安装后重启/重新加载 Agent，并打开 Tether 工具栏弹窗。Broker 尚未运行时，MCP 服务会自动拉起并最多等待 10 秒；设置 `BB_BROKER_AUTOSTART=0` 可关闭自动拉起，改为手动管理。连接故障排查和有意保留的手动配置备用流程见[设置参考](../skills/tether-browser/references/setup.zh-CN.md)和[原型指南](../prototype/README.zh-CN.md)。
+
+## 权限策略
+
+Broker 默认由策略托管：策略文件为 `<runtime>/.local/policy.json`，文件不存在表示全放行。文件热加载，修改后立即生效。规则按 first-match 匹配：
+
+- `version` — 必须为 `1`。
+- `id` — 规则唯一标识。
+- `client` — `"*"` 或客户端身份。
+- `origin` — `"*"` 或 `scheme://host[:port]`；host 前导 `*.` 匹配子域和裸域。
+- `actions` — `session`、`availableTabs`、`observe`、`fill`、`click`、`navigate`、`createTab`、`closeTab` 或 `"*"`。
+- `effect` — `allow`、`deny` 或 `ask`；`ask` 仅适用于 `actions: ["session"]`。
+- `default` — 无规则匹配时为 `allow` 或 `deny`。
+
+```json
+{
+  "version": 1,
+  "default": "allow",
+  "rules": [
+    { "id": "bank-readonly", "client": "*", "origin": "https://*.bank.com", "actions": ["fill", "click", "navigate"], "effect": "deny" },
+    { "id": "confirm-session", "client": "*", "origin": "*", "actions": ["session"], "effect": "ask" }
+  ]
+}
+```
+
+被拒请求返回 `policy_denied`。文件损坏或非法时，除 `capabilities` 外全部拒绝，错误为 `policy_invalid`（fail-closed）；`capabilities` 返回 `policy: {default, rules, valid}`。排队的写操作在执行时按页面当前 origin 重新检查。`ask` 命中的会话请求不会自动批准，需在弹窗中人工批准。
+
+```powershell
+node bin/tether.mjs policy list
+node bin/tether.mjs policy add --effect deny --actions fill,click,navigate --origin https://*.bank.com [--client C] [--id ID] [--first]
+node bin/tether.mjs policy remove --id ID
+node bin/tether.mjs policy default allow|deny
+node bin/tether.mjs policy path
+node bin/tether.mjs policy reset
+```
 
 ## 本地 tarball 安装
 

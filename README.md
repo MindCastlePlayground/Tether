@@ -34,9 +34,9 @@ Use the [installation guide](docs/INSTALL.md) for the CLI-based Windows setup an
 
 ```powershell
 npm ci
-node bin/tether.mjs install --agent codex --scope project --project .
+node bin/tether.mjs install
 ```
-The installer never starts Broker. Keep generated runtime credentials and private keys on this machine.
+The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; the MCP server auto-starts it when needed. The default policy allows all requests, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
 
 ## Identity
 

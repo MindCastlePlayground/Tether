@@ -29,7 +29,7 @@ npm run build
 .\.local\broker.exe
 ```
 
-`broker.exe` 前台命令适合终端调试；后台启动须使用 `Start-Process -WindowStyle Hidden`。测试页用 `node scripts/fixture.mjs` 启动。服务已经监听时不要重复启动 Broker。
+`broker.exe` 前台命令适合终端调试；后台启动须使用 `Start-Process -WindowStyle Hidden`。Broker 尚未监听时，MCP 服务会自动拉起；`BB_BROKER_AUTOSTART=0` 可关闭自动拉起，改为手动启动。测试页用 `node scripts/fixture.mjs` 启动。服务已经监听时不要重复启动 Broker。
 
 Chrome 打开 `chrome://extensions`，启用开发者模式，加载本目录 `extension/`，并固定 Tether。当前扩展 ID 为 `ojofdihdmmgpnaedmomclpmdkhnmbjln`。扩展后台变更后需在扩展管理页重新加载。Native Host 已注册到当前用户的 Chrome/Edge，但 Edge 本身尚未验收；未更改浏览器启动参数、系统根证书、路由或防火墙。
 
@@ -92,7 +92,7 @@ npm run build
 在现有浏览器中将 `extension/` 作为未打包扩展加载。全新初始化会生成本机扩展密钥/ID 并更新 `manifest.json`；应使用该机器生成的 ID，而不是 README 中历史遗留的 ID。初始化会保留已有配置。为兼容注册流程，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。这些命令不会启动 Broker。
 ## 授权和网络边界
 
-- `newGroup` 默认自动授权已认证身份控制任务页面、创建最多 10 个当前会话页面，以及在这些页面进行 HTTP(S) 导航和网站操作。工具栏可关闭自动批准；关闭后新请求需手工批准。开关当前只在后台存活期间保存，扩展重新加载恢复默认开启。标签组仅用于展示；实际权限按 client/session/page 授予。
+- `newGroup` 默认自动授权已认证身份控制任务页面、创建最多 10 个当前会话页面，以及在这些页面进行 HTTP(S) 导航和网站操作。工具栏可关闭自动批准；关闭后新请求需手工批准。开关保存在 `chrome.storage.local`，扩展重新加载后保持不变。标签组仅用于展示；实际权限按 client/session/page 授予。
 - 自动批准开启时，已认证客户端可用 `availableTabs` 读取已有 HTTP(S) 标签的标题、URL、ID，并用 `attachExisting` 指定 `tabId` 自动接管。`attachExisting` 仅把该指定页面交给会话控制，不是创建新标签组；该页面保留原位置，也不授权同组其他页面。同一页面不能被两个会话同时占用。拖入页面不会得到授权，页面离开授权时的组会撤销。只有本会话创建的页面才允许关闭。
 - 撤销、客户端断连、Native 断连或租约过期会使当前授权失效；自动批准开启时，客户端仍可另行申请会话。若需阻止后续自动授权，应先关闭自动批准，再撤销已有会话。关闭开关也会拒绝 `availableTabs`，但不会撤销已经建立的会话。公开 RPC 不提供切换自动策略或直接调用批准函数的接口。未知 CDP、跨页面 ID、原始 CDP、全局 Cookie/Storage 接口均不公开。
 - 扩展 CSP 禁止自身网络连接；桥接/SDK 只使用明确的回环或 RFC1918 数字地址，验证证书和 SPKI pin，不走代理、不跟随重定向。网页来源 Origin 会被拒绝。Native Host 角色只能从回环连接。

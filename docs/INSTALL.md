@@ -8,16 +8,22 @@ Tether's root package is private and is not published to npm. Use a local checko
 
 ## Install from a checkout
 
-From the repository root, install the CLI dependencies and choose one or more agent integrations:
+From the repository root, one command installs the runtime and configures detected agents:
 
 ```powershell
 npm ci
-node bin/tether.mjs install --agent codex,claude,cursor,opencode,gemini --scope project --project . --language en --browser chrome
+node bin/tether.mjs install
 ```
 
-`--agent` is required and accepts a comma-separated selection from `codex`, `claude`, `cursor`, `opencode`, and `gemini`. Omit `--scope` for `project` and `--project` for the current directory. The durable home defaults to `%LOCALAPPDATA%\Tether`; its runtime is `%LOCALAPPDATA%\Tether\runtime`. Fresh setup copies the prototype there, installs locked Node dependencies, builds it, creates an isolated Python environment, installs Python requirements, generates local credentials/certificates, compiles launchers, and registers Native Messaging for both Chrome and Edge under the current Windows user. It never starts Broker.
+`--agent` is optional and defaults to `auto`, which detects installed `codex`, `claude`, `cursor`, `opencode`, and `gemini` hosts and configures all of them; pass a comma-separated selection to restrict it. Omit `--scope` for `project` and `--project` for the current directory; `--scope user` installs across projects. The durable home defaults to `%LOCALAPPDATA%\Tether`; its runtime is `%LOCALAPPDATA%\Tether\runtime`. Fresh setup copies the prototype there, installs locked Node dependencies, builds it, creates an isolated Python environment, installs Python requirements, generates local credentials/certificates, compiles launchers, and registers Native Messaging for both Chrome and Edge under the current Windows user. After success it opens the extension manager page and the extension folder; `--no-open` skips that, and a missing browser only prints a notice. The installer itself never starts Broker; the MCP server auto-starts it on demand (see below).
 
-The installer adds only the Tether MCP entry and copies the complete `skills/tether-browser/` folder with a non-secret `installation.json` locator. Existing configuration comments and unrelated keys are preserved. A config change receives a same-directory backup. Existing conflicting Tether entries or skill files cause the installer to stop; there is no force, replace, or upgrade option. Repeating an install for the same version is idempotent. For a newer version, choose a new `--home` until upgrade support is available.
+The installer adds only the Tether MCP entry and copies the complete `skills/tether-browser/` folder with a non-secret `installation.json` locator. Existing configuration comments and unrelated keys are preserved. A config change receives a same-directory backup. Existing conflicting Tether entries or skill files cause the installer to stop; there is no force or replace option. Repeating an install for the same version is idempotent. When an older runtime is detected, the installer points to `tether upgrade`:
+
+```powershell
+node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
+```
+
+It replaces the runtime sources, preserves `.local` (credentials, certificates, policy) and `.venv`, keeps the extension ID unchanged, re-runs `npm ci`/build and the Python install, and leaves agent configuration untouched.
 
 Use `--runtime PATH` to reuse an already configured prototype. This skips runtime copy, dependencies, build, Python setup, and credential generation; it still registers Native Messaging unless `--no-register` is supplied. `--no-register` skips HKCU registration. `--python PATH` selects the interpreter for a fresh isolated environment, and `--language en|zh-CN` sets MCP descriptions and setup messages.
 
@@ -55,7 +61,41 @@ node bin/tether.mjs extension --runtime "$env:LOCALAPPDATA\Tether\runtime" --bro
 
 Enable Developer mode, choose **Load unpacked**, and select the shown extension folder. This is a manual browser step; Tether does not silently install an extension or publish it to a browser store. `--browser chrome|edge` selects which manager opens.
 
-After installation, restart/reload the agent and open the Tether toolbar popup. Broker remains stopped until separately started. For connection troubleshooting and the deliberate manual setup fallback, see [the setup reference](../skills/tether-browser/references/setup.md) and [prototype guide](../prototype/README.md).
+After installation, restart/reload the agent and open the Tether toolbar popup. The MCP server auto-starts Broker when it is not already listening and waits up to 10 seconds; set `BB_BROKER_AUTOSTART=0` to disable that and manage Broker manually. For connection troubleshooting and the deliberate manual setup fallback, see [the setup reference](../skills/tether-browser/references/setup.md) and [prototype guide](../prototype/README.md).
+
+## Permission policy
+
+Broker is managed by default: the policy file is `<runtime>/.local/policy.json`, and its absence means all requests are allowed. The file is hot-reloaded, so edits take effect immediately. Rules are evaluated first-match:
+
+- `version` — must be `1`.
+- `id` — unique rule identifier.
+- `client` — `"*"` or a client identity.
+- `origin` — `"*"` or `scheme://host[:port]`; a leading `*.` in the host matches subdomains and the bare domain.
+- `actions` — `session`, `availableTabs`, `observe`, `fill`, `click`, `navigate`, `createTab`, `closeTab`, or `"*"`.
+- `effect` — `allow`, `deny`, or `ask`; `ask` is only valid with `actions: ["session"]`.
+- `default` — `allow` or `deny` when no rule matches.
+
+```json
+{
+  "version": 1,
+  "default": "allow",
+  "rules": [
+    { "id": "bank-readonly", "client": "*", "origin": "https://*.bank.com", "actions": ["fill", "click", "navigate"], "effect": "deny" },
+    { "id": "confirm-session", "client": "*", "origin": "*", "actions": ["session"], "effect": "ask" }
+  ]
+}
+```
+
+A denied request returns `policy_denied`. A corrupt or invalid file rejects everything except `capabilities` with `policy_invalid` (fail-closed); `capabilities` reports `policy: {default, rules, valid}`. A queued write is re-checked against the page's current origin when it executes. With `ask`, that session request is not auto-approved and needs manual approval in the popup.
+
+```powershell
+node bin/tether.mjs policy list
+node bin/tether.mjs policy add --effect deny --actions fill,click,navigate --origin https://*.bank.com [--client C] [--id ID] [--first]
+node bin/tether.mjs policy remove --id ID
+node bin/tether.mjs policy default allow|deny
+node bin/tether.mjs policy path
+node bin/tether.mjs policy reset
+```
 
 ## Local tarball route
 

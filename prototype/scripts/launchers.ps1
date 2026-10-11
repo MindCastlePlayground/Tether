@@ -29,7 +29,7 @@ class Launch {
     p.UseShellExecute=false; p.CreateNoWindow=true;
     p.RedirectStandardInput=true; p.RedirectStandardOutput=true; p.RedirectStandardError=true;
     p.EnvironmentVariables.Clear();
-    foreach(var name in new[]{"SystemRoot","WINDIR","TEMP","TMP","USERPROFILE","LOCALAPPDATA","APPDATA","BB_LANGUAGE"}) {
+    foreach(var name in new[]{"SystemRoot","WINDIR","TEMP","TMP","USERPROFILE","LOCALAPPDATA","APPDATA","BB_LANGUAGE","BB_BROKER_AUTOSTART"}) {
       var value=Environment.GetEnvironmentVariable(name); if(value!=null)p.EnvironmentVariables[name]=value;
     }
     p.EnvironmentVariables["BB_CLIENT_CONFIG"]=@"$client";

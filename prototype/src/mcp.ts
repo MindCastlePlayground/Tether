@@ -4,6 +4,7 @@ import { z } from "zod";
 import { BridgeClient, loadConfig } from "./client.js";
 import { Rpc } from "./client-constants.js";
 import { Brand } from "./protocol.js";
+import { Autostart } from "./autostart.js";
 import { I18n, McpText } from "./i18n.js";
 
 class McpTools {
@@ -35,6 +36,7 @@ class McpTools {
 }
 
 async function main(): Promise<void> {
+  await Autostart.run().catch(() => {});
   const path = process.env.BB_CLIENT_CONFIG;
   if (!path) throw new Error("missingConfigPath");
   const client = new BridgeClient(await loadConfig(path));

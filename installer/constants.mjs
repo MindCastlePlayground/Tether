@@ -1,5 +1,6 @@
 export class Cmd {
   static UPGRADE = 'upgrade';
+  static POLICY = 'policy';
 }
 
 export class Opt {
@@ -36,9 +37,28 @@ export class Install {
   static REQUIRED = ['dist/mcp.js', 'dist/broker.js', 'dist/host.js', '.local/mcp.exe', '.local/host.exe', '.local/broker.exe', '.local/agent.json', '.local/broker.json', '.local/native-host.json', 'extension/manifest.json'];
   static VALUES = ['agent', 'scope', 'project', 'home', 'runtime', 'browser', 'language', 'python'];
   static FLAGS = ['dry-run', 'open-browser', 'no-register', 'help', Opt.NO_OPEN];
-  static COMMANDS = ['install', 'doctor', 'extension', 'help', Cmd.UPGRADE];
+  static COMMANDS = ['install', 'doctor', 'extension', 'help', Cmd.UPGRADE, Cmd.POLICY];
   static OPTION = { DRY: 'dry-run', OPEN: 'open-browser', NO_REGISTER: 'no-register', NO_OPEN: Opt.NO_OPEN };
   static BROWSERS = ['chrome', 'edge'];
   static LANGUAGES = ['en', 'zh-CN'];
   static EXCLUDE = ['.local', '.venv', '__pycache__', 'node_modules', 'dist'];
+}
+
+export class Policy {
+  static FILE = 'policy.json';
+  static VERSION = 1;
+  static WILD = '*';
+  static SESSION = 'session';
+  static ALLOW = 'allow';
+  static DENY = 'deny';
+  static ASK = 'ask';
+  static COMMANDS = ['list', 'add', 'remove', 'default', 'reset', 'path'];
+  static ACTION = { LIST: 'list', ADD: 'add', REMOVE: 'remove', DEFAULT: 'default', RESET: 'reset', PATH: 'path' };
+  static KEY = { VERSION: 'version', DEFAULT: 'default', RULES: 'rules', ID: 'id', CLIENT: 'client', ORIGIN: 'origin', ACTIONS: 'actions', EFFECT: 'effect', FIRST: 'first' };
+  static VALUES = ['effect', 'actions', 'origin', 'client', 'id'];
+  static FLAGS = ['first'];
+  static EFFECTS = [Policy.ALLOW, Policy.DENY, Policy.ASK];
+  static DEFAULTS = [Policy.ALLOW, Policy.DENY];
+  static ACTIONS = [Policy.SESSION, 'availableTabs', 'observe', 'fill', 'click', 'navigate', 'createTab', 'closeTab'];
+  static FALLBACK = { [Policy.KEY.VERSION]: Policy.VERSION, [Policy.KEY.DEFAULT]: Policy.ALLOW, [Policy.KEY.RULES]: [] };
 }

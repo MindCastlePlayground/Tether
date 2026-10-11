@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExtensionController } from '../extension/controller.js';
-import { Wire } from '../extension/protocol.js';
+import { Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -20,6 +20,13 @@ class FakeChrome {
     this.nativeConnections = 0;
     this.native = { onMessage: new Event(), onDisconnect: new Event(), messages: [], postMessage: m => this.native.messages.push(m) };
     this.action = { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} };
+    this.storage = {
+      data: {},
+      local: {
+        get: async key => (Object.hasOwn(this.storage.data, key) ? { [key]: this.storage.data[key] } : {}),
+        set: async values => { Object.assign(this.storage.data, values); }
+      }
+    };
     this.tabs = {
       onRemoved: new Event(), onReplaced: new Event(), onUpdated: new Event(), onAttached: new Event(), onDetached: new Event(),
       data: new Map([[1, { id: 1, url: 'https://example.test/a', title: 'Example', groupId: -1 }]]), next: 2,
@@ -62,6 +69,27 @@ test('request exposes no page metadata until the user approves in the extension 
   assert.equal((await c.approvalStatus({ clientId: clientB, pendingId: p.pendingId })).status, Wire.Expired);
 });
 
+test('an explicit _ask request always waits for popup approval', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  const result = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1, _ask: true });
+  assert.deepEqual(result, { pendingId: result.pendingId, status: Wire.Pending });
+  assert.equal(c.pending.size, 1);
+  assert.equal(c.sessions.size, 0);
+});
+
+test('auto approval returns the approved session without polling', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  const result = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'newGroup' });
+  assert.equal(result.status, Wire.Approved);
+  assert.ok(result.sessionId);
+  assert.equal(result.pages.length, 1);
+  assert.ok(Number.isInteger(result.groupId));
+  assert.equal(c.pending.size, 0);
+  assert.equal(c.sessions.size, 1);
+});
+
 test('new-group requests are automatically approved and remain revocable', async () => {
   const api = new FakeChrome();
   const c = new ExtensionController(api);
@@ -88,6 +116,39 @@ test('auto approval switch disables both automatic grants and tab enumeration', 
   const attach = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
   assert.equal((await c.approvalStatus({ clientId: clientB, pendingId: attach.pendingId })).status, Wire.Pending);
   await assert.rejects(c.dispatch(Wire.AvailableTabs, { clientId: clientA }), /not_authorized/);
+});
+
+test('the popup toggle persists the auto approval preference to storage', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  const messages = [];
+  const port = { postMessage: value => messages.push(value) };
+  await c.popup({ type: 'popup.setAutoApproval', enabled: false }, { url: api.runtime.getURL('popup.html') }, port);
+  assert.equal(api.storage.data[Storage.AutoApprove], false);
+  assert.deepEqual(messages.at(-1), { type: 'popup.autoApproval', enabled: false });
+});
+
+test('a restarted controller honors the stored auto approval preference', async () => {
+  const api = new FakeChrome();
+  const first = new ExtensionController(api);
+  await first.popup({ type: 'popup.setAutoApproval', enabled: false }, { url: api.runtime.getURL('popup.html') }, { postMessage() {} });
+  const second = new ExtensionController(api);
+  second.start();
+  await assert.rejects(second.dispatch(Wire.AvailableTabs, { clientId: clientA }), /not_authorized/);
+  const pending = await second.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'newGroup' });
+  assert.equal(pending.status, Wire.Pending);
+  assert.equal(second.sessions.size, 0);
+  second.stop();
+});
+
+test('missing preference storage keeps auto approval enabled', async () => {
+  const api = new FakeChrome();
+  delete api.storage;
+  const c = new ExtensionController(api);
+  c.start();
+  const tabs = await c.dispatch(Wire.AvailableTabs, { clientId: clientA });
+  assert.equal(tabs.tabs.length, 1);
+  c.stop();
 });
 
 test('authenticated clients can enumerate HTTP(S) tabs only while auto approval is enabled', async () => {

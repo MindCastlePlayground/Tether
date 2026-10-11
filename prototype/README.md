@@ -76,7 +76,9 @@ Keep the client instance and connection for the session, then call `close()`. `e
 
 ## Initialize a new machine
 
-Requirements are Node.js, Windows PowerShell, Python 3.12, and the Python requirements. The first dependency install needs package registry access; runtime does not download components. Versions are pinned by the lockfile.
+The preferred Windows path installs from the repository root with the Tether CLI; see the [installation guide](../docs/INSTALL.md) for agent selection, config locations, and extension loading. It supports Node.js 22+ and Python 3.10+, and keeps Broker stopped. The CLI also supports `--runtime` to reuse an existing setup.
+
+For manual setup or recovery, run these commands from this directory. They install the prototype runtime directly and do not configure agent MCP entries:
 
 ```powershell
 npm ci
@@ -87,10 +89,7 @@ python scripts/setup.py
 npm run build
 ```
 
-Before writing credentials, `setup.py` restricts `.local/` ACLs and does not overwrite existing configuration. A fresh configuration generates a new extension ID and updates the manifest. Certificates are valid for 30 days; automatic rotation is not implemented. `launchers.ps1` preserves existing executables. To update launchers, stop processes belonging to this prototype first, then delete only `.local/{host,broker,mcp}.exe` and rebuild them.
-
-LAN deployment is opt-in. Before generating certificates, set `BB_LAN_IP` to the actual RFC1918 address and add `lan: {ip, port, cidrs}` to the broker configuration. Client certificates and SPKI pins must match that address. Use separate credentials for each remote caller; distribute only that client's configuration and the public certificate, never `server.key`, `host.json`, or credentials for other roles. LAN listening is disabled by default. This acceptance run temporarily used `192.168.3.7:18450` and shut it down after testing.
-
+Load `extension/` as an unpacked extension in the existing browser. Fresh setup generates a local extension key/ID and updates `manifest.json`; use that machine's generated ID, not a historical README ID. Setup preserves existing configuration. The internal Native Messaging identifier remains `com.freebird.browser_bridge` for registration compatibility. These commands do not start Broker.
 ## Authorization and network boundaries
 
 - `newGroup` automatically authorizes an authenticated identity to control task pages, create up to 10 pages in the current session, and navigate or interact with websites over HTTP(S). The toolbar can turn off auto-approval; new requests then require manual approval. The switch is stored only while the extension background remains alive. Reloading the extension restores the default enabled state. A tab group is organizational; actual permission is scoped to client, session, and page.

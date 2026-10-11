@@ -2,7 +2,7 @@
 
 [English](sdk.md)
 
-有 MCP 时优先使用 MCP。只有在用户要求编写脚本或宿主没有 MCP 集成时才选择 SDK。从 `<checkout>/prototype` 运行，或者以该目录为基准解析导入/配置路径。不要通过命令行传递令牌，也不要打印已加载的配置。
+有 MCP 时优先使用 MCP。只有在用户要求编写脚本或宿主没有 MCP 集成时才选择 SDK。由 CLI 安装时从 `installation.json.runtime` 运行，否则定位 `<checkout>/prototype`；以该 runtime 目录为基准解析导入/配置路径。不要通过命令行传递令牌，也不要打印已加载的配置。
 
 ## Node
 

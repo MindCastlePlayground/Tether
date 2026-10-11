@@ -1,6 +1,7 @@
 # Local runtime, credentials and generated dependencies
 **/.local/
 **/node_modules/
+**/.venv/
 **/.npm-cache/
 **/dist/
 **/__pycache__/
@@ -16,6 +17,7 @@
 # Local migration history, raw agent conversations and diagnostic notes
 /work/
 /outputs/
+/mindcastleplayground-tether-*.tgz
 /RENAME-STATUS.md
 /prototype/work/
 **/evidence/*.jsonl

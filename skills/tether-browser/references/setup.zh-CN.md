@@ -2,7 +2,7 @@
 
 [English](setup.md)
 
-使用实际检出目录中的路径。在 `<checkout>/prototype` 目录下运行这些命令；不要复制其他机器的 `.local` 凭据。修改前先检查现有配置和安装。
+若存在 `installation.json.runtime`，使用该目录；否则定位实际的 `<checkout>/prototype`。在该 runtime 目录下运行命令；不要复制其他机器的 `.local` 凭据。修改前先检查现有配置和安装。
 
 ## 已有安装
 
@@ -31,7 +31,9 @@ Start-Process -FilePath (Join-Path (Get-Location) '.local\broker.exe') -WindowSt
 
 ## 全新 Windows 安装
 
-要求：Node.js、Windows PowerShell、Python 3.12，以及现有的 Chrome/Edge 浏览器。安装依赖需要访问软件包注册表。仅当安装属于任务范围时才执行：
+配置支持的 Agent 时，优先使用仓库根目录的安装器，详见[Agent 安装](install.zh-CN.md)。全新安装需要 Windows、Node.js 22+ 和 Python 3.10+；安装器会保持 Broker 停止。下方手动命令仍可用于直接初始化原型或恢复，但不会配置 Agent MCP 项。
+
+要求：Node.js、Windows PowerShell、Python 3.12，以及现有的 Chrome/Edge 浏览器。安装依赖需要访问软件包注册表。需要手动初始化时执行：
 
 ```powershell
 npm ci

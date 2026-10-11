@@ -12,8 +12,8 @@ Use the user's existing browser through Tether's extension → Native Messaging 
 ## Locate and connect
 
 - Prefer already configured Tether MCP tools. Tool prefixes depend on the agent host; discover tools by their method names below rather than assuming a prefix.
-- Otherwise find the Tether checkout from the user's project/configuration. This folder is normally `<checkout>/skills/tether-browser`; the implementation is `<checkout>/prototype`. A copied skill may live elsewhere: do not infer the checkout from a global skill installation or hardcode a developer's drive path.
-- Read [setup](references/setup.md) only for missing installation/configuration or connection troubleshooting. Read [SDK usage](references/sdk.md) only when MCP is unavailable or the user requests code.
+- When installation/configuration is missing, consult [agent installation](references/install.md). An installed skill may include `installation.json`; if present, use its `runtime`, `mcpCommand` and `configFile` to locate the installed components. A copied skill may live elsewhere: never infer the checkout from the skill directory or hardcode a developer's drive path.
+- Read [setup](references/setup.md) for connection troubleshooting or the manual installation fallback. Read [SDK usage](references/sdk.md) only when MCP is unavailable or the user requests code.
 - Call `capabilities({})`; browser operations need `browserConnected: true`. MCP initialization or successful tool enumeration alone does not prove that the Broker, Native Host and extension are connected.
 - Preserve an explicit instruction to keep Broker stopped. In that case limit work to configuration, documentation or offline checks, and report that live browser control is unavailable. Do not start it merely because a connection fails.
 

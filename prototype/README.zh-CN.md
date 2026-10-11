@@ -76,7 +76,9 @@ try {
 
 ## 新机器初始化
 
-需要 Node、Windows PowerShell、Python 3.12 及 Python requirements。首次安装依赖需要访问包仓库；运行阶段不下载组件。版本由 lockfile 固定。
+Windows 推荐通过仓库根目录的 Tether CLI 安装；Agent 选择、配置位置和加载扩展说明见[安装指南](../docs/INSTALL.zh-CN.md)。要求 Node.js 22+ 和 Python 3.10+，且 Broker 保持停止。CLI 也支持通过 `--runtime` 复用现有配置。
+
+手动初始化或恢复时，在本目录执行以下命令。它们直接安装原型 runtime，不会配置 Agent MCP 项：
 
 ```powershell
 npm ci
@@ -87,10 +89,7 @@ python scripts/setup.py
 npm run build
 ```
 
-`setup.py` 在写入凭据前限制 `.local/` ACL；已存在配置不会覆盖。新配置会生成新扩展 ID 并同步到 manifest。证书有效期为 30 天，目前没有自动轮换。`launchers.ps1` 保留已有 exe；更新启动器前，应先停止本原型对应进程，再只删除 `.local/{host,broker,mcp}.exe` 并重建。
-
-局域网部署需要显式选择：首次生成证书前设置 `BB_LAN_IP` 为实际 RFC1918 地址；Broker 配置添加 `lan: {ip, port, cidrs}`。客户端证书和 SPKI pin 必须匹配该地址；每个远程调用身份使用单独凭据，只分发该客户端配置和公有证书，不分发 `server.key`、`host.json` 或其他角色凭据。默认没有 LAN 监听。本次验收临时使用 `192.168.3.7:18450`，测试结束后已关闭。
-
+在现有浏览器中将 `extension/` 作为未打包扩展加载。全新初始化会生成本机扩展密钥/ID 并更新 `manifest.json`；应使用该机器生成的 ID，而不是 README 中历史遗留的 ID。初始化会保留已有配置。为兼容注册流程，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。这些命令不会启动 Broker。
 ## 授权和网络边界
 
 - `newGroup` 默认自动授权已认证身份控制任务页面、创建最多 10 个当前会话页面，以及在这些页面进行 HTTP(S) 导航和网站操作。工具栏可关闭自动批准；关闭后新请求需手工批准。开关当前只在后台存活期间保存，扩展重新加载恢复默认开启。标签组仅用于展示；实际权限按 client/session/page 授予。

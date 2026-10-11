@@ -2,7 +2,7 @@
 
 [简体中文](setup.zh-CN.md)
 
-Use paths from the actual checkout. Run these commands from `<checkout>/prototype`; never copy another machine's `.local` credentials. Check for existing configuration and installation before making changes.
+Use `installation.json.runtime` when available, otherwise locate the actual `<checkout>/prototype`. Run runtime commands from that directory; never copy another machine's `.local` credentials. Check for existing configuration and installation before making changes.
 
 ## Existing installation
 
@@ -31,7 +31,9 @@ If the user asked to keep it stopped, do not run this command. Do not kill anoth
 
 ## Fresh Windows installation
 
-Requirements: Node.js, Windows PowerShell, Python 3.12, and an existing Chrome/Edge browser. Dependency installation requires registry access. When installation is in scope:
+For supported agent setup, prefer the repository root's installer; see [agent installation](install.md). Fresh installation requires Windows, Node.js 22+, and Python 3.10+. The installer keeps Broker stopped. The manual commands below remain available for direct prototype setup or recovery; they do not configure agent MCP entries.
+
+Requirements: Node.js, Windows PowerShell, Python 3.12, and an existing Chrome/Edge browser. Dependency installation requires registry access. When manual setup is needed:
 
 ```powershell
 npm ci

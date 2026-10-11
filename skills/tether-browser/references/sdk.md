@@ -2,7 +2,7 @@
 
 [简体中文](sdk.zh-CN.md)
 
-Use MCP when available. Choose SDKs for a user-requested script or a host without MCP integration. Run from `<checkout>/prototype` or resolve imports/config paths against that directory. Never pass a token on the command line or print the loaded config.
+Use MCP when available. Choose SDKs for a user-requested script or a host without MCP integration. Run from `installation.json.runtime` when installed by the CLI, otherwise locate `<checkout>/prototype`; resolve imports/config paths against that runtime directory. Never pass a token on the command line or print the loaded config.
 
 ## Node
 

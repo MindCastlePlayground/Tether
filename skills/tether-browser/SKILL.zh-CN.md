@@ -7,8 +7,8 @@
 ## 定位并连接
 
 - 优先使用已配置的 Tether MCP 工具。工具前缀取决于智能体宿主；请根据下方方法名发现工具，不要假定某个前缀。
-- 否则，从用户的项目或配置中查找 Tether 检出目录。本技能通常位于 `<checkout>/skills/tether-browser`，实现位于 `<checkout>/prototype`。复制的技能可能位于其他位置：不要根据全局技能安装推断检出目录，也不要硬编码开发者的盘符路径。
-- 仅在缺少安装/配置或排查连接问题时阅读[连接设置](references/setup.zh-CN.md)。仅在 MCP 不可用或用户要求编写代码时阅读[SDK 用法](references/sdk.zh-CN.md)。
+- 缺少安装/配置时，先查看[Agent 安装](references/install.zh-CN.md)。已安装技能可能包含 `installation.json`；若存在，使用其中的 `runtime`、`mcpCommand` 和 `configFile` 定位已安装组件。复制的技能可能位于其他位置：不要根据技能目录推断检出目录，也不要硬编码开发者的盘符路径。
+- 阅读[连接设置](references/setup.zh-CN.md)以排查连接问题或使用手动安装备用流程。仅在 MCP 不可用或用户要求编写代码时阅读[SDK 用法](references/sdk.zh-CN.md)。
 - 调用 `capabilities({})`；浏览器操作需要 `browserConnected: true`。MCP 初始化成功或工具枚举成功，并不能证明 Broker、Native Host 和扩展均已连接。
 - 遵守明确要求保持 Broker 停止的指示。在这种情况下，仅处理配置、文档或离线检查，并说明无法进行实时浏览器控制。不要仅仅因为连接失败就启动它。
 

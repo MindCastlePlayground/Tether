@@ -6,7 +6,7 @@
 
 <p align="center"><strong>连接你的浏览器。</strong></p>
 
-[English](README.md) · [完整原型指南（英文）](prototype/README.md) · [完整原型指南（简体中文）](prototype/README.zh-CN.md) · [验收记录](prototype/VERIFICATION.zh-CN.md) · [品牌资源](assets/README.zh-CN.md)
+[English](README.md) · [安装指南](docs/INSTALL.zh-CN.md) · [Install guide](docs/INSTALL.md) · [完整原型指南（英文）](prototype/README.md) · [完整原型指南（简体中文）](prototype/README.zh-CN.md) · [验收记录](prototype/VERIFICATION.zh-CN.md) · [品牌资源](assets/README.zh-CN.md)
 
 Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的本地客户端控制已运行 Chrome 中明确授予的页面。它不会启动浏览器，也不要求使用独立浏览器 profile。
 
@@ -30,18 +30,13 @@ Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的�
 
 ## 快速开始
 
-前置条件、首次初始化、加载浏览器扩展、客户端配置和安全边界见[原型操作指南](prototype/README.zh-CN.md)。在 `Tether/prototype` 目录首次初始化：
+使用[安装指南](docs/INSTALL.zh-CN.md)通过 CLI 安装 Windows runtime 并加载浏览器扩展。根目录 npm 包为私有包，未发布到 npm；请从检出目录或本地 tarball 安装。手动初始化原型和安全边界见[原型指南](prototype/README.zh-CN.md)。
 
 ```powershell
 npm ci
-python -m pip install -r python/requirements.txt
-python scripts/setup.py
-& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/launchers.ps1
-& ./scripts/register.ps1
-npm run build
+node bin/tether.mjs install --agent codex --scope project --project . --language zh-CN
 ```
-
-指南还说明了如何启动本机 Broker 和注册 Native Messaging。生成的 `.local/` 凭据与私钥应留在本机。
+安装器不会启动 Broker。生成的 runtime 凭据与私钥应留在本机。
 
 ## 品牌
 
@@ -57,6 +52,7 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 - `prototype/` — 当前扩展、Broker、SDK、MCP 服务、初始化脚本和验收证据。
 - `prototype/README.md` — 完整英文操作指南。
 - `prototype/README.zh-CN.md` — 完整简体中文操作指南。
+- [安装指南](docs/INSTALL.zh-CN.md) / [Install guide](docs/INSTALL.md) — 安装 CLI、配置支持的 Agent 并加载浏览器扩展。
 - [国际化指南](docs/I18N.zh-CN.md) / [Internationalization guide](docs/I18N.md) — 弹窗语言、语言偏好和翻译流程。
 - [M0 计划](prototype/PLAN.zh-CN.md) / [M0 plan](prototype/PLAN.md)、[验收记录](prototype/VERIFICATION.zh-CN.md) / [verification](prototype/VERIFICATION.md)，以及[品牌验收](assets/branding-verification.zh-CN.md) / [brand verification](assets/branding-verification.md)。
 
@@ -64,7 +60,7 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 
 使用 Tether 前，让 Agent 阅读 [skills/tether-browser/SKILL.md](skills/tether-browser/SKILL.md)。入口涵盖连接检查、会话批准、页面 ID、写操作序号、不确定结果和清理，并按需引用安装与 SDK 指南；另有[简体中文阅读版](skills/tether-browser/SKILL.zh-CN.md)。
 
-如果 Agent 宿主支持文件夹式 Skill，可将完整 `skills/tether-browser/` 复制到其配置的 Skill 目录，再使用 `$tether-browser`。仍需提供实际 Tether 仓库位置并连接 MCP；复制 Skill 不会安装扩展、生成凭据、配置 MCP 或启动 Broker。
+安装器会复制完整 Skill 文件夹并为支持的 Agent 配置 MCP，详见[安装指南](docs/INSTALL.zh-CN.md)。手动安装时，将整个 `skills/tether-browser/` 复制到宿主配置的 Skill 目录，再使用 `$tether-browser`。
 
 ## 状态
 

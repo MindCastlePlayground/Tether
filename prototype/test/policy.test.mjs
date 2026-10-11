@@ -48,8 +48,6 @@ test('broker mock host gets ask; denial does not consume sequence; invalid polic
   const cap=await broker.handle('script',{...msg,method:Method.Capabilities});assert.equal(cap.policy.valid,false);assert.equal(JSON.stringify(cap).includes(file),false);
  }finally{host?.terminate();await broker.stop();}
 });
-// Command environment record: default shell creation failed with CreateProcessAsUserW 5;
-// the same read commands succeeded with require_escalated. No secrets were emitted.
 test('queued write re-checks policy against the page origin at execution time',async()=>{
  put([rule]);
  const cfg=Config.load('.local/broker.json');cfg.port=18450;cfg.policyFile=file;

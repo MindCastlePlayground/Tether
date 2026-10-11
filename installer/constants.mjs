@@ -14,6 +14,20 @@ export class Hint {
   static INSTALL = 'tether install';
 }
 
+export class Scope {
+  static PROJECT = 'project';
+  static USER = 'user';
+  // Agents whose configuration defaults to the user home instead of the project.
+  static USER_DEFAULT = ['opencode'];
+}
+
+// opencode 1.2.27 validates `mcp.<name>` with a strict schema: any other key invalidates the whole file.
+export class OpenCode {
+  static VERSION = '1.2.27';
+  static MCP_KEYS = ['type', 'command', 'environment', 'enabled', 'timeout'];
+  static SKILL_KEYS = ['name', 'description'];
+}
+
 export class Probe {
   static PATH = 'PATH';
   static PATHEXT = 'PATHEXT';

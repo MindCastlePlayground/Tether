@@ -15,7 +15,7 @@ npm ci
 node bin/tether.mjs install
 ```
 
-`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`，`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；MCP 服务会在需要时自动拉起（见下文）。
+`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`（OpenCode 默认用户级 `~/.config/opencode`），`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；MCP 服务会在需要时自动拉起（见下文）。
 
 安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。若发现冲突的 Tether 配置项或已有技能文件，安装器会停止；没有强制覆盖选项。同一版本重复安装是幂等的。检测到旧版本 runtime 时，安装器会提示运行 `tether upgrade`：
 
@@ -48,6 +48,8 @@ node bin/tether.mjs doctor --home "$env:LOCALAPPDATA\Tether"
 | Cursor | `.cursor/mcp.json`；`.cursor/skills/tether-browser/` | 用户 home 下的相同路径 |
 | OpenCode | `opencode.json` 或 `opencode.jsonc`；`.opencode/skills/tether-browser/` | `$XDG_CONFIG_HOME/opencode/` 或 `~/.config/opencode/` 下的配置和技能 |
 | Gemini CLI | `.gemini/settings.json`；`.gemini/skills/tether-browser/` | 用户 home 下的相同路径 |
+
+支持 OpenCode 1.2.27 及以上版本。用户范围下，安装器把 `opencode.jsonc`（或已有的 `opencode.json`/`opencode.jsonc`）和 `skills/tether-browser/` 写入 `$XDG_CONFIG_HOME/opencode/` 或 `~/.config/opencode/`；Windows 上 OpenCode 同样读取该路径，而非 `%APPDATA%`。OpenCode 1.2.27 对 `mcp.tether` 做严格校验，因此条目只包含 `type`、`command`、`environment` 和 `enabled`。在隔离安装的 OpenCode 1.2.27 中，`opencode debug skill` 列出了 `tether-browser`，`opencode mcp list` 显示 `tether connected`。
 
 已安装技能会优先使用已配置的 Tether MCP 工具。必要时读取 `installation.json` 来定位 runtime；不会根据技能目录推断检出目录。安装后请重启或重新加载 Agent。项目配置包含当前机器的绝对路径；跨仓库的个人安装可选择用户范围。每个浏览器/用户只有一个 Tether Native Messaging 注册：注册另一个 runtime 会将该注册切换到新目录，因此需要加载与之匹配的扩展。
 

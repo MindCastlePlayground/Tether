@@ -5,6 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { parse } from 'jsonc-parser';
 import { Agents } from '../installer/agents.mjs';
+import { Cli } from '../installer/cli.mjs';
+import { OpenCode, Scope } from '../installer/constants.mjs';
 
 const entry = { command: 'C:/tools/mcp.exe', args: ['serve', '--stdio'], env: { BB_LANGUAGE: 'en' } };
 const mk = () => {
@@ -72,4 +74,31 @@ test('Codex appends valid TOML, preserves existing text, and detects collisions'
   assert.throws(() => Agents.edit('codex', '[mcp_servers.tether]\ncommand="other"\nargs=[]\n', entry), /Conflicting/);
   assert.throws(() => Agents.edit('codex', 'mcp_servers = { other = {} }\n', entry), /append/);
   assert.throws(() => Agents.edit('codex', '[mcp_servers]\ntether = {}\n', entry), /Conflicting/);
+});
+
+test('opencode entry stays within the opencode 1.2.27 strict MCP schema', () => {
+  const entry = { command: 'C:\rt\.local\mcp.exe', args: [], env: { BB_LANGUAGE: 'en' } };
+  const server = parse(Agents.edit('opencode', '', entry)).mcp.tether;
+  assert.deepEqual(Object.keys(server).filter(k => !OpenCode.MCP_KEYS.includes(k)), []);
+  assert.equal(server.type, 'local');
+  assert.deepEqual(server.command, [entry.command]);
+});
+
+test('opencode defaults to the user config directory unless scope is explicit', () => {
+  const home = path.join(os.tmpdir(), 'tether-home');
+  const context = { project: path.join(home, 'proj'), userHome: home };
+  const user = Agents.paths('opencode', Cli.scope('opencode', {}), context);
+  assert.equal(user.config, path.join(home, '.config', 'opencode', 'opencode.jsonc'));
+  assert.equal(user.skill, path.join(home, '.config', 'opencode', 'skills', 'tether-browser'));
+  assert.equal(Cli.scope('codex', {}), Scope.PROJECT);
+  assert.equal(Cli.scope('opencode', { scope: Scope.PROJECT }), Scope.PROJECT);
+  assert.equal(Cli.parse(['install']).options.scope, undefined);
+});
+
+test('skill frontmatter carries the name and description opencode 1.2.27 requires', () => {
+  const text = fs.readFileSync(path.join(Cli.ROOT, 'skills', 'tether-browser', 'SKILL.md'), 'utf8');
+  const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)[1];
+  const keys = Object.fromEntries(head.split(/\r?\n/).map(line => line.split(/:\s*/, 2)));
+  for (const key of OpenCode.SKILL_KEYS) assert.ok(keys[key], key);
+  assert.equal(keys.name, 'tether-browser');
 });

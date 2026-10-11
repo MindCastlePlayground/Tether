@@ -3,7 +3,7 @@ import path from 'node:path';
 import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml } from 'smol-toml';
 import { isDeepStrictEqual } from 'node:util';
-import { Probe } from './constants.mjs';
+import { OpenCode, Probe } from './constants.mjs';
 
 class Names {
   static all = ['codex', 'claude', 'cursor', 'opencode', 'gemini'];
@@ -42,6 +42,7 @@ class Config {
     const desired = open
       ? { [fields.type]: fields.local, [fields.command]: [entry.command, ...entry.args], [fields.env]: entry.env, [fields.enabled]: true }
       : { ...(name === 'claude' ? { [fields.type]: fields.stdio } : {}), [fields.command]: entry.command, [fields.args]: entry.args, [fields.env]: entry.env };
+    if (open && Object.keys(desired).some(k => !OpenCode.MCP_KEYS.includes(k))) throw new Error(`opencode ${OpenCode.VERSION} rejects unknown MCP keys`);
     if (Object.hasOwn(parent, Names.key)) {
       if (Config.equal(parent[Names.key], desired)) return text;
       throw new Error(`Conflicting ${Names.key} entry`);

@@ -60,6 +60,12 @@ The folded tether mark connects a navy stem with a teal loop. [Brand assets](ass
 - [Internationalization guide](docs/I18N.md) / [国际化指南](docs/I18N.zh-CN.md) — popup locales, language preference, and translation workflow.
 - [M0 plan](prototype/PLAN.md) / [M0 计划](prototype/PLAN.zh-CN.md), [verification](prototype/VERIFICATION.md) / [验收记录](prototype/VERIFICATION.zh-CN.md), and [brand verification](assets/branding-verification.md) / [品牌验收](assets/branding-verification.zh-CN.md).
 
+## Agent skill
+
+Ask an agent to read [skills/tether-browser/SKILL.md](skills/tether-browser/SKILL.md) before using Tether. It covers connection checks, session approval, page IDs, write sequencing, uncertain outcomes and cleanup, with setup and SDK references loaded only when needed. A [Simplified Chinese reading copy](skills/tether-browser/SKILL.zh-CN.md) is included.
+
+For an agent host that supports folder-based skills, copy the entire `skills/tether-browser/` folder to its configured skill directory, then invoke `$tether-browser`. The skill still needs the actual Tether checkout and MCP connection; copying it does not install the extension, create credentials, configure MCP or start Broker.
+
 ## Status
 
 This repository contains a working prototype with recorded build, simulated, protocol, and real Chrome evidence. Read [VERIFICATION.md](prototype/VERIFICATION.md) for exactly what passed and what remains unverified. Edge, a second LAN machine, and several M0 items remain unverified or unimplemented; the evidence does not establish a complete zero-external-traffic guarantee for the browser profile.

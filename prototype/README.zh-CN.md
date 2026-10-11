@@ -10,6 +10,8 @@
 
 弹窗使用 Chrome 语言消息支持英文和简体中文；用户未手动选择时跟随浏览器语言，手动选择保存在本机。语言目录和翻译流程见[国际化指南](../docs/I18N.zh-CN.md)。
 
+Agent 使用前请阅读仓库内的 [Tether browser Skill](../skills/tether-browser/SKILL.md) 或[中文阅读版](../skills/tether-browser/SKILL.zh-CN.md)，了解会话流程和工具约定。
+
 ## 实现内容
 
 当前链路为现有 Chrome/Edge → MV3 扩展 → Native Messaging → 本机 TLS WebSocket Broker → Node/Python SDK 或 stdio MCP。没有浏览器启动器、独立 profile、CDP TCP 端口或云端中继。默认可由客户端新建任务标签组，也可明确接管一个已有 HTTP(S) 标签。

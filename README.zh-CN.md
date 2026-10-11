@@ -60,6 +60,12 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 - [国际化指南](docs/I18N.zh-CN.md) / [Internationalization guide](docs/I18N.md) — 弹窗语言、语言偏好和翻译流程。
 - [M0 计划](prototype/PLAN.zh-CN.md) / [M0 plan](prototype/PLAN.md)、[验收记录](prototype/VERIFICATION.zh-CN.md) / [verification](prototype/VERIFICATION.md)，以及[品牌验收](assets/branding-verification.zh-CN.md) / [brand verification](assets/branding-verification.md)。
 
+## Agent Skill
+
+使用 Tether 前，让 Agent 阅读 [skills/tether-browser/SKILL.md](skills/tether-browser/SKILL.md)。入口涵盖连接检查、会话批准、页面 ID、写操作序号、不确定结果和清理，并按需引用安装与 SDK 指南；另有[简体中文阅读版](skills/tether-browser/SKILL.zh-CN.md)。
+
+如果 Agent 宿主支持文件夹式 Skill，可将完整 `skills/tether-browser/` 复制到其配置的 Skill 目录，再使用 `$tether-browser`。仍需提供实际 Tether 仓库位置并连接 MCP；复制 Skill 不会安装扩展、生成凭据、配置 MCP 或启动 Broker。
+
 ## 状态
 
 仓库包含可运行原型，以及构建、模拟、协议和真实 Chrome 验收记录。具体通过项与未验证项见[验收记录](prototype/VERIFICATION.zh-CN.md)。Edge、第二台局域网机器和若干 M0 项仍未验收或未实现；现有证据不足以证明整个浏览器 profile 完全没有外部流量。

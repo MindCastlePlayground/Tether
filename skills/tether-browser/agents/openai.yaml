@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tether Browser"
+  short_description: "Use existing browser tabs through Tether MCP or SDKs"
+  default_prompt: "Use $tether-browser to work with the requested existing browser tab through Tether."

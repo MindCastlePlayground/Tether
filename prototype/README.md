@@ -10,6 +10,8 @@ Language and contributor references: [M0 plan](PLAN.md) / [简体中文计划](P
 
 The popup uses Chrome locale messages for English and Simplified Chinese, follows the browser language until the user chooses a language, and stores that choice locally. See the [internationalization guide](../docs/I18N.md) for the locale and translation workflow.
 
+Agent users should read the repository's [Tether browser skill](../skills/tether-browser/SKILL.md) for the session workflow and tool contract, or the [Chinese reading copy](../skills/tether-browser/SKILL.zh-CN.md).
+
 ## What is implemented
 
 The path is an existing Chrome/Edge browser → MV3 extension → Native Messaging → local TLS WebSocket broker → Node/Python SDK or stdio MCP. There is no browser launcher, dedicated profile, CDP TCP port, or cloud relay. By default, a client can create a task tab group; it can also explicitly take over one existing HTTP(S) tab.

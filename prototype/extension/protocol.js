@@ -39,6 +39,10 @@ export class PopupMessage {
   static SetAutoApproval = 'popup.setAutoApproval';
 }
 
+export class Storage {
+  static AutoApprove = 'autoApprove';
+}
+
 export class Failure {
   static Invalid = 'invalid_request';
   static Forbidden = 'not_authorized';

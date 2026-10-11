@@ -1,4 +1,4 @@
-import { BrowserAction, CdpMethod, Failure, Limits, PopupMessage, Wire } from './protocol.js';
+import { BrowserAction, CdpMethod, Failure, Limits, PopupMessage, Storage, Wire } from './protocol.js';
 
 export class ExtensionController {
   constructor(api = globalThis.chrome, clock = () => Date.now(), userAgent = () => globalThis.navigator.userAgent) {
@@ -15,11 +15,13 @@ export class ExtensionController {
     this.intentionalDetach = new Set();
     this.approving = new Set();
     this.autoApprove = true;
+    this.ready = null;
     this.stopped = false;
     this.timer = null;
   }
 
   start() {
+    this.ready = this.load();
     this.api.runtime.onConnect.addListener(port => {
       if (port.name !== PopupMessage.Port) return;
       port.onMessage.addListener(msg => this.popup(msg, port.sender, port));
@@ -44,6 +46,17 @@ export class ExtensionController {
     this.stopped = true;
     clearInterval(this.timer);
     this.disconnected();
+  }
+
+  async load() {
+    try {
+      const data = await this.api.storage.local.get(Storage.AutoApprove);
+      if (typeof data?.[Storage.AutoApprove] === 'boolean') this.autoApprove = data[Storage.AutoApprove];
+    } catch { /* Keep the default when preferences are unavailable. */ }
+  }
+
+  async save() {
+    try { await this.api.storage.local.set({ [Storage.AutoApprove]: this.autoApprove }); } catch { /* Keep the choice in memory. */ }
   }
 
   connect() {
@@ -85,6 +98,7 @@ export class ExtensionController {
     if (method === Wire.ApprovalStatus) return this.approvalStatus(p);
     if (method === Wire.AvailableTabs) {
       this.client(p);
+      await this.ready;
       if (!this.autoApprove) throw new Error(Failure.Forbidden);
       const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });
       return { tabs: tabs.filter(t => /^https?:\/\//i.test(t.url ?? '')).map(t => ({
@@ -115,6 +129,7 @@ export class ExtensionController {
 
   async requestSession(p) {
     this.client(p);
+    await this.ready;
     if ([...this.pending.values()].some(x => x.clientId === p.clientId)) throw new Error(Failure.Busy);
     if (!['newGroup', 'attachExisting'].includes(p.mode)) throw new Error(Failure.Invalid);
     if (p.tabId !== undefined && !Number.isInteger(p.tabId)) throw new Error(Failure.Invalid);
@@ -124,9 +139,11 @@ export class ExtensionController {
     this.statusSet(pendingId, p.clientId, { status: Wire.Pending });
     this.api.action.setBadgeText({ text: BrowserAction.BadgePending });
     this.api.action.setBadgeBackgroundColor({ color: BrowserAction.BadgeColor });
-    if (this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined)))
+    if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined)))
       await this.approve(pendingId, p.tabId);
-    return { pendingId, status: Wire.Pending };
+    const result = this.results.get(pendingId);
+    if (result?.status === Wire.Approved) return { pendingId, ...result.value, status: result.status };
+    return { pendingId, status: result?.status ?? Wire.Pending };
   }
 
   async approvalStatus(p) {
@@ -145,9 +162,11 @@ export class ExtensionController {
           pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
         })) });
       } else if (msg?.type === PopupMessage.AutoApproval) {
+        await this.ready;
         port.postMessage({ type: msg.type, enabled: this.autoApprove });
       } else if (msg?.type === PopupMessage.SetAutoApproval) {
         this.autoApprove = msg.enabled === true;
+        await this.save();
         port.postMessage({ type: PopupMessage.AutoApproval, enabled: this.autoApprove });
       } else if (msg?.type === PopupMessage.Tabs) {
         const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });

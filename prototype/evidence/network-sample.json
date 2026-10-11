@@ -1,0 +1,71 @@
+﻿{
+    "scope":  "four TCP socket snapshots of prototype broker/native-host/SDK processes; not packet capture; browser and UDP excluded",
+    "outsideLoopbackCount":  0,
+    "connections":  [
+                        {
+                            "LocalAddress":  "0.0.0.0",
+                            "LocalPort":  10355,
+                            "RemoteAddress":  "0.0.0.0",
+                            "RemotePort":  0,
+                            "State":  100,
+                            "OwningProcess":  76528
+                        },
+                        {
+                            "LocalAddress":  "0.0.0.0",
+                            "LocalPort":  10425,
+                            "RemoteAddress":  "0.0.0.0",
+                            "RemotePort":  0,
+                            "State":  100,
+                            "OwningProcess":  47484
+                        },
+                        {
+                            "LocalAddress":  "127.0.0.1",
+                            "LocalPort":  10355,
+                            "RemoteAddress":  "127.0.0.1",
+                            "RemotePort":  18443,
+                            "State":  5,
+                            "OwningProcess":  76528
+                        },
+                        {
+                            "LocalAddress":  "127.0.0.1",
+                            "LocalPort":  10425,
+                            "RemoteAddress":  "127.0.0.1",
+                            "RemotePort":  18443,
+                            "State":  5,
+                            "OwningProcess":  47484
+                        },
+                        {
+                            "LocalAddress":  "127.0.0.1",
+                            "LocalPort":  18443,
+                            "RemoteAddress":  "0.0.0.0",
+                            "RemotePort":  0,
+                            "State":  2,
+                            "OwningProcess":  77472
+                        },
+                        {
+                            "LocalAddress":  "127.0.0.1",
+                            "LocalPort":  18443,
+                            "RemoteAddress":  "127.0.0.1",
+                            "RemotePort":  10355,
+                            "State":  5,
+                            "OwningProcess":  77472
+                        },
+                        {
+                            "LocalAddress":  "127.0.0.1",
+                            "LocalPort":  18443,
+                            "RemoteAddress":  "127.0.0.1",
+                            "RemotePort":  10393,
+                            "State":  5,
+                            "OwningProcess":  77472
+                        },
+                        {
+                            "LocalAddress":  "127.0.0.1",
+                            "LocalPort":  18443,
+                            "RemoteAddress":  "127.0.0.1",
+                            "RemotePort":  10425,
+                            "State":  5,
+                            "OwningProcess":  77472
+                        }
+                    ],
+    "at":  "2026-10-11T04:29:19.8660164Z"
+}

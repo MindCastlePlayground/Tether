@@ -1,0 +1,3 @@
+import {createServer} from 'node:http';
+const html=`<!doctype html><html><head><title>Browser Bridge Local Test</title></head><body><h1>Browser Bridge local fixture</h1><label>Name <input id="name"></label><button id="save">Save locally</button><output id="result">not saved</output><a href="/popup" target="_blank">Popup test</a><script>document.cookie='bb_fixture=existing-profile; SameSite=Strict';document.querySelector('#save').onclick=()=>{document.querySelector('#result').textContent='saved: '+document.querySelector('#name').value};</script></body></html>`;
+createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(html);}).listen(18444,'127.0.0.1',()=>console.log('fixture_ready'));

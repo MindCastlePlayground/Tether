@@ -1,0 +1,27 @@
+# Local runtime, credentials and generated dependencies
+**/.local/
+**/node_modules/
+**/.npm-cache/
+**/dist/
+**/__pycache__/
+*.py[cod]
+*.stdout
+*.stderr
+*.before-rename
+*.before-tether
+.env
+.env.*
+!.env.example
+
+# Local migration history, raw agent conversations and diagnostic notes
+/work/
+/outputs/
+/RENAME-STATUS.md
+/prototype/work/
+**/evidence/*.jsonl
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

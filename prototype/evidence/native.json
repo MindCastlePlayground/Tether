@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-11T04:02:04.253Z",
+  "scope": "real native executable, simulated extension peer",
+  "checks": [
+    {
+      "name": "native_length_prefixed_fragmented_roundtrip",
+      "pass": true
+    },
+    {
+      "name": "native_stdin_eof_stops_host",
+      "pass": true
+    },
+    {
+      "name": "native_origin_mismatch_rejected",
+      "pass": true
+    }
+  ]
+}

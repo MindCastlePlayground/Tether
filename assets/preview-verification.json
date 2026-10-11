@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-11T05:27:24.177Z",
+  "fixture": "mock extension runtime; no Native Host or Broker",
+  "title": "Tether",
+  "logo": "128px loaded",
+  "overflow": false,
+  "toggle": "passed",
+  "keyboardFocus": "passed",
+  "pageErrors": []
+}

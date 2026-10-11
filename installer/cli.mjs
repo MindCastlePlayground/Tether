@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Agents } from './agents.mjs';
-import { Install } from './constants.mjs';
+import { Agents, Detect } from './agents.mjs';
+import { Cmd, Hint, Install, Opt } from './constants.mjs';
 import { Files } from './files.mjs';
 import { Runtime } from './runtime.mjs';
 import { Browser } from './browser.mjs';
@@ -29,10 +29,28 @@ export class Cli {
   }
   static help(language) {
     if (language === 'zh-CN') {
-      console.log(`Tether 安装器（Windows、Node 22+、Python 3.10+）\n\n  tether install --agent codex,claude,cursor,opencode,gemini [选项]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n\n选项：\n  --scope project|user   默认项目范围\n  --project PATH         项目配置/Skill 目录（默认当前目录）\n  --home PATH            持久安装目录（默认 LOCALAPPDATA/Tether）\n  --runtime PATH         复用已配置的 prototype 目录\n  --python PATH          创建独立环境的 Python 解释器\n  --language en|zh-CN    MCP 描述及初始化提示语言\n  --no-register          跳过 HKCU 原生主机注册\n  --open-browser         打开扩展管理页和扩展目录\n  --dry-run              只预览路径，不写入或启动进程\n\n已有冲突的 MCP/Skill 会保留并报告。\n扩展需要手动启用开发者模式并加载已解压的扩展程序。\n安装器不会启动 Broker。根包尚未发布到 npm 公共仓库。`);
+      console.log(`Tether 安装器（Windows、Node 22+、Python 3.10+）\n\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [选项]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n\n选项：\n  --agent LIST|auto      省略或 auto：检测本机已安装的 Agent 并全部配置\n  --scope project|user   默认项目范围\n  --project PATH         项目配置/Skill 目录（默认当前目录）\n  --home PATH            持久安装目录（默认 LOCALAPPDATA/Tether）\n  --runtime PATH         复用已配置的 prototype 目录\n  --python PATH          创建独立环境的 Python 解释器\n  --language en|zh-CN    MCP 描述及初始化提示语言\n  --no-register          跳过 HKCU 原生主机注册\n  --open-browser         打开扩展管理页。install 默认会打开，除非 --no-open\n  --no-open              install 成功后不打开浏览器\n  --dry-run              只预览路径，不写入或启动进程\n\n已有冲突的 MCP/Skill 会保留并报告。\n扩展需要手动启用开发者模式并加载已解压的扩展程序。\n安装器不会启动 Broker。根包尚未发布到 npm 公共仓库。\nupgrade 替换运行目录源码并保留 .local 与 .venv，不修改 Agent 配置，也不重新生成凭据。\ninstall 遇到旧版本运行目录时不会覆盖，请运行 tether upgrade。`);
       return;
     }
-    console.log(`Tether installer (Windows, Node 22+, Python 3.10+)\n\n  tether install --agent codex,claude,cursor,opencode,gemini [options]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n\nOptions:\n  --scope project|user   Default: project\n  --project PATH         Project config/skill destination (default: current directory)\n  --home PATH            Durable installation home (default: LOCALAPPDATA/Tether)\n  --runtime PATH         Reuse an already configured prototype directory\n  --python PATH          Python executable for a fresh isolated venv\n  --language en|zh-CN    MCP descriptions and setup messages\n  --no-register          Skip HKCU Native Messaging registration\n  --open-browser         Open extension manager and extension folder\n  --dry-run              Print paths/plan without writes or processes\n\nExisting conflicting MCP entries/skills are preserved and reported.\nBrowser extension loading needs Developer mode + Load unpacked.\nInstallation never starts Broker. npm registry publication is not yet available.`);
+    console.log(`Tether installer (Windows, Node 22+, Python 3.10+)\n\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [options]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n\nOptions:\n  --agent LIST|auto      Omit or auto: detect and configure every installed agent\n  --scope project|user   Default: project\n  --project PATH         Project config/skill destination (default: current directory)\n  --home PATH            Durable installation home (default: LOCALAPPDATA/Tether)\n  --runtime PATH         Reuse an already configured prototype directory\n  --python PATH          Python executable for a fresh isolated venv\n  --language en|zh-CN    MCP descriptions and setup messages\n  --no-register          Skip HKCU Native Messaging registration\n  --open-browser         Open the extension manager. Install does this unless --no-open\n  --no-open              Do not open the browser after install\n  --dry-run              Print paths/plan without writes or processes\n\nExisting conflicting MCP entries/skills are preserved and reported.\nBrowser extension loading needs Developer mode + Load unpacked.\nInstallation never starts Broker. npm registry publication is not yet available.\nupgrade replaces runtime source, keeps .local and .venv, and does not change agent config or regenerate credentials.\ninstall does not overwrite an older runtime; run tether upgrade.`);
+  }
+  static resolve(options, find = Detect.find) {
+    const raw = options.agent;
+    if (raw && raw !== Opt.AUTO) return { names: [...new Set(raw.split(',').filter(Boolean))], detected: false };
+    const names = find(process.env, os.homedir(), fs.existsSync);
+    if (!names.length) throw new Error(options.language === 'zh-CN' ? `未检测到已安装的 Agent。请使用 ${Opt.AGENT} 指定。` : `No installed agents detected. Pass ${Opt.AGENT}.`);
+    return { names, detected: true };
+  }
+  static upgrade(runtime, options) {
+    const zh = options.language === 'zh-CN';
+    if (!fs.existsSync(runtime)) throw new Error(`Runtime not found: ${runtime}. Run ${Hint.INSTALL} first.`);
+    console.log(`${zh ? '升级运行目录' : 'Upgrade runtime'}: ${runtime}`);
+    console.log(zh ? '保留 .local 与 .venv，替换源码后构建。不修改 Agent 配置。' : 'Keeps .local and .venv, replaces source, then builds. Agent config is unchanged.');
+    if (options[Install.OPTION.DRY]) return 0;
+    if (process.platform !== 'win32') throw new Error('Native host setup currently supports Windows only. --dry-run works on other platforms.');
+    Runtime.upgrade(runtime, path.join(Cli.ROOT, 'prototype'), options);
+    console.log(zh ? '升级完成。' : 'Upgrade complete.');
+    return 0;
   }
   static root(options) { return options.runtime ? path.resolve(options.runtime) : path.join(path.resolve(options.home || path.join(process.env.LOCALAPPDATA || os.homedir(), 'Tether')), 'runtime'); }
   static plans(options, runtime) {
@@ -77,6 +95,10 @@ export class Cli {
       if (options[Install.OPTION.OPEN] && !options[Install.OPTION.DRY]) await Browser.open(browser);
       return 0;
     }
+    if (command === Cmd.UPGRADE) return Cli.upgrade(runtime, options);
+    const resolved = Cli.resolve(options);
+    if (resolved.detected) console.log(`${options.language === 'zh-CN' ? '检测到 Agent' : 'Detected agents'}: ${resolved.names.join(', ')}`);
+    options.agent = resolved.names.join(',');
     // Validate all destination configs/skill conflicts before preparing runtime or writing any agent config.
     const plans = Cli.plans(options, runtime);
     const browser = Cli.print(options, runtime, plans);
@@ -96,7 +118,10 @@ export class Cli {
       if (backup) console.log(`Backup: ${backup}`);
       for (const skill of plan.skills) Files.write(skill.file, skill.text);
     }
-    if (options[Install.OPTION.OPEN]) await Browser.open(browser);
+    if (!options[Install.OPTION.NO_OPEN]) {
+      try { await Browser.open(browser); }
+      catch (error) { console.log(error.message); }
+    }
     console.log(options.language === 'zh-CN' ? '安装完成。重启/重新加载 Agent 后使用 tether-browser Skill 和 tether MCP。浏览器加载需要手动完成。' : 'Installed. Restart/reload your agent to use the tether-browser skill and tether MCP. Complete browser loading manually.');
     return 0;
   }

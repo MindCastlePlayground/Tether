@@ -8,12 +8,13 @@
 
 ## 从检出目录安装
 
-在仓库根目录一条命令安装（默认自动检测 Agent）：
+双击根目录的 `install.bat` 进入交互式安装，或运行：
 
 ```powershell
-npm ci
-node bin/tether.mjs install
+.\install.bat
 ```
+
+BAT 入口检查 Node.js 22+，并使用 npm 安装缺失的 CLI 依赖。无参数运行时会在退出前暂停，保留错误信息；也支持转发显式命令，例如 `.\install.bat install --agent codex --dry-run` 或 `.\install.bat upgrade`。相对路径和默认项目目录以调用时的工作目录为准。即使转发的是 dry-run 命令，依赖准备仍可能写入 `node_modules`。
 
 在终端中不带参数运行 `node bin/tether.mjs` 会进入交互式安装引导。它会询问 Agent、范围及路径、Python 可执行文件、浏览器、语言、Native Messaging 注册、安装后打开浏览器和是否仅预览；按 Enter 使用显示的默认值。范围默认 `auto`：多数 Agent 使用项目级，OpenCode 使用用户级。按 Ctrl+C 或结束输入会取消并以退出码 130 结束。没有连接终端时，不带参数仍显示帮助；显式命令和参数可继续用于脚本。
 

@@ -78,7 +78,7 @@ export class Install {
   static KEY = '.local/extension-public.json';
   static MANIFEST = 'extension/manifest.json';
   static LOCATION = 'installation.json';
-  static VERSION = '0.1.0';
+  static VERSION = '0.1.1';
   static SERVER = 'tether';
   static HOST = 'com.freebird.browser_bridge';
   static SOURCE = ['package.json', 'package-lock.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];

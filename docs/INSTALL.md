@@ -8,12 +8,13 @@ Tether's root package is private and is not published to npm. Use a local checko
 
 ## Install from a checkout
 
-From the repository root, one command installs the runtime and configures detected agents:
+Double-click the root `install.bat` to open the interactive installer, or run:
 
 ```powershell
-npm ci
-node bin/tether.mjs install
+.\install.bat
 ```
+
+The BAT entry checks Node.js 22+ and installs missing CLI dependencies with npm. With no arguments it keeps the window open on exit so errors remain visible. It also forwards explicit commands, for example `.\install.bat install --agent codex --dry-run` or `.\install.bat upgrade`. Relative paths and the default project directory use the caller's working directory. Dependency setup may write `node_modules` even when the forwarded command is a dry run.
 
 With a terminal attached, running `node bin/tether.mjs` with no arguments starts an interactive install guide. It asks for the Agent selection, scope and paths, Python executable, browser, language, Native Messaging registration, browser opening, and optional preview mode; pressing Enter keeps the shown default. Scope defaults to `auto`: project scope for most agents, user scope for OpenCode. Ctrl+C or end of input cancels with exit code 130. With no terminal attached, no arguments still prints help, and explicit commands and flags remain available for scripts.
 

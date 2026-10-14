@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExtensionController } from '../extension/controller.js';
-import { Storage, Wire } from '../extension/protocol.js';
+import { NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -48,6 +48,36 @@ class FakeChrome {
 }
 
 const clientA = 'client-alpha-0001';
+test('native disconnect consumes lastError synchronously and exposes recovery status', async () => {
+  const api = new FakeChrome();
+  let reads = 0;
+  Object.defineProperty(api.runtime, 'lastError', { get() { reads++; return { message: 'Native host has exited.' }; } });
+  const c = new ExtensionController(api);
+  c.connect();
+  c.stopped = true;
+  api.native.onDisconnect.fire();
+  assert.equal(reads, 1);
+  const messages = [];
+  await c.popup({ type: PopupMessage.Status }, { url: api.runtime.getURL('popup.html') }, { postMessage: m => messages.push(m) });
+  assert.equal(messages[0].code, NativeStatus.Host);
+  assert.equal(messages[0].detail, 'Native host has exited.');
+});
+
+test('native diagnosis survives disconnect, pushes to popup, and clears on recovery', () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  const messages = [];
+  c.popups.add({ postMessage: m => messages.push(m) });
+  c.connect();
+  api.native.onMessage.fire({ type: NativeStatus.Type, state: NativeStatus.Error, code: 'broker_unavailable' });
+  c.stopped = true;
+  api.native.onDisconnect.fire();
+  assert.equal(c.status.code, 'broker_unavailable');
+  api.native.onMessage.fire({ type: NativeStatus.Type, state: NativeStatus.Connected });
+  assert.equal(messages.at(-1).state, NativeStatus.Connected);
+  assert.equal(c.status.code, undefined);
+  assert.equal(api.native.messages.length, 0);
+});
 const clientB = 'client-bravo-0002';
 
 async function approvedExisting() {

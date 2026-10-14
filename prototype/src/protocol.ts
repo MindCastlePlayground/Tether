@@ -2,6 +2,22 @@ export class Brand {
   static readonly Name = 'tether';
   static readonly Version = '0.1.0';
 }
+export class NativeStatus {
+  static readonly Type = 'native.status';
+  static readonly Connected = 'connected';
+  static readonly Error = 'error';
+  static readonly Config = 'host_config_failed';
+  static readonly Origin = 'host_origin_mismatch';
+  static readonly Offline = 'broker_unavailable';
+  static readonly TLS = 'broker_tls_failed';
+  static readonly Auth = 'broker_auth_failed';
+  static readonly Closed = 'broker_disconnected';
+  static readonly Frame = 'native_frame_invalid';
+  static readonly Timeout = 5000;
+  static readonly Refused = 'ECONNREFUSED';
+  static readonly TLSCodes = new Set(['CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY']);
+  static readonly Pin = 'pin_mismatch';
+}
 export enum Action {
   Session='session', Available='availableTabs', Observe='observe', Fill='fill', Click='click',
   Navigate='navigate', Create='createTab', Close='closeTab'

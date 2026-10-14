@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Agents, Detect } from './agents.mjs';
-import { Cmd, Hint, Install, Opt, Policy, Scope } from './constants.mjs';
+import { Cmd, Hint, Install, Interactive, Opt, Policy, Scope } from './constants.mjs';
+import { Prompt } from './prompt.mjs';
 import { Files } from './files.mjs';
 import { Runtime } from './runtime.mjs';
 import { Browser } from './browser.mjs';
@@ -129,6 +130,12 @@ export class Cli {
     return 0;
   }
   static async main(args) {
+    if (!args.length && process.stdin.isTTY && process.stdout.isTTY) {
+      console.log(Intl.DateTimeFormat().resolvedOptions().locale.startsWith('zh') ? 'Tether 交互式安装' : 'Tether interactive setup');
+      const prompted = await Prompt.run();
+      if (!prompted) return Interactive.CANCELLED;
+      args = prompted;
+    }
     const { command, options } = Cli.parse([...args]);
     if (command === 'help') { Cli.help(options.language); return 0; }
     const runtime = Cli.root(options);

@@ -27,6 +27,7 @@ export class Wire {
 }
 
 export class PopupMessage {
+  static Status = 'popup.status';
   static Port = 'popup';
   static Pending = 'popup.pending';
   static Tabs = 'popup.tabs';
@@ -41,6 +42,20 @@ export class PopupMessage {
 
 export class Storage {
   static AutoApprove = 'autoApprove';
+}
+
+export class NativeStatus {
+  static Type = 'native.status';
+  static Connected = 'connected';
+  static Error = 'error';
+  static Waiting = 'waiting';
+  static Host = 'native_host_failed';
+  static Hints = Object.freeze({
+    host_config_failed: 'nativeConfig', host_origin_mismatch: 'nativeOrigin',
+    broker_unavailable: 'nativeOffline', broker_tls_failed: 'nativeTLS',
+    broker_auth_failed: 'nativeAuth', broker_disconnected: 'nativeClosed',
+    native_frame_invalid: 'nativeFrame', native_host_failed: 'nativeHost'
+  });
 }
 
 export class Failure {

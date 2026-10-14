@@ -90,6 +90,21 @@ npm run build
 ```
 
 在现有浏览器中将 `extension/` 作为未打包扩展加载。全新初始化会生成本机扩展密钥/ID 并更新 `manifest.json`；应使用该机器生成的 ID，而不是 README 中历史遗留的 ID。初始化会保留已有配置。为兼容注册流程，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。这些命令不会启动 Broker。
+## 原生主机故障排查
+
+弹窗会显示 Broker 连接状态及恢复提示；Native Messaging 断开时会读取 `runtime.lastError`。能够启动的 host 会在以退出码 1 结束前发送带长度前缀的诊断消息，stderr 只输出固定错误码。安装或加载扩展不会启动 Broker。
+
+| 错误 | 解决步骤 |
+| --- | --- |
+| `broker_unavailable` | 启动已配置的 MCP 客户端并启用 `BB_BROKER_AUTOSTART`，或在已安装 runtime 目录运行 `node dist/broker.js .local/broker.json`。扩展会自动重连。 |
+| `host_config_failed` / `host_origin_mismatch` | 在仓库根目录运行 `node bin/tether.mjs doctor --runtime <runtime>`。恢复配套 runtime/配置并加载其 `extension/`，核对扩展 ID 与 `.local/native-host.json`。 |
+| `broker_tls_failed` | 检查系统时间、证书和 pin 是否配套。初始化证书有效期为 30 天；过期后请停止 Broker、备份 runtime，在新目录安装、更新 Agent 配置并加载新扩展。初始化会保留已有证书，重跑不会续期。 |
+| `broker_auth_failed` / `broker_disconnected` | 检查 Broker 终端错误，确认运行中的 Broker 与 host 属于同一 runtime 和配置，再重启正确的 Broker。 |
+| `native_host_failed` | Node 或原生启动器可能尚未启动。检查弹窗显示的浏览器错误、Node.js 可用性及已注册的可执行文件路径；恢复已安装 runtime，重跑其 `scripts/register.ps1` 后重新加载扩展。 |
+| `native_frame_invalid` | 同步更新 runtime 和扩展，将消息限制在 512 KiB 以内。 |
+
+源码更新后需重新构建已安装 runtime 并重新加载其扩展。在本目录运行诊断测试：`node --test --test-isolation=none test/host.test.mjs test/extension.test.mjs test/i18n.test.mjs`；host 测试依赖本地初始化证书，使用临时回环测试服务器，不连接运行中的 Broker。
+
 ## 授权和网络边界
 
 - `newGroup` 默认自动授权已认证身份控制任务页面、创建最多 10 个当前会话页面，以及在这些页面进行 HTTP(S) 导航和网站操作。工具栏可关闭自动批准；关闭后新请求需手工批准。开关保存在 `chrome.storage.local`，扩展重新加载后保持不变。标签组仅用于展示；实际权限按 client/session/page 授予。

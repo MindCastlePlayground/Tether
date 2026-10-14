@@ -15,6 +15,7 @@ try{
   buffer=Buffer.concat([buffer,data]);
   while(buffer.length>=4){const n=buffer.readUInt32LE();if(n>512*1024)throw Error('native_framing_failed');if(buffer.length<n+4)return;
    const req=JSON.parse(buffer.subarray(4,n+4));buffer=buffer.subarray(n+4);
+   if(req.type==='native.status')continue;
    const body=Buffer.from(JSON.stringify({jsonrpc:'2.0',id:req.id,result:req.method==='requestSession'?{pendingId:'native-transport-probe',status:'pending'}:{ok:true}}));
    const head=Buffer.alloc(4);head.writeUInt32LE(body.length);
    // Deliberately fragmented input, including the length header.

@@ -1,4 +1,4 @@
-import { BrowserAction, CdpMethod, Failure, Limits, PopupMessage, Storage, Wire } from './protocol.js';
+import { BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from './protocol.js';
 
 export class ExtensionController {
   constructor(api = globalThis.chrome, clock = () => Date.now(), userAgent = () => globalThis.navigator.userAgent) {
@@ -18,12 +18,16 @@ export class ExtensionController {
     this.ready = null;
     this.stopped = false;
     this.timer = null;
+    this.status = { state: NativeStatus.Waiting };
+    this.popups = new Set();
   }
 
   start() {
     this.ready = this.load();
     this.api.runtime.onConnect.addListener(port => {
       if (port.name !== PopupMessage.Port) return;
+      this.popups.add(port);
+      port.onDisconnect.addListener(() => this.popups.delete(port));
       port.onMessage.addListener(msg => this.popup(msg, port.sender, port));
     });
     this.api.tabs.onRemoved.addListener(tabId => this.dropTab(tabId));
@@ -63,11 +67,35 @@ export class ExtensionController {
     if (this.stopped) return;
     try {
       this.port = this.api.runtime.connectNative(Wire.Host);
-      this.port.onMessage.addListener(message => this.receive(message));
+      let reported = false;
+      this.port.onMessage.addListener(message => {
+        if (message?.type === NativeStatus.Type) {
+          if (message.state === NativeStatus.Connected ||
+              (message.state === NativeStatus.Error && Object.hasOwn(NativeStatus.Hints, message.code))) {
+            reported = message.state === NativeStatus.Error;
+            this.setStatus({ state: message.state, code: message.code });
+          }
+          return;
+        }
+        this.receive(message);
+      });
       this.port.onDisconnect.addListener(() => {
+        // Chrome exposes lastError only during this callback; reading it consumes it.
+        const error = this.api.runtime.lastError?.message;
+        if (!reported) this.setStatus({ state: NativeStatus.Error, code: NativeStatus.Host, detail: error });
         void this.disconnected().finally(() => { if (!this.stopped) setTimeout(() => this.connect(), 1000); });
       });
-    } catch { this.port = null; if (!this.stopped) setTimeout(() => this.connect(), 1000); }
+    } catch {
+      this.setStatus({ state: NativeStatus.Error, code: NativeStatus.Host });
+      this.port = null; if (!this.stopped) setTimeout(() => this.connect(), 1000);
+    }
+  }
+
+  setStatus(status) {
+    this.status = status;
+    for (const port of this.popups) {
+      try { port.postMessage({ type: PopupMessage.Status, ...status }); } catch { this.popups.delete(port); }
+    }
   }
 
   async receive(msg) {
@@ -157,7 +185,9 @@ export class ExtensionController {
   async popup(msg, sender, port) {
     if (!sender || sender.url !== this.api.runtime.getURL('popup.html') || sender.tab) return;
     try {
-      if (msg?.type === PopupMessage.Pending) {
+      if (msg?.type === PopupMessage.Status) {
+        port.postMessage({ type: PopupMessage.Status, ...this.status });
+      } else if (msg?.type === PopupMessage.Pending) {
         port.postMessage({ type: msg.type, items: [...this.pending].map(([pendingId, x]) => ({
           pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
         })) });

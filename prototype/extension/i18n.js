@@ -2,6 +2,9 @@ import en from './_locales/en/messages.json' with { type: 'json' };
 import zh from './_locales/zh_CN/messages.json' with { type: 'json' };
 
 export class Text {
+  static NativeConnected = 'nativeConnected';
+  static NativeWaiting = 'nativeWaiting';
+  static NativeHost = 'nativeHost';
   static Title = 'title';
   static Tagline = 'tagline';
   static Footer = 'footer';

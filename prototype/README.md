@@ -90,6 +90,21 @@ npm run build
 ```
 
 Load `extension/` as an unpacked extension in the existing browser. Fresh setup generates a local extension key/ID and updates `manifest.json`; use that machine's generated ID, not a historical README ID. Setup preserves existing configuration. The internal Native Messaging identifier remains `com.freebird.browser_bridge` for registration compatibility. These commands do not start Broker.
+## Native host troubleshooting
+
+The popup shows the Broker connection state and a recovery hint. `runtime.lastError` is consumed when Native Messaging disconnects. A host that can start sends a framed diagnosis before exiting with code 1; stderr contains only the fixed error code. Installing or loading the extension does not start Broker.
+
+| Error | Recovery |
+| --- | --- |
+| `broker_unavailable` | Start the configured MCP client with `BB_BROKER_AUTOSTART` enabled, or run `node dist/broker.js .local/broker.json` from the installed runtime directory. The extension retries automatically. |
+| `host_config_failed` / `host_origin_mismatch` | Run `node bin/tether.mjs doctor --runtime <runtime>` from the repository root. Restore the matching runtime/configuration and load its `extension/`; check its ID against `.local/native-host.json`. |
+| `broker_tls_failed` | Check the clock and matching certificate/pin. Setup certificates last 30 days. For expiration, stop Broker, back up the runtime, install into a new directory, update agent configuration, and load the new extension. Setup preserves existing certificates; rerunning it does not renew them. |
+| `broker_auth_failed` / `broker_disconnected` | Check Broker terminal errors. Ensure the running Broker and host belong to the same runtime and configuration, then restart the correct Broker. |
+| `native_host_failed` | Node or the native launcher may not have started. Check the browser error displayed in the popup, Node.js availability, and the registered executable path. Restore the installed runtime and rerun its `scripts/register.ps1`, then reload the extension. |
+| `native_frame_invalid` | Update the runtime and extension together and reduce messages to at most 512 KiB. |
+
+After a source update, rebuild the installed runtime and reload its extension. Run the diagnostics tests from this directory with `node --test --test-isolation=none test/host.test.mjs test/extension.test.mjs test/i18n.test.mjs`; host tests require the local setup certificates and use temporary loopback test servers, not the running Broker.
+
 ## Authorization and network boundaries
 
 - `newGroup` automatically authorizes an authenticated identity to control task pages, create up to 10 pages in the current session, and navigate or interact with websites over HTTP(S). The toolbar can turn off auto-approval; new requests then require manual approval. The switch is persisted in `chrome.storage.local` and survives extension reloads. A tab group is organizational; actual permission is scoped to client, session, and page.

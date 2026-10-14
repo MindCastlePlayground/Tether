@@ -15,6 +15,8 @@ npm ci
 node bin/tether.mjs install
 ```
 
+在终端中不带参数运行 `node bin/tether.mjs` 会进入交互式安装引导。它会询问 Agent、范围及路径、Python 可执行文件、浏览器、语言、Native Messaging 注册、安装后打开浏览器和是否仅预览；按 Enter 使用显示的默认值。范围默认 `auto`：多数 Agent 使用项目级，OpenCode 使用用户级。按 Ctrl+C 或结束输入会取消并以退出码 130 结束。没有连接终端时，不带参数仍显示帮助；显式命令和参数可继续用于脚本。
+
 `--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`（OpenCode 默认用户级 `~/.config/opencode`），`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；MCP 服务会在需要时自动拉起（见下文）。
 
 安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。若发现冲突的 Tether 配置项或已有技能文件，安装器会停止；没有强制覆盖选项。同一版本重复安装是幂等的。检测到旧版本 runtime 时，安装器会提示运行 `tether upgrade`：

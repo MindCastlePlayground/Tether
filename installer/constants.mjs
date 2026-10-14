@@ -3,6 +3,40 @@ export class Cmd {
   static POLICY = 'policy';
 }
 
+export class Interactive {
+  static CANCELLED = 130;
+  static AGENT = 'Agent(s) [auto]: ';
+  static SCOPE = 'Scope (auto/project/user) [auto: project; OpenCode user]: ';
+  static PROJECT = 'Project path [current directory]: ';
+  static HOME = 'Install home [default]: ';
+  static RUNTIME = 'Existing runtime path [none]: ';
+  static PYTHON = 'Python executable [default]: ';
+  static BROWSER = 'Browser (chrome/edge) [chrome]: ';
+  static LANGUAGE = 'Language (en/zh-CN) [auto]: ';
+  static REGISTER = 'Register Native Messaging (yes/no) [yes]: ';
+  static OPEN = 'Open browser after install (yes/no) [yes]: ';
+  static DRY = 'Preview only (yes/no) [no]: ';
+  static PROMPTS_ZH = {
+    agent: 'Agent 名称（逗号分隔）[auto]: ', scope: '范围（auto/project/user）[auto：项目级，OpenCode 用户级]: ',
+    project: '项目目录 [当前目录]: ', home: '安装目录 [默认]: ', runtime: '已有 runtime 路径 [无]: ',
+    python: 'Python 可执行文件 [默认]: ', browser: '浏览器（chrome/edge）[chrome]: ',
+    language: '语言（en/zh-CN）[自动]: ', register: '注册 Native Messaging（yes/no）[yes]: ',
+    open: '安装后打开浏览器（yes/no）[yes]: ', dry: '仅预览（yes/no）[no]: '
+  };
+  static AGENTS = ['auto', 'codex', 'claude', 'cursor', 'opencode', 'gemini'];
+  static SCOPES = ['auto', 'project', 'user'];
+  static BROWSERS = ['chrome', 'edge'];
+  static LANGUAGES = ['en', 'zh-CN'];
+  static YES = ['yes', 'no'];
+  static AUTO = 'auto';
+  static EMPTY = '';
+  static DEFAULT = 'default';
+  static PROJECT_SCOPE = 'project';
+  static CHROME = 'chrome';
+  static YES_VALUE = 'yes';
+  static NO_VALUE = 'no';
+}
+
 export class Opt {
   static NO_OPEN = 'no-open';
   static AUTO = 'auto';

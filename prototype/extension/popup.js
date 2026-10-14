@@ -1,4 +1,4 @@
-import { PopupMessage } from './protocol.js';
+import { NativeStatus, PopupMessage } from './protocol.js';
 import { Locale, Text } from './i18n.js';
 
 class Popup {
@@ -11,6 +11,7 @@ class Popup {
     this.autoApproval = true;
     this.locale = new Locale(api);
     this.view = null;
+    this.status = { state: NativeStatus.Waiting };
     this.port = api.runtime.connect({ name: PopupMessage.Port });
     this.port.onMessage.addListener(msg => this.receive(msg));
   }
@@ -36,12 +37,14 @@ class Popup {
   }
 
   start() {
+    this.port.postMessage({ type: PopupMessage.Status });
     this.port.postMessage({ type: PopupMessage.Pending });
     this.port.postMessage({ type: PopupMessage.Sessions });
     this.port.postMessage({ type: PopupMessage.AutoApproval });
   }
 
   receive(msg) {
+    if (msg.type === PopupMessage.Status) { this.status = msg; this.render(); }
     if (msg.type === PopupMessage.Pending) { this.pending = msg.items ?? []; this.render(); }
     if (msg.type === PopupMessage.Sessions) { this.sessions = msg.items ?? []; this.render(); }
     if (msg.type === PopupMessage.AutoApproval) { this.autoApproval = msg.enabled === true; this.render(); }
@@ -52,6 +55,14 @@ class Popup {
   render() {
     this.view = null;
     this.clear();
+    const connection = this.el('section'); connection.className = 'card';
+    connection.append(this.el('strong', this.locale.get(this.status.state === NativeStatus.Connected ? Text.NativeConnected : Text.NativeWaiting)));
+    if (this.status.state === NativeStatus.Error) {
+      connection.append(this.el('div', this.status.code));
+      connection.append(this.el('div', this.locale.get(NativeStatus.Hints[this.status.code] ?? Text.NativeHost), 'hint'));
+      if (this.status.detail) connection.append(this.el('div', this.status.detail, 'hint'));
+    }
+    this.root.append(connection);
     const settings = this.el('section'); settings.className = 'card';
     const label = this.el('label');
     const toggle = this.doc.createElement('input'); toggle.type = 'checkbox'; toggle.checked = this.autoApproval;

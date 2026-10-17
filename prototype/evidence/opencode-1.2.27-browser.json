@@ -1,0 +1,175 @@
+{
+  "date": "2026-10-17",
+  "timezone": "Asia/Shanghai",
+  "client": "OpenCode",
+  "version": "1.2.27",
+  "model": "deepseek-v4-flash",
+  "browser": "Chrome",
+  "transport": "stdio: node dist/mcp.js",
+  "selectors": "Public homepage DOM independently inspected before model execution",
+  "runs": [
+    {
+      "flow": "local-fixture",
+      "calls": [
+        {
+          "tool": "tether_capabilities",
+          "status": "completed",
+          "result": {
+            "browserConnected": true
+          }
+        },
+        {
+          "tool": "tether_requestSession",
+          "status": "completed",
+          "result": {
+            "status": "approved"
+          }
+        },
+        {
+          "tool": "tether_observe",
+          "status": "completed",
+          "result": {
+            "url": "http://127.0.0.1:18444/",
+            "title": "Browser Bridge Local Test",
+            "textLength": 65,
+            "sideEffect": "none"
+          }
+        },
+        {
+          "tool": "tether_fill",
+          "status": "completed",
+          "selector": "#name",
+          "value": "TETHER_OPENCODE_1_2_27",
+          "seq": 1,
+          "result": {
+            "sideEffect": "applied"
+          }
+        },
+        {
+          "tool": "tether_click",
+          "status": "completed",
+          "selector": "#save",
+          "seq": 2,
+          "result": {
+            "sideEffect": "applied"
+          }
+        },
+        {
+          "tool": "tether_observe",
+          "status": "completed",
+          "result": {
+            "url": "http://127.0.0.1:18444/",
+            "title": "Browser Bridge Local Test",
+            "textLength": 85,
+            "savedTextVerified": true,
+            "sideEffect": "none"
+          }
+        },
+        {
+          "tool": "tether_closeTab",
+          "status": "completed",
+          "seq": 3,
+          "result": {
+            "sideEffect": "applied"
+          }
+        },
+        {
+          "tool": "tether_release",
+          "status": "completed",
+          "seq": 4,
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "errors": 0,
+      "finish": "stop"
+    },
+    {
+      "flow": "public-wikipedia",
+      "calls": [
+        {
+          "tool": "tether_capabilities",
+          "status": "completed",
+          "result": {
+            "browserConnected": true
+          }
+        },
+        {
+          "tool": "tether_requestSession",
+          "status": "completed",
+          "result": {
+            "status": "approved"
+          }
+        },
+        {
+          "tool": "tether_observe",
+          "status": "completed",
+          "result": {
+            "url": "https://www.wikipedia.org/",
+            "title": "Wikipedia",
+            "textLength": 1463,
+            "sideEffect": "none"
+          }
+        },
+        {
+          "tool": "tether_fill",
+          "status": "completed",
+          "selector": "#searchInput",
+          "value": "Python",
+          "seq": 1,
+          "result": {
+            "sideEffect": "applied"
+          }
+        },
+        {
+          "tool": "tether_observe",
+          "status": "completed",
+          "result": {
+            "url": "https://www.wikipedia.org/",
+            "title": "Wikipedia",
+            "textLength": 1539,
+            "sideEffect": "none"
+          }
+        },
+        {
+          "tool": "tether_click",
+          "status": "completed",
+          "selector": "button[type=submit]",
+          "seq": 2,
+          "result": {
+            "sideEffect": "applied"
+          }
+        },
+        {
+          "tool": "tether_observe",
+          "status": "completed",
+          "result": {
+            "url": "https://zh.wikipedia.org/wiki/Python",
+            "title": "Python - 维基百科，自由的百科全书",
+            "textLength": 16000,
+            "sideEffect": "none"
+          }
+        },
+        {
+          "tool": "tether_closeTab",
+          "status": "completed",
+          "seq": 3,
+          "result": {
+            "sideEffect": "applied"
+          }
+        },
+        {
+          "tool": "tether_release",
+          "status": "completed",
+          "seq": 4,
+          "result": {
+            "ok": true
+          }
+        }
+      ],
+      "errors": 0,
+      "finish": "stop"
+    }
+  ]
+}

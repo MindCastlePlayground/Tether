@@ -38,10 +38,25 @@ Fixes 6 and 7 were rechecked with the final real-browser tests. Automatically al
 - No second LAN machine was tested. No firewall changes or public listener were used.
 - TCP snapshots are not packet capture. They do not cover brief connections, UDP, every dependency's internal paths, or browser sync/reporting. They do not support a claim of strict zero egress for the entire existing browser profile.
 - Real Edge, Chrome restart/service-worker crash residue, real drag-in/drag-out, debugger contention, the complete toolbar toggle/revocation UI flow, and OOPIF were not verified. M0 does not implement automatic OOPIF attachment, file transfer, or automatic popup authorization.
-- Test page content was not sent to a real model. “Agent call” here means an actual MCP tool-protocol call. The model-side egress policy depends on the Agent deployment.
+- In the 2026-10-11 tests, page content was not sent to a real model; “Agent call” meant an actual MCP tool-protocol call. The model-driven tests below add later evidence. The model-side egress policy depends on the Agent deployment.
 
 ## Reruns and security
 
-See the [prototype guide](README.md). All automated browser tests operate only on the local synthetic page at `http://127.0.0.1:18444/`. Under the updated user policy, new groups and specified existing pages are automatically approved; test code does not call the approval function directly. Real tab enumeration is used only within the client to find the synthetic page; other page lists are not written to evidence. Approval in FakeChrome unit tests does not affect the real browser.
+See the [prototype guide](README.md). The original automated browser scripts operate only on the local synthetic page at `http://127.0.0.1:18444/`; the later model-driven public website test is recorded below. Under the updated user policy, new groups and specified existing pages are automatically approved; test code does not call the approval function directly. Real tab enumeration is used only within the client to find the synthetic page; other page lists are not written to evidence. Approval in FakeChrome unit tests does not affect the real browser.
 
 The `.local/` directory contains credentials and private keys and is restricted to the current local user/SYSTEM ACL. Reports and logs contain no credentials; evidence contains only synthetic data and operation status.
+
+## OpenCode 1.2.27 live browser acceptance — 2026-10-17
+
+An isolated official `opencode-windows-x64@1.2.27` binary reported `1.2.27`. Its configuration and XDG directories stayed under local `work/`, preserving the existing OpenCode installation and user configuration. The configured text model (`deepseek-v4-flash`) made actual Tether MCP calls through stdio, Broker, Native Messaging and the manually loaded Chrome extension. This run used Node with `dist/mcp.js`, rather than the generated MCP EXE launcher. Credentials came from local configuration/environment variables.
+
+| Flow | Actual tool evidence | Result |
+|---|---|---|
+| Connection | `mcp list` reported Tether connected; after extension loading, `capabilities` returned `browserConnected: true` | Passed |
+| Local page | 8 completed calls: capabilities, requestSession, observe, fill, click, observe, closeTab, release. Filling `#name` and clicking `#save` both returned `applied`; observation read back `saved: TETHER_OPENCODE_1_2_27` | Passed |
+| Public website | 9 completed calls: capabilities, requestSession, observe, fill, observe, click, observe, closeTab, release. On `https://www.wikipedia.org/`, OpenCode entered `Python` in `#searchInput` and clicked `button[type=submit]`. Observation confirmed `https://zh.wikipedia.org/wiki/Python`, its article title and 16,000 characters of visible text | Passed |
+| Cleanup and completion | Both runs closed their created tab, released the session with `ok: true`, and ended with `step_finish` reason `stop`; no error events | Passed |
+
+The selectors for the public homepage were independently inspected before the model run. All reported page reads, fills and clicks were performed by OpenCode through Tether MCP. This establishes real webpage reading, input and navigation; it does not establish automatic discovery of every control. `observe` returns up to 16,000 characters of visible body text, so the article result is not a full-page extraction. This run did not cover Edge, every tool, or all authorization/lifecycle boundaries.
+
+The sanitized event summary is [OpenCode browser evidence](evidence/opencode-1.2.27-browser.json). Raw events, local test configuration and the one-off runner remain in ignored `work/opencode-1.2.27/`. Synthetic and public page content was sent to the configured model during these runs; this is not zero-egress acceptance.

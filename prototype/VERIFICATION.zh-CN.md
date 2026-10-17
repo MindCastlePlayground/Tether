@@ -38,10 +38,25 @@
 - 没有通过另一台 LAN 主机实测，没有修改防火墙，没有公网监听。
 - TCP 采样不是抓包，未覆盖短暂连接、UDP、所有依赖内部路径或浏览器本体同步/上报。不能据此承诺整个现有浏览器 profile 严格零外传。
 - 未验证真实 Edge、Chrome 重启/扩展 service worker 崩溃残留、真实拖入拖出、Debugger 争用、工具栏手动关闭开关及撤销的完整真实 UI 流程、OOPIF；M0 不开放 OOPIF 自动连接、文件和弹窗自动授权。
-- 没有向真实模型发送测试网页内容；“Agent 调用”当前指实际 MCP 工具协议调用。其模型侧外传策略由 Agent 部署方式决定。
+- 2026-10-11 的测试没有向真实模型发送网页内容；当时“Agent 调用”指实际 MCP 工具协议调用。下方真实模型测试补充了后续证据。模型侧外传策略由 Agent 部署方式决定。
 
 ## 复跑与安全
 
-见[原型指南](README.zh-CN.md)。所有浏览器自动测试只操作本地合成页 `http://127.0.0.1:18444/`。按用户更新要求，新建组及指定已有页默认自动批准；测试代码不直接调用批准函数。真实标签枚举只用于在客户端内找到合成页，不将其他页面列表写入证据。FakeChrome 单元测试里的批准不会影响真实浏览器。
+见[原型指南](README.zh-CN.md)。原有浏览器自动测试脚本只操作本地合成页 `http://127.0.0.1:18444/`；后续模型驱动的公共网站测试另记于下方。按用户更新要求，新建组及指定已有页默认自动批准；测试代码不直接调用批准函数。真实标签枚举只用于在客户端内找到合成页，不将其他页面列表写入证据。FakeChrome 单元测试里的批准不会影响真实浏览器。
 
 本目录 `.local/` 含凭据和私钥，只保留本机当前用户/SYSTEM ACL。报告与日志没有凭据；证据仅含合成数据及操作状态。
+
+## OpenCode 1.2.27 真实浏览器验收 — 2026-10-17
+
+隔离安装官方 `opencode-windows-x64@1.2.27`，二进制实际返回版本 `1.2.27`。配置和 XDG 目录均位于本地 `work/`，保留现有 OpenCode 安装及用户配置。已配置的文本模型（`deepseek-v4-flash`）经 stdio、Broker、Native Messaging 和手动加载的 Chrome 扩展执行真实 Tether MCP 调用。本次使用 Node 启动 `dist/mcp.js`，未使用生成的 MCP EXE 启动器。凭据从本地配置及环境变量读取。
+
+| 流程 | 实际工具证据 | 结论 |
+|---|---|---|
+| 连接 | `mcp list` 显示 Tether connected；加载扩展后 `capabilities` 返回 `browserConnected: true` | 通过 |
+| 本地页面 | 8 次调用全部 completed：capabilities、requestSession、observe、fill、click、observe、closeTab、release。填写 `#name`、点击 `#save` 均返回 applied；观察读回 `saved: TETHER_OPENCODE_1_2_27` | 通过 |
+| 真实网站 | 9 次调用全部 completed：capabilities、requestSession、observe、fill、observe、click、observe、closeTab、release。在 `https://www.wikipedia.org/` 的 `#searchInput` 输入 `Python`，点击 `button[type=submit]`；观察确认跳转至 `https://zh.wikipedia.org/wiki/Python`，返回条目标题及 16000 字符可见文本 | 通过 |
+| 清理与结束 | 两次运行均关闭测试标签、释放会话并返回 ok=true；最终 step_finish reason=stop，无 error 事件 | 通过 |
+
+公共首页的选择器在模型运行前经过独立检查。上述页面读取、填写和点击均由 OpenCode 通过 Tether MCP 完成，证明真实网页读取、输入和导航可用，但未验证任意页面全部控件的自动发现能力。observe 最多返回 16000 字符可见正文，条目结果不代表全文提取。本次未覆盖 Edge、全部工具及所有授权和生命周期边界。
+
+精简事件证据见 [OpenCode 浏览器实测](evidence/opencode-1.2.27-browser.json)。原始事件、本地测试配置及临时运行脚本保留于被忽略的 `work/opencode-1.2.27/`。本次合成及公共页面内容实际发送给了已配置模型，不属于零外传验收。

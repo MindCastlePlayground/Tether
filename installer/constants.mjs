@@ -77,12 +77,13 @@ export class Install {
   static MARKER = '.tether-install.json';
   static KEY = '.local/extension-public.json';
   static MANIFEST = 'extension/manifest.json';
+  static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
-  static VERSION = '0.1.1';
+  static VERSION = '1.0.0';
   static SERVER = 'tether';
   static HOST = 'com.freebird.browser_bridge';
   static SOURCE = ['package.json', 'package-lock.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
-  static REQUIRED = ['dist/mcp.js', 'dist/broker.js', 'dist/host.js', '.local/mcp.exe', '.local/host.exe', '.local/broker.exe', '.local/agent.json', '.local/broker.json', '.local/native-host.json', 'extension/manifest.json'];
+  static REQUIRED = ['dist/mcp.js', 'dist/broker.js', 'dist/host.js', 'dist/lifecycle.js', '.local/mcp.exe', '.local/host.exe', '.local/broker.exe', '.local/agent.json', '.local/broker.json', '.local/native-host.json', 'extension/manifest.json'];
   static VALUES = ['agent', 'scope', 'project', 'home', 'runtime', 'browser', 'language', 'python'];
   static FLAGS = ['dry-run', 'open-browser', 'no-register', 'help', Opt.NO_OPEN];
   static COMMANDS = ['install', 'doctor', 'extension', 'help', Cmd.UPGRADE, Cmd.POLICY];

@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:https';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { BlockList } from 'node:net';
@@ -8,7 +9,7 @@ import { Policy } from './policy.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Config } from './config.js';
 import { Engine } from './engine.js';
-import { Method, Limit, Wire, Action, Effect, PolicyKey, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
+import { Method, Limit, Wire, Action, Effect, PolicyKey, Brand, BrokerControl as Control, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
 
 interface Pending {resolve:(v:any)=>void;reject:(e:Error)=>void;timer:NodeJS.Timeout;}
 interface Ledger {high:number; records:Map<number,{body:string,result:Promise<any>,at:number}>; tail:Promise<any>;}
@@ -23,9 +24,9 @@ export class Broker {
   async start():Promise<void>{
     const binds=[{ip:'127.0.0.1',port:this.cfg.port,cidrs:['127.0.0.1/32']}];
     if(this.cfg.lan){if(!Config.privateIP(this.cfg.lan.ip)||this.cfg.lan.ip==='127.0.0.1'||!this.cfg.lan.cidrs?.length)throw Error('invalid_lan');binds.push(this.cfg.lan);}
-    for(const bind of binds){
+    try { for(const bind of binds){
       const allow=new BlockList();for(const cidr of bind.cidrs){const [ip,bits]=cidr.split('/');if(!Config.privateIP(ip)||!/^\d+$/.test(bits)||+bits<8||+bits>32)throw Error('invalid_cidr');allow.addSubnet(ip,+bits,'ipv4');}
-      const server=createServer({key:readFileSync(this.cfg.keyFile),cert:readFileSync(this.cfg.certFile),minVersion:'TLSv1.2'},(_,res)=>{res.writeHead(404);res.end();});
+      const server=createServer({key:readFileSync(this.cfg.keyFile),cert:readFileSync(this.cfg.certFile),minVersion:'TLSv1.2'},(req,res)=>this.control(req,res));
       const wss=new WebSocketServer({noServer:true,maxPayload:Limit.Frame,perMessageDeflate:false});
       server.on('upgrade',(req,socket,head)=>{
         const ip=req.socket.remoteAddress??'';const auth=req.headers[Wire.Auth];
@@ -36,8 +37,20 @@ export class Broker {
         wss.handleUpgrade(req,socket,head,ws=>this.connected(ws,identity));
       });
       await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(bind.port,bind.ip,()=>resolve());});this.servers.push(server);
-    }
+    } } catch (err) { await this.stop(); throw err; }
     this.timer=setInterval(()=>{if(this.host)for(const clientId of this.clients.keys())void this.forward(Method.Heartbeat,{clientId}).catch(()=>{this.host?.terminate();});},Limit.Heartbeat);
+  }
+  private control(req:IncomingMessage,res:ServerResponse):void {
+    const auth=req.headers[Wire.Auth];
+    const token=typeof auth==='string'&&auth.startsWith(Wire.Bearer)?auth.slice(Wire.Bearer.length):'';
+    const hash=Config.hash(token);
+    const id=Object.entries(this.cfg.tokens as Record<string,string>).find(([,v])=>v.length===hash.length&&timingSafeEqual(Buffer.from(v),Buffer.from(hash)))?.[0];
+    if(req.socket.remoteAddress!=='127.0.0.1'||req.headers[Wire.Origin]!==undefined||!id){res.writeHead(403);res.end();return;}
+    const health=req.method===Control.Get&&req.url===Control.Health;
+    const stop=req.method===Control.Post&&req.url===Control.Stop&&id===Wire.Host;
+    if(!health&&!stop){res.writeHead(404);res.end();return;}
+    res.writeHead(200);res.end(JSON.stringify({name:Brand.Name,version:Brand.Version}));
+    if(stop)setImmediate(()=>void this.stop());
   }
   private connected(ws:WebSocket,identity:string):void{
     this.sockets.add(ws);ws.on('error',()=>{});

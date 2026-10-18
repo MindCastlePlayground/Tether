@@ -29,9 +29,9 @@ npm run build
 .\.local\broker.exe
 ```
 
-The foreground broker command is useful for terminal debugging. For a background process, use `Start-Process -WindowStyle Hidden`. The MCP server auto-starts the broker on demand when it is not already listening; `BB_BROKER_AUTOSTART=0` disables that and leaves startup to you. Start the fixture page with `node scripts/fixture.mjs`. Do not start a second broker while one is already listening.
+The foreground broker command is useful for terminal debugging. For a background process, use `Start-Process -WindowStyle Hidden`. The installer itself does not start Broker. Once loaded, the extension defaults to `auto` management and probes every 30 seconds; MCP and Native Host can start Broker for the same runtime. Shared runtime mode `off` prevents MCP from starting it again. A candidate listener must pass TLS, certificate pin, and authentication checks for that runtime; Tether never kills or reuses an unrelated service and never switches ports. Broker startup failures set minimum backoff delays of 1, 2, 4, 8, and 16 seconds; probes normally run about every 30 seconds and Chrome may delay them. Five consecutive failures enter `blocked`. Native Host reconnects independently with backoff capped at 30 seconds. Start the fixture page with `node scripts/fixture.mjs`.
 
-Open `chrome://extensions` in Chrome, enable Developer mode, load this directory's `extension/` folder, and pin Tether. The current extension ID is `ojofdihdmmgpnaedmomclpmdkhnmbjln`. Reload the extension in the extensions page after changing its background code. Native Host is registered for the current user's Chrome and Edge, but Edge itself has not been validated. Setup did not change browser startup arguments, system root certificates, routes, or firewall rules.
+Open `chrome://extensions` in Chrome, enable Developer mode, and load this directory's `extension/` folder, which contains `manifest.json` and `【选择此目录加载Tether扩展】.txt`; select the extension directory itself. Pin Tether. The current extension ID is `ojofdihdmmgpnaedmomclpmdkhnmbjln`. Reload the extension in the extensions page after changing its background code. Native Host is registered for the current user's Chrome and Edge, but Edge itself has not been validated. Setup did not change browser startup arguments, system root certificates, routes, or firewall rules.
 
 Real browser tests operate only on the local synthetic page. Under the requested policy, an authenticated client is automatically approved by default to create a task group or attach to a specified existing tab; per-request approval is not required:
 
@@ -76,7 +76,7 @@ Keep the client instance and connection for the session, then call `close()`. `e
 
 ## Initialize a new machine
 
-The preferred Windows path installs from the repository root with the Tether CLI; see the [installation guide](../docs/INSTALL.md) for agent selection, config locations, and extension loading. It supports Node.js 22+ and Python 3.10+, and keeps Broker stopped. The CLI also supports `--runtime` to reuse an existing setup.
+The preferred Windows path installs from the repository root with the Tether CLI; see the [installation guide](../docs/INSTALL.md) for agent selection, config locations, and extension loading. It supports Node.js 22+ and Python 3.10+. The installer does not start Broker, but loading the extension starts its default `auto` management mode. The CLI also supports `--runtime` to reuse an existing setup.
 
 For manual setup or recovery, run these commands from this directory. They install the prototype runtime directly and do not configure agent MCP entries:
 
@@ -89,16 +89,16 @@ python scripts/setup.py
 npm run build
 ```
 
-Load `extension/` as an unpacked extension in the existing browser. Fresh setup generates a local extension key/ID and updates `manifest.json`; use that machine's generated ID, not a historical README ID. Setup preserves existing configuration. The internal Native Messaging identifier remains `com.freebird.browser_bridge` for registration compatibility. These commands do not start Broker.
+Load `extension/` as an unpacked extension in the existing browser; select the directory containing `manifest.json` and `【选择此目录加载Tether扩展】.txt`. Fresh setup generates a local extension key/ID and updates `manifest.json`; use that machine's generated ID, not a historical README ID. Setup preserves existing configuration. The internal Native Messaging identifier remains `com.freebird.browser_bridge` for registration compatibility. These commands do not start Broker; the loaded extension manages it by default.
 ## Native host troubleshooting
 
-The popup shows the Broker connection state and a recovery hint. `runtime.lastError` is consumed when Native Messaging disconnects. A host that can start sends a framed diagnosis before exiting with code 1; stderr contains only the fixed error code. Installing or loading the extension does not start Broker.
+The popup shows the Broker connection state and a recovery hint, and lets the user enable or disable extension management. `runtime.lastError` is consumed when Native Messaging disconnects. A host that can start sends a framed diagnosis before exiting with code 1; stderr contains only the fixed error code. Installing the extension does not start Broker; loading it starts default `auto` management. Keep TLS verification enabled. Setup certificates last 30 days; when one expires, renew the matching certificate and pin in the runtime.
 
 | Error | Recovery |
 | --- | --- |
-| `broker_unavailable` | Start the configured MCP client with `BB_BROKER_AUTOSTART` enabled, or run `node dist/broker.js .local/broker.json` from the installed runtime directory. The extension retries automatically. |
+| `broker_unavailable` | Check the extension management mode and shared runtime mode. In `auto`, the extension and MCP/Native Host can start the same runtime's Broker; `off` prevents MCP startup. After five consecutive failures, resolve the conflict and retry. |
 | `host_config_failed` / `host_origin_mismatch` | Run `node bin/tether.mjs doctor --runtime <runtime>` from the repository root. Restore the matching runtime/configuration and load its `extension/`; check its ID against `.local/native-host.json`. |
-| `broker_tls_failed` | Check the clock and matching certificate/pin. Setup certificates last 30 days. For expiration, stop Broker, back up the runtime, install into a new directory, update agent configuration, and load the new extension. Setup preserves existing certificates; rerunning it does not renew them. |
+| `broker_tls_failed` | Check the clock and matching certificate/pin. Setup certificates last 30 days. Renew an expired certificate and its matching pin; never disable TLS verification. |
 | `broker_auth_failed` / `broker_disconnected` | Check Broker terminal errors. Ensure the running Broker and host belong to the same runtime and configuration, then restart the correct Broker. |
 | `native_host_failed` | Node or the native launcher may not have started. Check the browser error displayed in the popup, Node.js availability, and the registered executable path. Restore the installed runtime and rerun its `scripts/register.ps1`, then reload the extension. |
 | `native_frame_invalid` | Update the runtime and extension together and reduce messages to at most 512 KiB. |

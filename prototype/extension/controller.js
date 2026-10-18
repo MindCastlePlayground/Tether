@@ -1,4 +1,4 @@
-import { BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from './protocol.js';
+import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from './protocol.js';
 
 export class ExtensionController {
   constructor(api = globalThis.chrome, clock = () => Date.now(), userAgent = () => globalThis.navigator.userAgent) {
@@ -19,6 +19,11 @@ export class ExtensionController {
     this.stopped = false;
     this.timer = null;
     this.status = { state: NativeStatus.Waiting };
+    this.brokerMode = Broker.Auto;
+    this.brokerStatus = { mode: Broker.Auto, state: Broker.StateStarting };
+    this.retryDelay = 1000;
+    this.retryTimer = null;
+    this.wasConnected = false;
     this.popups = new Set();
   }
 
@@ -30,6 +35,8 @@ export class ExtensionController {
       port.onDisconnect.addListener(() => this.popups.delete(port));
       port.onMessage.addListener(msg => this.popup(msg, port.sender, port));
     });
+    this.api.alarms?.onAlarm?.addListener(alarm => { if (alarm.name === Broker.Alarm) this.probe(); });
+    this.api.alarms?.create?.(Broker.Alarm, { periodInMinutes: 0.5 });
     this.api.tabs.onRemoved.addListener(tabId => this.dropTab(tabId));
     this.api.tabs.onReplaced.addListener((added, removed) => { this.dropTab(removed); });
     this.api.tabs.onUpdated.addListener((tabId, change) => {
@@ -49,14 +56,41 @@ export class ExtensionController {
   stop() {
     this.stopped = true;
     clearInterval(this.timer);
+    clearTimeout(this.retryTimer);
     this.disconnected();
   }
 
   async load() {
     try {
       const data = await this.api.storage.local.get(Storage.AutoApprove);
+      const broker = await this.api.storage.local.get(Storage.BrokerMode);
       if (typeof data?.[Storage.AutoApprove] === 'boolean') this.autoApprove = data[Storage.AutoApprove];
+      if ([Broker.Auto, Broker.On, Broker.Off].includes(broker?.[Storage.BrokerMode])) this.brokerMode = broker[Storage.BrokerMode];
     } catch { /* Keep the default when preferences are unavailable. */ }
+  }
+
+  async saveBrokerMode() { try { await this.api.storage.local.set({ [Storage.BrokerMode]: this.brokerMode }); } catch { /* Retain the choice in memory. */ } }
+
+  sendBroker(action, restore = false) {
+    try { this.port?.postMessage({ type: Broker.Control, action, ...(action === Broker.ModeAction ? { mode: this.brokerMode } : {}), ...(restore ? { restore: true } : {}) }); } catch { /* Port may be closing. */ }
+  }
+
+  async probe() {
+    await this.ready;
+    if (this.port) this.sendBroker(Broker.Probe);
+  }
+
+  async setBrokerMode(mode) {
+    if (![Broker.Auto, Broker.On, Broker.Off].includes(mode)) return;
+    this.brokerMode = mode;
+    await this.saveBrokerMode();
+    this.brokerStatus = { mode, state: mode === Broker.Off ? Broker.StateStopped : Broker.StateStarting };
+    this.sendBroker(Broker.ModeAction);
+    this.publishBrokerStatus();
+  }
+
+  publishBrokerStatus() {
+    for (const port of this.popups) { try { port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus }); } catch { this.popups.delete(port); } }
   }
 
   async save() {
@@ -67,27 +101,34 @@ export class ExtensionController {
     if (this.stopped) return;
     try {
       this.port = this.api.runtime.connectNative(Wire.Host);
+      void Promise.resolve(this.ready).then(() => { if (this.port) this.sendBroker(Broker.ModeAction, true); });
       let reported = false;
       this.port.onMessage.addListener(message => {
         if (message?.type === NativeStatus.Type) {
           if (message.state === NativeStatus.Connected ||
               (message.state === NativeStatus.Error && Object.hasOwn(NativeStatus.Hints, message.code))) {
             reported = message.state === NativeStatus.Error;
+            if (message.state === NativeStatus.Connected) { this.wasConnected = true; this.retryDelay = 1000; }
+            else if (message.state === NativeStatus.Error && this.wasConnected) { this.wasConnected = false; void this.disconnected(true); }
             this.setStatus({ state: message.state, code: message.code });
           }
           return;
         }
+        if (message?.type === Broker.Status) { this.brokerStatus = message; this.publishBrokerStatus(); return; }
         this.receive(message);
       });
       this.port.onDisconnect.addListener(() => {
         // Chrome exposes lastError only during this callback; reading it consumes it.
         const error = this.api.runtime.lastError?.message;
+        this.wasConnected = false;
+        void this.disconnected();
         if (!reported) this.setStatus({ state: NativeStatus.Error, code: NativeStatus.Host, detail: error });
-        void this.disconnected().finally(() => { if (!this.stopped) setTimeout(() => this.connect(), 1000); });
+        this.port = null;
+        if (!this.stopped) { clearTimeout(this.retryTimer); this.retryTimer = setTimeout(() => this.connect(), this.retryDelay); this.retryDelay = Math.min(this.retryDelay * 2, 30000); }
       });
     } catch {
       this.setStatus({ state: NativeStatus.Error, code: NativeStatus.Host });
-      this.port = null; if (!this.stopped) setTimeout(() => this.connect(), 1000);
+      this.port = null; if (!this.stopped) { clearTimeout(this.retryTimer); this.retryTimer = setTimeout(() => this.connect(), this.retryDelay); this.retryDelay = Math.min(this.retryDelay * 2, 30000); }
     }
   }
 
@@ -187,6 +228,13 @@ export class ExtensionController {
     try {
       if (msg?.type === PopupMessage.Status) {
         port.postMessage({ type: PopupMessage.Status, ...this.status });
+      } else if (msg?.type === PopupMessage.BrokerStatus) {
+        await this.ready;
+        this.brokerStatus.mode = this.brokerMode;
+        port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus });
+      } else if (msg?.type === PopupMessage.SetBrokerMode) {
+        await this.setBrokerMode(msg.mode);
+        port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus });
       } else if (msg?.type === PopupMessage.Pending) {
         port.postMessage({ type: msg.type, items: [...this.pending].map(([pendingId, x]) => ({
           pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
@@ -517,8 +565,8 @@ export class ExtensionController {
     if (!this.pending.size) this.api.action.setBadgeText({ text: '' });
   }
 
-  async disconnected() {
-    this.port = null;
+  async disconnected(keepPort = false) {
+    if (!keepPort) this.port = null;
     this.approving.clear();
     await Promise.all([...this.sessions.keys()].map(id => this.revoke(id)));
     this.pending.clear(); this.lease.clear(); this.results.clear();

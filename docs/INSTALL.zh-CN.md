@@ -18,7 +18,7 @@ BAT 入口检查 Node.js 22+，并使用 npm 安装缺失的 CLI 依赖。无参
 
 在终端中不带参数运行 `node bin/tether.mjs` 会进入交互式安装引导。它会询问 Agent、范围及路径、Python 可执行文件、浏览器、语言、Native Messaging 注册、安装后打开浏览器和是否仅预览；按 Enter 使用显示的默认值。范围默认 `auto`：多数 Agent 使用项目级，OpenCode 使用用户级。按 Ctrl+C 或结束输入会取消并以退出码 130 结束。没有连接终端时，不带参数仍显示帮助；显式命令和参数可继续用于脚本。
 
-`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`（OpenCode 默认用户级 `~/.config/opencode`），`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；MCP 服务会在需要时自动拉起（见下文）。
+`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`（OpenCode 默认用户级 `~/.config/opencode`），`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；加载扩展后默认 `auto` 模式会管理它，每 30 秒探测一次。MCP 与 Native Host 仅在 TLS、证书 pin 和认证验证通过后为同一 runtime 拉起 Broker，不会杀掉或复用外部服务，也不自动换端口。Broker 启动失败设置 1、2、4、8、16 秒的最短退避时间；通常在约每 30 秒的下一次探测时重试，Chrome 也可能延后探测。连续失败 5 次后进入 `blocked`。Native Host 独立重连，退避间隔最高为 30 秒。共享 runtime 模式为 `off` 时，MCP 不会重新拉起 Broker。
 
 安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。若发现冲突的 Tether 配置项或已有技能文件，安装器会停止；没有强制覆盖选项。同一版本重复安装是幂等的。检测到旧版本 runtime 时，安装器会提示运行 `tether upgrade`：
 
@@ -26,7 +26,7 @@ BAT 入口检查 Node.js 22+，并使用 npm 安装缺失的 CLI 依赖。无参
 node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
 ```
 
-升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
+从 0.x 升级前先停止旧 Broker，升级后重新加载已解压的扩展。旧 Broker 缺少带认证的生命周期端点，会被视为端口占用。升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
 
 传入 `--runtime PATH` 可复用已配置的原型目录。此时跳过 runtime 复制、依赖安装、构建、Python 初始化和凭据生成；除非提供 `--no-register`，仍会注册 Native Messaging。`--no-register` 跳过 HKCU 注册。`--python PATH` 指定全新隔离环境使用的 Python，`--language en|zh-CN` 设置 MCP 描述与初始化提示语言。
 
@@ -64,9 +64,9 @@ node bin/tether.mjs doctor --home "$env:LOCALAPPDATA\Tether"
 node bin/tether.mjs extension --runtime "$env:LOCALAPPDATA\Tether\runtime" --browser edge --open-browser
 ```
 
-启用开发者模式，选择**加载已解压的扩展程序**，再选择显示的扩展目录。这一步需要在浏览器中手动完成；Tether 不会静默安装扩展，也不会发布到浏览器商店。`--browser chrome|edge` 选择打开哪个管理页。
+启用开发者模式，选择**加载已解压的扩展程序**，再选择包含 `manifest.json` 和 `【选择此目录加载Tether扩展】.txt` 的扩展目录。必须选择该目录本身，不要选择父目录或 manifest 文件。这一步需要在浏览器中手动完成；Tether 不会静默安装扩展，也不会发布到浏览器商店。`--browser chrome|edge` 选择打开哪个管理页。
 
-安装后重启/重新加载 Agent，并打开 Tether 工具栏弹窗。Broker 尚未运行时，MCP 服务会自动拉起并最多等待 10 秒；设置 `BB_BROKER_AUTOSTART=0` 可关闭自动拉起，改为手动管理。连接故障排查和有意保留的手动配置备用流程见[设置参考](../skills/tether-browser/references/setup.zh-CN.md)和[原型指南](../prototype/README.zh-CN.md)。
+安装后重启/重新加载 Agent，并打开 Tether 工具栏弹窗，可手动开启或关闭扩展管理。默认 `auto` 模式每 30 秒探测；证书过期时应更新配套证书和 pin，并保持 TLS 验证开启。连接故障排查和有意保留的手动配置备用流程见[设置参考](../skills/tether-browser/references/setup.zh-CN.md)和[原型指南](../prototype/README.zh-CN.md)。
 
 ## 权限策略
 
@@ -109,7 +109,7 @@ node bin/tether.mjs policy reset
 ```powershell
 npm ci
 npm pack --pack-destination work
-npx --yes --package ./work/mindcastleplayground-tether-0.1.0.tgz tether install --agent codex --project PATH --home PATH
+npx --yes --package ./work/mindcastleplayground-tether-1.0.0.tgz tether install --agent codex --project PATH --home PATH
 ```
 
 tarball 包含准备全新 runtime 所需的 CLI 和原型源码。通过 `npx` 使用 GitHub 源可能需要已授权的 Git 访问；有条件时优先使用本地 tarball。

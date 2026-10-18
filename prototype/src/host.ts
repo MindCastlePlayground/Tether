@@ -1,44 +1,79 @@
 import { WebSocket } from 'ws';
 import { Config } from './config.js';
-import { Limit, NativeStatus as Status } from './protocol.js';
+import { BrokerLifecycle } from './lifecycle.js';
+import { Limit, NativeStatus as Status, BrokerControl as C } from './protocol.js';
+
 export class NativeHost {
-  private input=Buffer.alloc(0);private ws:WebSocket;private queue:Buffer[]=[];private stopped=false;
-  constructor(cfg:any,origin:string){
+  private input=Buffer.alloc(0);
+  private ws?:WebSocket;
+  private queue:Buffer[]=[];
+  private stopped=false;
+  private task=Promise.resolve();
+  private life:BrokerLifecycle;
+  constructor(private cfg:any,origin:string,file:string){
     if(origin!==`chrome-extension://${cfg.extensionId}/`)throw Error(Status.Origin);
     if(new URL(cfg.url).hostname!=='127.0.0.1')throw Error(Status.Config);
-    this.ws=new WebSocket(cfg.url,{...Config.tls(cfg),handshakeTimeout:Status.Timeout});
-    this.ws.on('open',()=>{NativeHost.status(Status.Connected);for(const body of this.queue)this.ws.send(body.toString('utf8'));this.queue=[];});
-    this.ws.on('message',data=>{const body=Buffer.from(data.toString());if(body.length>Limit.Frame)return this.stop(Status.Frame);NativeHost.write(body);});
-    this.ws.on('error',(err:NodeJS.ErrnoException)=>this.stop(err.code===Status.Refused?Status.Offline:Status.TLSCodes.has(err.code??'')||err.message===Status.Pin?Status.TLS:Status.Closed));
-    this.ws.on('unexpected-response',(_req,response)=>{response.resume();this.stop(Status.Auth);});
-    this.ws.on('close',()=>this.stop(Status.Closed));
-    process.stdin.on('data',(data:Buffer)=>this.feed(data));process.stdin.on('end',()=>this.stop());
+    Config.tls(cfg);
+    this.life=new BrokerLifecycle(file);
+    process.stdin.on('data',(data:Buffer)=>this.feed(data));
+    process.stdin.on('end',()=>this.stop());
+    this.enqueue(()=>this.cycle());
+  }
+  private enqueue(fn:()=>Promise<void>):void {
+    this.task=this.task.then(fn).catch(()=>NativeHost.status(Status.Error,C.Error));
+  }
+  private async cycle(mode?:string,restore=false):Promise<void>{
+    if(this.stopped)return;
+    const prior=this.life.state();
+    const change=mode&&(!restore||mode!==prior.mode);
+    const state=change ? await this.life.set(mode!) : prior.mode===C.Auto ? await this.life.ensure() : await this.life.inspect();
+    NativeHost.write(Buffer.from(JSON.stringify({type:C.Status,...state})));
+    if(state.state===C.Running){this.connect();return;}
+    if(state.state===C.Starting&&this.ws?.readyState===WebSocket.OPEN)return;
+    if(this.ws){this.ws.terminate();this.ws=undefined;}
+    this.queue=[];
+    NativeHost.status(Status.Error,state.code??(state.mode===C.Off?C.Disabled:Status.Offline));
+  }
+  private connect():void {
+    if(this.stopped||this.ws?.readyState===WebSocket.OPEN||this.ws?.readyState===WebSocket.CONNECTING)return;
+    const ws=new WebSocket(this.cfg.url,{...Config.tls(this.cfg),handshakeTimeout:Status.Timeout});this.ws=ws;
+    ws.on('open',()=>{if(this.ws!==ws)return;NativeHost.status(Status.Connected);for(const body of this.queue)ws.send(body.toString('utf8'));this.queue=[];});
+    ws.on('message',data=>{const body=Buffer.from(data.toString());if(body.length>Limit.Frame)return this.stop(Status.Frame);NativeHost.write(body);});
+    let reported=false;
+    const failed=(code:string)=>{if(this.ws!==ws)return;this.ws=undefined;this.queue=[];reported=true;NativeHost.status(Status.Error,code);ws.terminate();};
+    ws.on('error',(err:NodeJS.ErrnoException)=>failed(err.code===Status.Refused?Status.Offline:Status.TLSCodes.has(err.code??'')||err.message===Status.Pin?Status.TLS:Status.Closed));
+    ws.on('unexpected-response',(_req,response)=>{response.resume();failed(Status.Auth);});
+    ws.on('close',()=>{if(!reported)failed(Status.Closed);});
   }
   private feed(data:Buffer):void{
     this.input=Buffer.concat([this.input,data]);
-    while(this.input.length>=4){const size=this.input.readUInt32LE(0);if(size===0||size>Limit.Frame)return this.stop(Status.Frame);if(this.input.length<size+4)return;
+    while(this.input.length>=4){
+      const size=this.input.readUInt32LE(0);if(size===0||size>Limit.Frame)return this.stop(Status.Frame);if(this.input.length<size+4)return;
       const body=this.input.subarray(4,size+4);this.input=this.input.subarray(size+4);
-      try{JSON.parse(body.toString('utf8'));}catch{return this.stop(Status.Frame);}
-      if(this.ws.readyState===WebSocket.OPEN)this.ws.send(body.toString('utf8'));else if(this.queue.length<8)this.queue.push(body);else return this.stop(Status.Frame);
+      let msg:any;try{msg=JSON.parse(body.toString('utf8'));}catch{return this.stop(Status.Frame);}
+      if(msg?.type===C.Type){
+        if(msg.action===C.Mode&&C.Modes.includes(msg.mode))this.enqueue(()=>this.cycle(msg.mode,msg.restore===true));
+        else if(msg.action===C.Probe)this.enqueue(()=>this.cycle());
+        else NativeHost.status(Status.Error,C.Error);
+        continue;
+      }
+      if(this.ws?.readyState===WebSocket.OPEN)this.ws.send(body.toString('utf8'));
+      else if(this.ws?.readyState===WebSocket.CONNECTING&&this.queue.length<8)this.queue.push(body);
+      else NativeHost.status(Status.Error,Status.Offline);
     }
   }
   private static write(body:Buffer,done?:()=>void):void{
     const head=Buffer.alloc(4);head.writeUInt32LE(body.length);process.stdout.write(Buffer.concat([head,body]),done);
   }
-  private static status(state:string,code?:string,done?:()=>void):void{
-    NativeHost.write(Buffer.from(JSON.stringify({type:Status.Type,state,code})),done);
-  }
-  private static fail(code:string):void{
-    // Fixed codes only; never expose config paths, tokens or raw transport errors.
-    process.stderr.write(`${code}\n`);NativeHost.status(Status.Error,code,()=>process.exit(1));
-  }
+  private static status(state:string,code?:string,done?:()=>void):void{NativeHost.write(Buffer.from(JSON.stringify({type:Status.Type,state,code})),done);}
+  private static fail(code:string):void{process.stderr.write(`${code}\n`);NativeHost.status(Status.Error,code,()=>process.exit(1));}
   private stop(code?:string):void{
-    if(this.stopped)return;this.stopped=true;this.ws.terminate();
+    if(this.stopped)return;this.stopped=true;this.ws?.terminate();
     if(code)NativeHost.fail(code);else process.exit(0);
   }
   static run():void{
     process.stdout.on('error',()=>process.exit(1));
-    try{new NativeHost(Config.load(process.argv[2]),process.argv[3]);}
+    try{new NativeHost(Config.load(process.argv[2]),process.argv[3],process.argv[2]);}
     catch(err){NativeHost.fail(err instanceof Error&&err.message===Status.Origin?Status.Origin:Status.Config);}
   }
 }

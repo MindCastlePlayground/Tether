@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from 'node:fs';
 import { Language, McpText, I18n } from "../dist/i18n.js";
 import { Locale, Text } from "../extension/i18n.js";
 import { NativeStatus } from "../extension/protocol.js";
@@ -27,6 +28,8 @@ test("all MCP tools have localized descriptions", () => {
 });
 
 test("popup catalogs cover all text keys and browser locale fallbacks", () => {
+  const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
+  assert.match(manifest.content_security_policy.extension_pages, /connect-src 'self'(?:;|$)/);
   const keys = [...Object.values(Text), ...Object.values(NativeStatus.Hints)];
   assert.deepEqual(Object.keys(Locale.Catalogs.en).sort(), Object.keys(Locale.Catalogs['zh-CN']).sort());
   for (const language of ['en', 'zh-CN']) {

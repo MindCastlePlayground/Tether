@@ -29,9 +29,9 @@ npm run build
 .\.local\broker.exe
 ```
 
-`broker.exe` 前台命令适合终端调试；后台启动须使用 `Start-Process -WindowStyle Hidden`。Broker 尚未监听时，MCP 服务会自动拉起；`BB_BROKER_AUTOSTART=0` 可关闭自动拉起，改为手动启动。测试页用 `node scripts/fixture.mjs` 启动。服务已经监听时不要重复启动 Broker。
+`broker.exe` 前台命令适合终端调试；后台启动须使用 `Start-Process -WindowStyle Hidden`。安装器本身不会启动 Broker；加载扩展后默认启用 `auto` 管理模式，每 30 秒探测一次。MCP 与 Native Host 可为同一 runtime 拉起 Broker；共享 runtime 模式为 `off` 时，MCP 不会重新拉起。候选监听端点必须通过 TLS、证书 pin 和认证检查，确认属于该 runtime；不会杀掉或复用无关服务，也不会切换端口。Broker 启动失败设置 1、2、4、8、16 秒的最短退避时间；通常在约每 30 秒的下一次探测时重试，Chrome 也可能延后探测。连续失败 5 次后进入 `blocked`。Native Host 独立重连，退避间隔最高为 30 秒。测试页用 `node scripts/fixture.mjs` 启动。
 
-Chrome 打开 `chrome://extensions`，启用开发者模式，加载本目录 `extension/`，并固定 Tether。当前扩展 ID 为 `ojofdihdmmgpnaedmomclpmdkhnmbjln`。扩展后台变更后需在扩展管理页重新加载。Native Host 已注册到当前用户的 Chrome/Edge，但 Edge 本身尚未验收；未更改浏览器启动参数、系统根证书、路由或防火墙。
+Chrome 打开 `chrome://extensions`，启用开发者模式，加载本目录 `extension/`，该目录包含 `manifest.json` 和 `【选择此目录加载Tether扩展】.txt`；选择扩展目录本身，并固定 Tether。当前扩展 ID 为 `ojofdihdmmgpnaedmomclpmdkhnmbjln`。扩展后台变更后需在扩展管理页重新加载。Native Host 已注册到当前用户的 Chrome/Edge，但 Edge 本身尚未验收；未更改浏览器启动参数、系统根证书、路由或防火墙。
 
 真实测试只操作本机合成页面。按用户偏好，已认证客户端默认自动获准新建任务组及接管指定已有标签，无需逐次批准：
 
@@ -76,7 +76,7 @@ try {
 
 ## 新机器初始化
 
-Windows 推荐通过仓库根目录的 Tether CLI 安装；Agent 选择、配置位置和加载扩展说明见[安装指南](../docs/INSTALL.zh-CN.md)。要求 Node.js 22+ 和 Python 3.10+，且 Broker 保持停止。CLI 也支持通过 `--runtime` 复用现有配置。
+Windows 推荐通过仓库根目录的 Tether CLI 安装；Agent 选择、配置位置和加载扩展说明见[安装指南](../docs/INSTALL.zh-CN.md)。要求 Node.js 22+ 和 Python 3.10+。安装器不启动 Broker，但加载扩展后默认启用 `auto` 管理模式。CLI 也支持通过 `--runtime` 复用现有配置。
 
 手动初始化或恢复时，在本目录执行以下命令。它们直接安装原型 runtime，不会配置 Agent MCP 项：
 
@@ -89,16 +89,16 @@ python scripts/setup.py
 npm run build
 ```
 
-在现有浏览器中将 `extension/` 作为未打包扩展加载。全新初始化会生成本机扩展密钥/ID 并更新 `manifest.json`；应使用该机器生成的 ID，而不是 README 中历史遗留的 ID。初始化会保留已有配置。为兼容注册流程，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。这些命令不会启动 Broker。
+在现有浏览器中将包含 `manifest.json` 和 `【选择此目录加载Tether扩展】.txt` 的 `extension/` 目录作为未打包扩展加载；选择目录本身。全新初始化会生成本机扩展密钥/ID 并更新 `manifest.json`；应使用该机器生成的 ID，而不是 README 中历史遗留的 ID。初始化会保留已有配置。为兼容注册流程，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。这些命令不会启动 Broker；加载后的扩展默认管理它。
 ## 原生主机故障排查
 
-弹窗会显示 Broker 连接状态及恢复提示；Native Messaging 断开时会读取 `runtime.lastError`。能够启动的 host 会在以退出码 1 结束前发送带长度前缀的诊断消息，stderr 只输出固定错误码。安装或加载扩展不会启动 Broker。
+弹窗会显示 Broker 连接状态及恢复提示，并可手动开启或关闭扩展管理；Native Messaging 断开时会读取 `runtime.lastError`。能够启动的 host 会在以退出码 1 结束前发送带长度前缀的诊断消息，stderr 只输出固定错误码。安装扩展不会启动 Broker；加载后默认启动 `auto` 管理。保持 TLS 验证开启。初始化证书有效期为 30 天；过期时更新 runtime 中配套的证书和 pin。
 
 | 错误 | 解决步骤 |
 | --- | --- |
-| `broker_unavailable` | 启动已配置的 MCP 客户端并启用 `BB_BROKER_AUTOSTART`，或在已安装 runtime 目录运行 `node dist/broker.js .local/broker.json`。扩展会自动重连。 |
+| `broker_unavailable` | 检查扩展管理模式和共享 runtime 模式。`auto` 下扩展及 MCP/Native Host 可启动同一 runtime 的 Broker；`off` 会阻止 MCP 拉起。连续失败 5 次后，解决冲突并重试。 |
 | `host_config_failed` / `host_origin_mismatch` | 在仓库根目录运行 `node bin/tether.mjs doctor --runtime <runtime>`。恢复配套 runtime/配置并加载其 `extension/`，核对扩展 ID 与 `.local/native-host.json`。 |
-| `broker_tls_failed` | 检查系统时间、证书和 pin 是否配套。初始化证书有效期为 30 天；过期后请停止 Broker、备份 runtime，在新目录安装、更新 Agent 配置并加载新扩展。初始化会保留已有证书，重跑不会续期。 |
+| `broker_tls_failed` | 检查系统时间、证书和 pin 是否配套。初始化证书有效期为 30 天；过期时更新配套证书与 pin，切勿关闭 TLS 验证。 |
 | `broker_auth_failed` / `broker_disconnected` | 检查 Broker 终端错误，确认运行中的 Broker 与 host 属于同一 runtime 和配置，再重启正确的 Broker。 |
 | `native_host_failed` | Node 或原生启动器可能尚未启动。检查弹窗显示的浏览器错误、Node.js 可用性及已注册的可执行文件路径；恢复已安装 runtime，重跑其 `scripts/register.ps1` 后重新加载扩展。 |
 | `native_frame_invalid` | 同步更新 runtime 和扩展，将消息限制在 512 KiB 以内。 |

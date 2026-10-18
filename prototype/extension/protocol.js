@@ -38,10 +38,31 @@ export class PopupMessage {
   static Error = 'popup.error';
   static AutoApproval = 'popup.autoApproval';
   static SetAutoApproval = 'popup.setAutoApproval';
+  static BrokerStatus = 'popup.brokerStatus';
+  static SetBrokerMode = 'popup.setBrokerMode';
 }
 
 export class Storage {
   static AutoApprove = 'autoApprove';
+  static BrokerMode = 'brokerMode';
+}
+
+export class Broker {
+  static Control = 'broker.control';
+  static Status = 'broker.status';
+  static Auto = 'auto';
+  static On = 'on';
+  static Off = 'off';
+  static Probe = 'probe';
+  static ModeAction = 'mode';
+  static StateRunning = 'running';
+  static StateStopped = 'stopped';
+  static StateBackoff = 'backoff';
+  static StateBlocked = 'blocked';
+  static StateStarting = 'starting';
+  static Alarm = 'broker-probe';
+  static PortInUse = 'broker_port_in_use';
+  static StartFailed = 'broker_start_failed';
 }
 
 export class NativeStatus {
@@ -54,7 +75,9 @@ export class NativeStatus {
     host_config_failed: 'nativeConfig', host_origin_mismatch: 'nativeOrigin',
     broker_unavailable: 'nativeOffline', broker_tls_failed: 'nativeTLS',
     broker_auth_failed: 'nativeAuth', broker_disconnected: 'nativeClosed',
-    native_frame_invalid: 'nativeFrame', native_host_failed: 'nativeHost'
+    native_frame_invalid: 'nativeFrame', native_host_failed: 'nativeHost',
+    broker_stopped: 'brokerStopped', broker_control_failed: 'brokerStartFailed',
+    broker_port_in_use: 'brokerPortBusy', broker_start_failed: 'brokerStartFailed'
   });
 }
 

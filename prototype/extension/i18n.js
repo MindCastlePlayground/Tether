@@ -32,6 +32,17 @@ export class Text {
   static NoTabs = 'noTabs';
   static Back = 'back';
   static Error = 'error';
+  static Broker = 'broker';
+  static BrokerOn = 'brokerOn';
+  static BrokerOff = 'brokerOff';
+  static BrokerAuto = 'brokerAuto';
+  static BrokerPortBusy = 'brokerPortBusy';
+  static BrokerStartFailed = 'brokerStartFailed';
+  static BrokerStopped = 'brokerStopped';
+  static BrokerRunning = 'brokerRunning';
+  static BrokerStarting = 'brokerStarting';
+  static BrokerBackoff = 'brokerBackoff';
+  static BrokerBlocked = 'brokerBlocked';
 }
 
 export class Locale {

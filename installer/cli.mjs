@@ -81,8 +81,8 @@ export class Cli {
     for (const plan of plans) console.log(`${plan.name}\n  MCP: ${plan.config}\n  Skill: ${plan.skill}`);
     const browser = Browser.plan(options.browser, runtime);
     console.log(`${zh ? '扩展目录' : 'Extension'}: ${browser.folder}\n${zh ? '浏览器入口' : 'Browser manager'}: ${browser.url}`);
-    console.log(zh ? '打开开发者模式 → 加载已解压的扩展程序 → 选择扩展目录。' : 'Enable Developer mode → Load unpacked → select the extension folder.');
-    console.log(zh ? 'Broker 保持关闭；安装器不会启动它。' : 'Broker remains stopped; the installer never starts it.');
+    console.log(zh ? `打开开发者模式 → 加载已解压的扩展程序 → 选择扩展目录（目录中有 manifest.json 和“${Install.ANCHOR}”）。` : `Enable Developer mode → Load unpacked → select the extension folder containing manifest.json and “${Install.ANCHOR}”.`);
+    console.log(zh ? '安装器本身不会启动 Broker；加载扩展后默认 auto 模式会管理 Broker。' : 'The installer itself never starts Broker; once loaded, the extension manages it in auto mode by default.');
     return browser;
   }
   static doctor(runtime, options) {

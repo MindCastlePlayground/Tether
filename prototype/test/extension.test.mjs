@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExtensionController } from '../extension/controller.js';
-import { NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
+import { Broker, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -156,6 +156,39 @@ test('the popup toggle persists the auto approval preference to storage', async 
   await c.popup({ type: 'popup.setAutoApproval', enabled: false }, { url: api.runtime.getURL('popup.html') }, port);
   assert.equal(api.storage.data[Storage.AutoApprove], false);
   assert.deepEqual(messages.at(-1), { type: 'popup.autoApproval', enabled: false });
+});
+
+test('broker mode persists, is synchronized to native host, and probe is sent on demand', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  c.start();
+  const sent = [];
+  try {
+    await c.ready;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(api.native.messages.some(m => m.type === Broker.Control && m.action === Broker.ModeAction && m.mode === Broker.Auto && m.restore === true));
+    await c.probe();
+    assert.ok(api.native.messages.some(m => m.type === Broker.Control && m.action === Broker.Probe));
+    await c.popup({ type: PopupMessage.SetBrokerMode, mode: Broker.Off }, { url: api.runtime.getURL('popup.html') }, { postMessage: m => sent.push(m) });
+    assert.equal(api.storage.data[Storage.BrokerMode], Broker.Off);
+    assert.ok(api.native.messages.some(m => m.type === Broker.Control && m.action === Broker.ModeAction && m.mode === Broker.Off && !m.restore));
+    await c.popup({ type: PopupMessage.BrokerStatus }, { url: api.runtime.getURL('popup.html') }, { postMessage: m => sent.push(m) });
+    assert.ok(sent.some(m => m.type === PopupMessage.BrokerStatus && m.mode === Broker.Off));
+  } finally { c.stop(); }
+});
+
+test('native broker status is forwarded to popup without changing native websocket status', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  c.start();
+  const sent = [];
+  const popup = { postMessage: m => sent.push(m) };
+  try {
+    c.popups.add(popup);
+    api.native.onMessage.fire({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateBackoff, code: Broker.PortInUse, attempt: 2 });
+    assert.equal(c.status.state, NativeStatus.Waiting);
+    assert.ok(sent.some(m => m.type === PopupMessage.BrokerStatus && m.code === Broker.PortInUse));
+  } finally { c.stop(); }
 });
 
 test('a restarted controller honors the stored auto approval preference', async () => {
@@ -329,6 +362,24 @@ test('native disconnect revokes every grant and lease expiry revokes a client', 
   assert.equal(c.sessions.size, 0);
   assert.equal(c.pages.size, 0);
   assert.ok(api.debugger.calls.some(call => call[0] === 'detach'));
+});
+
+test('manual broker stop revokes grants while the native control channel remains open', async () => {
+  const { api, c, approved } = await approvedExisting();
+  c.connect();
+  api.native.onMessage.fire({ type: NativeStatus.Type, state: NativeStatus.Connected });
+  await c.dispatch(Wire.Attach, { clientId: clientA, sessionId: approved.sessionId, pageId: approved.pages[0].pageId });
+  api.native.onMessage.fire({ type: NativeStatus.Type, state: NativeStatus.Error, code: 'broker_stopped' });
+  assert.equal(c.sessions.size, 0);
+  assert.equal(c.pages.size, 0);
+  assert.equal(api.nativeConnections, 1);
+  assert.equal(c.port, api.native);
+  await c.setBrokerMode(Broker.On);
+  assert.equal(api.native.messages.at(-1).mode, Broker.On);
+  await c.setBrokerMode(Broker.Auto);
+  await c.probe();
+  assert.equal(api.native.messages.at(-1).action, Broker.Probe);
+  c.stop();
 });
 
 test('native disconnect reconnects without restoring prior grants', async () => {

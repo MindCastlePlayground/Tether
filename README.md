@@ -36,7 +36,7 @@ Use the [installation guide](docs/INSTALL.md) for the CLI-based Windows setup an
 npm ci
 node bin/tether.mjs install
 ```
-The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; the MCP server auto-starts it when needed. The default policy allows all requests, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
+The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker for the same runtime. Shared runtime mode `off` prevents MCP from starting it again. The default policy allows all requests, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
 
 ## Identity
 

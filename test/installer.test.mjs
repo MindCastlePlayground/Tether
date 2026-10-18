@@ -118,6 +118,19 @@ test('browser trigger targets extension manager without loading/profile switches
   assert.throws(() => Browser.plan('other',root),/Unsupported/);
 });
 
+test('runtime copy and npm package include the extension directory anchor', () => {
+  const root = Fixture.root();
+  const dest = path.join(root, 'runtime', 'extension');
+  const anchor = Install.ANCHOR;
+  Files.copy(path.join(Cli.ROOT, 'prototype', 'extension'), dest);
+  assert.ok(fs.existsSync(path.join(dest, 'manifest.json')));
+  assert.equal(Files.read(path.join(dest, anchor)), Files.read(path.join(Cli.ROOT, 'prototype', 'extension', anchor)));
+  assert.ok(Install.SOURCE.includes('extension'));
+  const pkg = Files.json(path.join(Cli.ROOT, 'package.json'));
+  assert.ok(pkg.files.includes('prototype/extension/'));
+  assert.ok(Files.read(path.join(dest, anchor)).includes('manifest.json'));
+});
+
 test('setup-time skill edits abort before registration and config mutation', async () => {
   const root=Fixture.root(), options=Fixture.options(root);
   const prepare=Runtime.prepare, register=Runtime.register;
@@ -230,7 +243,7 @@ test('dry-run without --agent prints detected agents and writes nothing', async 
   console.log = (...args) => logs.push(args.join(' '));
   try {
     Detect.find = () => ['codex', 'claude', 'opencode'];
-    const code = await Cli.main(['install', '--dry-run', '--project', path.join(root, 'project'), '--home', path.join(root, 'home'), '--language', 'en']);
+    const code = await Cli.main(['install', '--dry-run', '--scope', 'project', '--project', path.join(root, 'project'), '--home', path.join(root, 'home'), '--language', 'en']);
     assert.equal(code, 0);
     assert.match(logs.join('\n'), /Detected agents: codex, claude, opencode/);
     assert.deepEqual(fs.readdirSync(root), []);

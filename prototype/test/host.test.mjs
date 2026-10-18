@@ -16,6 +16,7 @@ class HostProbe {
     this.dir = mkdtempSync(resolve('work/host-test-'));
     const file = join(this.dir, 'host.json');
     writeFileSync(file, JSON.stringify(cfg));
+    writeFileSync(join(this.dir,'broker-state.json'),JSON.stringify({mode:'on',state:'starting',attempt:0,retryAt:0}));
     this.child = spawn(process.execPath, ['dist/host.js', file, `chrome-extension://${origin}/`], { stdio: 'pipe', windowsHide: true });
     this.exit = once(this.child, 'close');
     this.raw = Buffer.alloc(0);
@@ -31,12 +32,13 @@ class HostProbe {
       }
     });
   }
-  async done(code) {
-    assert.equal((await this.exit)[0], 1);
-    assert.equal(this.frames.at(-1).code, code);
-    assert.equal(this.frames.at(-1).type, Status.Type);
+  async done(code, fatal = false) {
+    const end=Date.now()+5000;
+    while(!this.frames.some(f=>f.type===Status.Type&&f.code===code)&&Date.now()<end)await new Promise(r=>setTimeout(r,20));
+    if(fatal)assert.equal((await this.exit)[0],1);
+    assert.ok(this.frames.some(f=>f.type===Status.Type&&f.code===code));
     assert.equal(this.raw.length, 0);
-    assert.equal(this.stderr.trim(), code);
+    assert.equal(this.stderr.trim(), fatal?code:'');
     assert.ok(!this.stderr.includes(HostProbe.cfg.token));
   }
   async close() {
@@ -46,7 +48,10 @@ class HostProbe {
   }
   static async server(t, handler) {
     const cfg = JSON.parse(readFileSync('.local/broker.json', 'utf8'));
-    const server = createServer({ key: readFileSync(cfg.keyFile), cert: readFileSync(cfg.certFile) }, handler);
+    const server = createServer({ key: readFileSync(cfg.keyFile), cert: readFileSync(cfg.certFile) }, (req,res)=>{
+      if(req.url==='/health'){res.end(JSON.stringify({name:'tether'}));return;}
+      if(handler)handler(req,res);else{res.writeHead(404);res.end();}
+    });
     await new Promise(done => server.listen(0, '127.0.0.1', done));
     t.after(() => new Promise(done => server.close(done)));
     return { server, cfg: { ...HostProbe.cfg, url: `wss://127.0.0.1:${server.address().port}/bridge` } };
@@ -56,13 +61,13 @@ class HostProbe {
 test('native origin mismatch sends a framed diagnosis before nonzero exit', { timeout: 10000 }, async t => {
   const probe = new HostProbe(undefined, 'invalid');
   t.after(() => probe.close());
-  await probe.done(Status.Origin);
+  await probe.done(Status.Origin,true);
 });
 
 test('invalid native config sends a safe framed diagnosis', { timeout: 10000 }, async t => {
   const probe = new HostProbe({ ...HostProbe.cfg, caFile: 'missing-certificate.pem' });
   t.after(() => probe.close());
-  await probe.done(Status.Config);
+  await probe.done(Status.Config,true);
 });
 
 test('stopped broker reports unavailable instead of silent exit', { timeout: 10000 }, async t => {
@@ -104,7 +109,7 @@ test('native transport preserves fragmented frames and exits cleanly on stdin EO
   assert.deepEqual(JSON.parse((await reply)[0]), JSON.parse(body));
   probe.child.stdin.end();
   assert.equal((await probe.exit)[0], 0);
-  assert.equal(probe.frames[0].state, Status.Connected);
+  assert.ok(probe.frames.some(f=>f.state===Status.Connected));
   assert.equal(probe.stderr, '');
   wss.close();
 });

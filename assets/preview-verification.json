@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-11T05:47:58.024Z",
+  "at": "2026-10-18T06:06:57.153Z",
   "fixture": "mock extension runtime; no Native Host or Broker",
   "languages": [
     "en",
@@ -17,7 +17,7 @@
   "persistence": "reload passed",
   "systemLanguage": "en-US and zh-TW passed",
   "invalidPreference": "falls back to browser",
-  "localeKeys": 29,
+  "localeKeys": 50,
   "logo": "128px loaded",
   "overflow": false,
   "keyboardFocus": "passed",

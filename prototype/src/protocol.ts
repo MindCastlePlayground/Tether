@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '0.1.1';
+  static readonly Version = '1.0.0';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';
@@ -69,4 +69,37 @@ export class Autostart {
   static readonly Max = 65535;
   static readonly Ignore = 'ignore' as const;
   static readonly Timeout = 'broker_autostart_timeout\n';
+}
+export class BrokerControl {
+  static readonly Type = 'broker.control';
+  static readonly Status = 'broker.status';
+  static readonly Mode = 'mode';
+  static readonly Probe = 'probe';
+  static readonly Auto = 'auto';
+  static readonly On = 'on';
+  static readonly Off = 'off';
+  static readonly Modes = [BrokerControl.Auto, BrokerControl.On, BrokerControl.Off];
+  static readonly Running = 'running';
+  static readonly Stopped = 'stopped';
+  static readonly Starting = 'starting';
+  static readonly Backoff = 'backoff';
+  static readonly Blocked = 'blocked';
+  static readonly Port = 'broker_port_in_use';
+  static readonly Failed = 'broker_start_failed';
+  static readonly Error = 'broker_control_failed';
+  static readonly Disabled = 'broker_stopped';
+  static readonly Health = '/health';
+  static readonly Stop = '/control/stop';
+  static readonly Get = 'GET';
+  static readonly Post = 'POST';
+  static readonly Https = 'https:';
+  static readonly StateFile = 'broker-state.json';
+  static readonly Lock = 'broker-start.lock';
+  static readonly HostFile = 'host.json';
+  static readonly ReadLimit = 4096;
+  static readonly ProbeMs = 700;
+  static readonly StartMs = 5000;
+  static readonly LockMs = 15000;
+  static readonly Delays = [1000, 2000, 4000, 8000, 16000];
+  static readonly Limit = 5;
 }

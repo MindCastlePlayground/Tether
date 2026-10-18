@@ -1,0 +1,13 @@
+加载 Tether 扩展 / Load the Tether extension
+
+请在浏览器的“加载已解压的扩展程序 / Load unpacked”对话框中选择当前这个目录。
+Select this directory in the browser's “Load unpacked” dialog.
+
+必须选择与 manifest.json 同级的扩展目录；不要选择其父目录或 manifest.json 文件。
+Choose the extension directory that contains manifest.json; do not choose its parent directory or the manifest.json file itself.
+
+加载后，Tether 扩展默认使用 auto 模式，每 30 秒探测并按退避间隔尝试连接或拉起同一 runtime 的 Broker。弹窗可手动开启或关闭扩展管理；停止写入共享 runtime 模式 off 后，MCP 不会重新拉起 Broker。
+After loading, the extension defaults to auto mode: it probes every 30 seconds and retries connection or startup of the Broker belonging to the same runtime using backoff. The popup can switch extension management on or off. In shared runtime mode off, MCP will not restart the Broker.
+
+证书有效期为 30 天。证书过期时请更新 runtime 中匹配的证书和 pin；不要关闭 TLS 验证。
+Certificates are valid for 30 days. If one expires, update the matching certificate and pin in the runtime; do not disable TLS verification.

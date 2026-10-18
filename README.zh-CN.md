@@ -36,7 +36,7 @@ Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的�
 npm ci
 node bin/tether.mjs install
 ```
-安装器会自动检测受支持的 Agent 宿主，一条命令完成 runtime 准备与配置，并打开扩展管理页和扩展目录。安装器本身不启动 Broker；MCP 服务会在需要时自动拉起。默认策略全放行，需要精细控制时可用 `tether policy` 添加 allow/deny/ask 规则。生成的 runtime 凭据与私钥应留在本机。
+安装器会自动检测受支持的 Agent 宿主，一条命令完成 runtime 准备与配置，并打开扩展管理页和扩展目录。安装器本身不启动 Broker；加载扩展后默认由 `auto` 模式管理，每 30 秒探测一次。MCP 与 Native Host 都可拉起同一 runtime 的 Broker；共享 runtime 模式为 `off` 时，MCP 不会重新拉起。默认策略全放行，需要精细控制时可用 `tether policy` 添加 allow/deny/ask 规则。生成的 runtime 凭据与私钥应留在本机。
 
 ## 品牌
 

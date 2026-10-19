@@ -118,6 +118,40 @@ test('browser trigger targets extension manager without loading/profile switches
   assert.throws(() => Browser.plan('other',root),/Unsupported/);
 });
 
+test('custom extension destinations overlay safely with force backups and are remembered', () => {
+  const root = Fixture.root();
+  const source = path.join(root, 'source'), target = path.join(root, 'custom-extension');
+  fs.mkdirSync(source); fs.writeFileSync(path.join(source, 'manifest.json'), 'new');
+  fs.mkdirSync(target); fs.writeFileSync(path.join(target, 'manifest.json'), 'old');
+  fs.writeFileSync(path.join(target, 'unrelated.txt'), 'keep');
+  assert.throws(() => Files.tree(source, target), /conflict/);
+  Files.tree(source, target, true);
+  assert.equal(Files.read(path.join(target, 'manifest.json')), 'new');
+  assert.equal(Files.read(path.join(target, 'unrelated.txt')), 'keep');
+  assert.ok(fs.readdirSync(target).some(name => name.startsWith('manifest.json.tether-backup-')));
+  const runtime = path.join(root, 'runtime'); fs.mkdirSync(runtime);
+  Files.write(path.join(runtime, Install.EXTENSION_LOCATION), JSON.stringify({ path: target }));
+  assert.equal(Cli.extension(runtime, {}), target);
+  assert.throws(() => Files.tree(source, source), /separate/);
+});
+
+test('force replaces conflicting MCP and skill plans while normal mode refuses', () => {
+  const root = Fixture.root(), options = Fixture.options(root);
+  const cfg = path.join(options.project, '.mcp.json');
+  fs.mkdirSync(options.project, { recursive: true });
+  fs.writeFileSync(cfg, '{"mcpServers":{"tether":{"command":"other"}}}');
+  assert.throws(() => Cli.plans({ ...options, agent: 'claude' }, options.runtime), /Conflicting/);
+  const plan = Cli.plans({ ...options, agent: 'claude', force: true }, options.runtime)[0];
+  assert.match(plan.text, /mcp\.exe/);
+  const skill = path.join(plan.skill, 'SKILL.md');
+  fs.mkdirSync(path.dirname(skill), { recursive: true }); fs.writeFileSync(skill, 'local');
+  const skillPlans = Files.skill(path.join(Cli.ROOT, 'skills', Install.SKILL), plan.skill, {}, true);
+  for (const item of skillPlans) Files.write(item.file, item.text);
+  assert.ok(fs.readdirSync(path.dirname(skill)).some(name => name.startsWith('SKILL.md.tether-backup-')));
+  const cfgBackup = Files.write(cfg, plan.text);
+  assert.ok(Files.read(cfgBackup).includes('other'));
+});
+
 test('runtime copy and npm package include the extension directory anchor', () => {
   const root = Fixture.root();
   const dest = path.join(root, 'runtime', 'extension');
@@ -185,6 +219,10 @@ test('parse accepts auto, no-open, and upgrade', () => {
   assert.equal(auto.options[Opt.NO_OPEN], true);
   assert.equal(auto.options[Install.OPTION.OPEN], true);
   assert.equal(Cli.parse([Cmd.UPGRADE, '--language', 'zh-CN']).command, Cmd.UPGRADE);
+  const enhanced = Cli.parse(['install', '--extension-dir', 'C:/ext', '--force', '--upgrade']).options;
+  assert.equal(enhanced['extension-dir'], 'C:/ext');
+  assert.equal(enhanced.force, true);
+  assert.equal(enhanced.upgrade, true);
   assert.deepEqual(Cli.resolve({ agent: Opt.AUTO, language: 'en' }, () => ['codex', 'opencode']).names, ['codex', 'opencode']);
   assert.equal(Cli.resolve({ agent: 'codex,claude', language: 'en' }, () => []).detected, false);
   assert.throws(() => Cli.resolve({ language: 'en' }, () => []), new RegExp(Opt.AGENT));
@@ -296,10 +334,17 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
     Runtime.upgrade(runtime, source, { language: 'en' });
     assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'newer');
     assert.equal(Files.read(path.join(runtime, '.local', 'broker.json')), 'secret');
-    assert.equal(calls.filter(item => item[0] === 'npm').length, 4);
+    fs.writeFileSync(path.join(runtime, 'extension', 'personal.txt'), 'keep');
+    fs.writeFileSync(path.join(source, 'extension', 'mark.txt'), 'forced');
+    Runtime.upgrade(runtime, source, { language: 'en', force: true });
+    assert.equal(Files.read(path.join(runtime, 'extension', 'mark.txt')), 'forced');
+    assert.equal(Files.read(path.join(runtime, 'extension', 'personal.txt')), 'keep');
+    assert.ok(fs.readdirSync(path.join(runtime, 'extension')).some(name => name.startsWith('mark.txt.tether-backup-')));
+    assert.equal(Files.json(path.join(runtime, Install.MANIFEST)).key, 'K');
+    assert.equal(calls.filter(item => item[0] === 'npm').length, 6);
     const runs = calls.filter(item => item[0] === 'run').map(item => item[2].join(' '));
-    assert.equal(runs.filter(item => item.includes('pip')).length, 2);
-    assert.equal(runs.filter(item => item.includes('setup.py')).length, 2);
+    assert.equal(runs.filter(item => item.includes('pip')).length, 3);
+    assert.equal(runs.filter(item => item.includes('setup.py')).length, 3);
     assert.ok(calls.every(item => item[0] !== 'run' || item[3] === runtime));
   } finally {
     Runtime.npm = npm;
@@ -315,6 +360,56 @@ test('install refuses an older runtime and points at upgrade', () => {
   const root = Fixture.root();
   fs.writeFileSync(path.join(root, Install.MARKER), JSON.stringify({ version: '0.0.0', ready: true }));
   assert.throws(() => Runtime.prepare(root, root, {}), new RegExp(Hint.UPGRADE));
+});
+
+test('force replaces Codex tables and nested env while retaining other servers and comments', () => {
+  const before = '# keep\n[mcp_servers."tether"]\ncommand="old"\n[mcp_servers.tether.env]\nOLD="1"\n[mcp_servers.other]\ncommand="keep"\n';
+  const entry = { command: 'new', args: [], env: { BB_LANGUAGE: 'en' } };
+  const text = Agents.edit('codex', before, entry, true);
+  assert.ok(text.includes('# keep'));
+  assert.ok(text.includes('command="keep"'));
+  assert.ok(!text.includes('OLD='));
+  assert.equal(Agents.edit('codex', text, entry), text);
+});
+
+test('extension sync remembers location, copies runtime identity and rejects runtime overlap', () => {
+  const root = Fixture.root(), runtime = path.join(root, 'runtime'), ext = path.join(root, '外置 extension');
+  Files.write(path.join(runtime, Install.MANIFEST), JSON.stringify({ key: 'stable', version: '1' }));
+  Runtime.sync(runtime, { 'extension-dir': ext });
+  assert.equal(Cli.extension(runtime, {}), ext);
+  Files.write(path.join(runtime, Install.MANIFEST), JSON.stringify({ key: 'stable', version: '2' }));
+  Runtime.sync(runtime, { upgrade: true });
+  assert.deepEqual(Files.json(path.join(ext, 'manifest.json')), { key: 'stable', version: '2' });
+  assert.throws(() => Runtime.location(runtime, { 'extension-dir': root }), /outside runtime/);
+  assert.throws(() => Runtime.location(runtime, { 'extension-dir': path.join(runtime, '.local') }), /outside runtime/);
+});
+
+test('force install overwrites planned skills but still detects concurrent edits', async () => {
+  const root = Fixture.root(), options = Fixture.options(root);
+  Fixture.runtime(options.runtime);
+  const skill = path.join(options.project, '.agents', 'skills', Install.SKILL, 'SKILL.md');
+  Files.write(skill, 'customized');
+  const prepare = Runtime.prepare, register = Runtime.register;
+  try {
+    Runtime.prepare = () => {};
+    Runtime.register = () => {};
+    await Cli.main(['install', '--agent', 'codex', '--project', options.project, '--runtime', options.runtime, '--force', '--no-open']);
+    assert.notEqual(Files.read(skill), 'customized');
+    assert.ok(fs.readdirSync(path.dirname(skill)).some(name => name.startsWith('SKILL.md.tether-backup-')));
+  } finally { Runtime.prepare = prepare; Runtime.register = register; }
+});
+
+test('install --upgrade routes an older managed runtime through upgrade', () => {
+  const root = Fixture.root();
+  fs.writeFileSync(path.join(root, Install.MARKER), JSON.stringify({ version: '0.0.1', ready: true }));
+  const upgrade = Runtime.upgrade, check = Runtime.check, calls = [];
+  try {
+    Runtime.upgrade = (...args) => calls.push(args);
+    Runtime.check = () => {};
+    Runtime.prepare(root, path.join(root, 'source'), { upgrade: true });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0], root);
+  } finally { Runtime.upgrade = upgrade; Runtime.check = check; }
 });
 
 test('native registration respects opt-out and targets the chosen runtime script', () => {

@@ -20,11 +20,23 @@ BAT 入口检查 Node.js 22+，并使用 npm 安装缺失的 CLI 依赖。无参
 
 `--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`（OpenCode 默认用户级 `~/.config/opencode`），`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；加载扩展后默认 `auto` 模式会管理它，每 30 秒探测一次。MCP 与 Native Host 仅在 TLS、证书 pin 和认证验证通过后为同一 runtime 拉起 Broker，不会杀掉或复用外部服务，也不自动换端口。Broker 启动失败设置 1、2、4、8、16 秒的最短退避时间；通常在约每 30 秒的下一次探测时重试，Chrome 也可能延后探测。连续失败 5 次后进入 `blocked`。Native Host 独立重连，退避间隔最高为 30 秒。共享 runtime 模式为 `off` 时，MCP 不会重新拉起 Broker。
 
-安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。若发现冲突的 Tether 配置项或已有技能文件，安装器会停止；没有强制覆盖选项。同一版本重复安装是幂等的。检测到旧版本 runtime 时，安装器会提示运行 `tether upgrade`：
+安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。同一版本重复安装是幂等的。单独升级 runtime 可运行：
 
 ```powershell
 node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
 ```
+
+### 自定义扩展目录、升级与强制覆盖
+
+`--extension-dir PATH` 指定浏览器加载的扩展目录，支持其他磁盘、中文和空格路径。省略时使用已记录的位置，首次安装默认 `<runtime>/extension`。后续 `upgrade`、`extension` 和 `doctor` 使用记录的位置；升级后在浏览器扩展管理页点击重新加载。改变目录时，需要在浏览器重新选择新目录。
+
+```powershell
+.\install.bat install --agent codex --home "D:\Apps\Tether" --extension-dir "E:\浏览器扩展\Tether"
+.\install.bat install --agent codex --home "D:\Apps\Tether" --upgrade
+.\install.bat install --agent codex --home "D:\Apps\Tether" --force
+```
+
+`install --upgrade` 升级托管 runtime 并更新所选 Agent 的 Tether Skill。`--force` 可重装同一版本，并备份后覆盖冲突的 Tether MCP 配置、Skill 和扩展文件。无关 MCP 配置和本地凭据保留。普通安装遇到冲突仍会停止；替换用户修改的内容前可先使用 `--dry-run` 查看路径。交互安装也提供扩展目录、升级和强制覆盖选项。
 
 从 0.x 升级前先停止旧 Broker，升级后重新加载已解压的扩展。旧 Broker 缺少带认证的生命周期端点，会被视为端口占用。升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
 
@@ -109,7 +121,7 @@ node bin/tether.mjs policy reset
 ```powershell
 npm ci
 npm pack --pack-destination work
-npx --yes --package ./work/mindcastleplayground-tether-1.0.0.tgz tether install --agent codex --project PATH --home PATH
+npx --yes --package ./work/mindcastleplayground-tether-1.1.0.tgz tether install --agent codex --project PATH --home PATH
 ```
 
 tarball 包含准备全新 runtime 所需的 CLI 和原型源码。通过 `npx` 使用 GitHub 源可能需要已授权的 Git 访问；有条件时优先使用本地 tarball。

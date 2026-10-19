@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Files } from './files.mjs';
-import { Hint, Install } from './constants.mjs';
+import { Hint, Install, InstallOption } from './constants.mjs';
 
 export class Runtime {
   static shell() { return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'); }
@@ -25,12 +25,17 @@ export class Runtime {
     if (path.resolve(native.path).toLowerCase() !== path.join(root, '.local', 'host.exe').toLowerCase()) throw new Error('Native host points to another runtime; regenerate its launchers/configuration before use.');
   }
   static prepare(root, source, options) {
-    if (options.runtime) { Runtime.check(root); return; }
+    if (options.runtime && !options[InstallOption.UPGRADE] && !options[InstallOption.FORCE]) { Runtime.check(root); return; }
     const marker = path.join(root, Install.MARKER);
     if (fs.existsSync(root)) {
       if (!fs.existsSync(marker)) throw new Error(`Runtime directory already exists: ${root}. Use --runtime for a configured checkout, or choose a new --home.`);
       const meta = Files.json(marker);
-      if (meta.version !== Install.VERSION) throw new Error(`Runtime ${root} is version ${meta.version}. Run ${Hint.UPGRADE}.`);
+      if (meta.version !== Install.VERSION && !options[InstallOption.UPGRADE] && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${meta.version}. Run ${Hint.UPGRADE} or install --upgrade.`);
+      if (meta.version !== Install.VERSION || options[InstallOption.FORCE] || options[InstallOption.UPGRADE]) {
+        Runtime.upgrade(root, source, options);
+        Runtime.check(root);
+        return;
+      }
       if (!meta.ready) Runtime.finish(root, options);
       Runtime.check(root);
       return;
@@ -47,20 +52,24 @@ export class Runtime {
     Runtime.npm(['run', 'build'], root);
   }
   static pip(root) { Runtime.run(Runtime.py(root), ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', path.join(root, 'python', 'requirements.txt')], root); }
-  static swap(root, source) {
+  static swap(root, source, options = {}) {
+    const a = path.resolve(root), b = path.resolve(source);
+    if (a === b || a.startsWith(`${b}${path.sep}`) || b.startsWith(`${a}${path.sep}`)) throw new Error('Runtime source and destination must be separate, non-nested directories.');
     for (const name of Install.SOURCE) {
       if (Install.EXCLUDE.includes(path.basename(name))) continue;
+      if (name === 'extension' && options[InstallOption.FORCE]) continue;
       const dest = path.join(root, name);
       fs.rmSync(dest, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       Files.copy(path.join(source, name), dest);
     }
+    if (options[InstallOption.FORCE]) Runtime.extension(path.join(source, 'extension'), path.join(root, 'extension'), true);
   }
   // Keep the extension ID stable: the fresh manifest lacks the key generated at first setup.
-  static key(root) {
+  static key(root, extension = path.join(root, 'extension')) {
     const pub = path.join(root, Install.KEY);
     if (!fs.existsSync(pub)) return;
-    const file = path.join(root, Install.MANIFEST);
+    const file = path.join(extension, 'manifest.json');
     fs.writeFileSync(file, `${JSON.stringify({ ...Files.json(file), key: Files.json(pub).key }, null, 2)}\n`);
   }
   static finish(root, options) {
@@ -77,15 +86,32 @@ export class Runtime {
     if (!fs.existsSync(root)) throw new Error(`Runtime not found: ${root}. Run ${Hint.INSTALL} first.`);
     const marker = path.join(root, Install.MARKER);
     if (!fs.existsSync(marker)) throw new Error(`Runtime ${root} has no install marker. Run ${Hint.INSTALL} first.`);
-    Runtime.swap(root, source);
+    Runtime.location(root, options);
+    Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: false })}\n`);
+    Runtime.swap(root, source, options);
     Runtime.key(root);
     Runtime.deps(root);
     Runtime.pip(root);
     // setup.py returns immediately when .local/broker.json already exists.
     const env = { ...process.env, BB_LANGUAGE: options.language };
     Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+    Runtime.sync(root, { ...options, [InstallOption.UPGRADE]: true });
     Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
   }
+  static location(root, options) {
+    const saved = path.join(root, Install.EXTENSION_LOCATION);
+    const dest = path.resolve(options[InstallOption.EXTENSION_DIR] || (fs.existsSync(saved) ? Files.json(saved).path : path.join(root, 'extension')));
+    const base = path.resolve(root).toLowerCase(), target = dest.toLowerCase();
+    if (target !== path.join(base, 'extension') && (target === base || base.startsWith(`${target}${path.sep}`) || target.startsWith(`${base}${path.sep}`))) throw new Error('Custom extension directory must be outside runtime.');
+    return dest;
+  }
+  static sync(root, options) {
+    const dest = Runtime.location(root, options);
+    const source = path.join(root, 'extension');
+    if (path.resolve(dest).toLowerCase() !== path.resolve(source).toLowerCase()) Files.tree(source, dest, Boolean(options[InstallOption.FORCE] || options[InstallOption.UPGRADE]));
+    Files.write(path.join(root, Install.EXTENSION_LOCATION), `${JSON.stringify({ path: dest })}\n`);
+  }
+  static extension(source, target, force = false) { Files.tree(source, target, force); }
   static register(root, options) {
     if (!options[Install.OPTION.NO_REGISTER]) Runtime.ps(path.join(root, 'scripts', 'register.ps1'), root, { ...process.env, BB_LANGUAGE: options.language });
   }

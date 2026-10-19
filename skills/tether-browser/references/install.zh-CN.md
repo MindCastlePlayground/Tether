@@ -29,3 +29,5 @@ node bin/tether.mjs extension --runtime PATH --browser chrome --open-browser
 ```
 
 此处 `PATH` 为已安装 runtime。用户启用开发者模式，点击**加载已解压的扩展程序**并选择其 `extension` 目录。命令可能启动所选浏览器，仅在用户要求配置浏览器时使用。扩展加载与 MCP 工具发现不能证明实时连接成功。仅在用户明确要求保持 Broker 停止时设置 `BB_BROKER_AUTOSTART=0`；否则 MCP 服务会在需要时自动拉起 Broker。`capabilities` 验证或手动启动见[连接设置](setup.zh-CN.md)。
+
+使用 `--extension-dir PATH` 指定独立扩展目录，后续升级会记住此位置。`install --upgrade` 升级托管 runtime 和所选 Skill；`--force` 备份后覆盖冲突的 Tether 文件和配置，并重装 runtime。可先用 `--dry-run` 预览，完成后在浏览器重新加载扩展。

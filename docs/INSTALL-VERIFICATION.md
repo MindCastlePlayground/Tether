@@ -2,6 +2,17 @@
 
 [简体中文](INSTALL-VERIFICATION.zh-CN.md) · [Installation](INSTALL.md)
 
+## Version 1.1.0 — 2026-10-19
+
+- 44 installer tests passed, covering forced configuration/skill replacement, backups, concurrent edits, extension location persistence and path overlap rejection.
+- Actual Windows installation of 1.0.0 followed by `install --upgrade`, repeat installation and `install --force`. All 13 original `.local` files retained their SHA-256 hashes and the extension identity remained unchanged.
+- An external extension directory with Unicode and spaces was remembered. Forced replacement backed up customized content and kept an unrelated file. `doctor` and `extension` resolved the recorded path.
+- The final tarball completed a fresh installation into another isolated home and external extension directory. Its standalone `upgrade` command completed against the earlier installation.
+- The upgraded MCP executable started from another working directory and exposed 12 tools in each language, reporting 1.1.0 with empty stderr.
+- Checks used `--no-register --no-open` and disabled Broker autostart during MCP inspection. Browser loading and live page RPC were not repeated for this installer change.
+
+## Earlier verification
+
 Verified on Windows with Node 24.9.0 and Python 3.12 on 2026-10-11:
 
 - `npm test`: 14 tests covering five hosts' paths/config formats, JSONC/TOML preservation, idempotence, conflicts, backups, complete skill copying, setup-time edit detection, dry-run behavior, browser trigger plans, and registration opt-out.

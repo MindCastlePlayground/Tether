@@ -31,12 +31,45 @@ export class Files {
     fs.renameSync(temp, file);
     return backup;
   }
-  static skill(source, target, location) {
+  static skill(source, target, location, force = false) {
     const plans = Files.entries(source).map(name => ({ file: path.join(target, name), text: Files.read(path.join(source, name)) }));
     plans.push({ file: path.join(target, Install.LOCATION), text: `${JSON.stringify(location, null, 2)}\n` });
     for (const plan of plans) {
-      if (fs.existsSync(plan.file) && Files.read(plan.file) !== plan.text) throw new Error(`Skill conflict: ${plan.file}. Keep or move the existing skill before reinstalling.`);
+      plan.before = fs.existsSync(plan.file) ? Files.read(plan.file) : null;
+      if (!force && fs.existsSync(plan.file) && Files.read(plan.file) !== plan.text) throw new Error(`Skill conflict: ${plan.file}. Keep or move the existing skill before reinstalling.`);
     }
     return plans;
+  }
+  static tree(source, target, force = false) {
+    const fromRoot = path.resolve(source).toLowerCase(), toRoot = path.resolve(target).toLowerCase();
+    if (fromRoot === toRoot || fromRoot.startsWith(`${toRoot}${path.sep}`) || toRoot.startsWith(`${fromRoot}${path.sep}`)) throw new Error('Extension source and destination must be separate, non-nested directories.');
+    const copy = dir => {
+      for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+        const from = path.join(dir, item.name), to = path.join(target, path.relative(source, from));
+        if (item.isDirectory()) {
+          if (fs.existsSync(to) && !fs.statSync(to).isDirectory()) {
+            if (!force) throw new Error(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
+            fs.renameSync(to, `${to}.tether-backup-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
+          }
+          fs.mkdirSync(to, { recursive: true }); copy(from); continue;
+        }
+        const data = fs.readFileSync(from);
+        if (fs.existsSync(to)) {
+          if (fs.statSync(to).isDirectory()) {
+            if (!force) throw new Error(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
+            fs.renameSync(to, `${to}.tether-backup-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
+          } else {
+            if (fs.readFileSync(to).equals(data)) continue;
+            if (!force) throw new Error(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
+            const suffix = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+            fs.copyFileSync(to, `${to}.tether-backup-${suffix}`, fs.constants.COPYFILE_EXCL);
+          }
+        }
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.writeFileSync(to, data);
+      }
+    };
+    fs.mkdirSync(target, { recursive: true });
+    copy(source);
   }
 }

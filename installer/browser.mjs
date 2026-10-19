@@ -4,9 +4,9 @@ import { spawn } from 'node:child_process';
 import { Install } from './constants.mjs';
 
 export class Browser {
-  static plan(name, runtime, env = process.env) {
+  static plan(name, runtime, env = process.env, extensionDir) {
     if (!Install.BROWSERS.includes(name)) throw new Error(`Unsupported browser: ${name}`);
-    const folder = path.join(runtime, 'extension');
+    const folder = extensionDir || path.join(runtime, 'extension');
     const url = name === 'chrome' ? 'chrome://extensions/' : 'edge://extensions/';
     const parts = name === 'chrome' ? ['Google', 'Chrome', 'Application', 'chrome.exe'] : ['Microsoft', 'Edge', 'Application', 'msedge.exe'];
     const exe = [env.LOCALAPPDATA, env.PROGRAMFILES, env['PROGRAMFILES(X86)']].filter(Boolean).map(base => path.join(base, ...parts)).find(file => fs.existsSync(file));

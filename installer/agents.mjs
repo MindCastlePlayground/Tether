@@ -31,7 +31,7 @@ class Config {
     if (!Config.object(value)) throw new Error('Configuration root must be an object');
     return value;
   }
-  static edit(name, text, entry) {
+  static edit(name, text, entry, force = false) {
     if (name === 'codex') return Config.toml(text, entry);
     const root = Config.read(text);
     const open = name === 'opencode';
@@ -45,12 +45,14 @@ class Config {
     if (open && Object.keys(desired).some(k => !OpenCode.MCP_KEYS.includes(k))) throw new Error(`opencode ${OpenCode.VERSION} rejects unknown MCP keys`);
     if (Object.hasOwn(parent, Names.key)) {
       if (Config.equal(parent[Names.key], desired)) return text;
-      throw new Error(`Conflicting ${Names.key} entry`);
+      if (!force) throw new Error(`Conflicting ${Names.key} entry`);
+      const edits = modify(text, [key, Names.key], desired, { formattingOptions: { insertSpaces: true, tabSize: 2 } });
+      return applyEdits(text, edits);
     }
     const edits = modify(text, [key, Names.key], desired, { formattingOptions: { insertSpaces: true, tabSize: 2 } });
     return applyEdits(text, edits);
   }
-  static toml(text, entry) {
+  static toml(text, entry, force = false) {
     let root;
     try { root = parseToml(text); } catch { throw new Error('Malformed TOML'); }
     if (!Config.object(root)) throw new Error('Configuration root must be a table');
@@ -60,7 +62,17 @@ class Config {
     const desired = { [fields.command]: entry.command, [fields.args]: entry.args, [fields.env]: entry.env };
     if (Object.hasOwn(servers, Names.key)) {
       if (Config.equal(servers[Names.key], desired)) return text;
-      throw new Error(`Conflicting ${Names.key} entry`);
+      if (!force) throw new Error(`Conflicting ${Names.key} entry`);
+      let skip = false;
+      const rest = text.split(/\r?\n/).filter(line => {
+        if (/^\s*\[/.test(line)) {
+          try { skip = Boolean(parseToml(line)[fields.parent]?.[Names.key]); }
+          catch { skip = false; }
+        }
+        return !skip;
+      }).join('\n');
+      if (parseToml(rest)[fields.parent]?.[Names.key]) throw new Error('Cannot replace inline Tether TOML entry; use a [mcp_servers.tether] table.');
+      return Config.toml(rest, entry, false);
     }
     const q = value => JSON.stringify(value);
     const table = `${fields.parent}.${Names.key}`;
@@ -132,9 +144,10 @@ export class Agents {
     const skillRoot = scope === 'project' ? path.join(project, Paths.dirs[name]) : name === 'opencode' ? path.join(config, 'opencode', 'skills') : path.join(user, Paths.dirs[name]);
     return { config: path.resolve(file), skill: path.resolve(skillRoot, 'tether-browser'), format: path.extname(file).slice(1) };
   }
-  static edit(name, text, entry) {
+  static edit(name, text, entry, force = false) {
     if (!Names.all.includes(name)) throw new Error(`Unknown agent: ${name}`);
     if (typeof text !== 'string' || !Config.object(entry) || typeof entry.command !== 'string' || !Array.isArray(entry.args) || !Config.object(entry.env)) throw new Error('Invalid configuration input');
-    return Config.edit(name, text.trim() ? text : name === 'codex' ? '' : '{}\n', entry);
+    if (name === 'codex') return Config.toml(text.trim() ? text : '', entry, force);
+    return Config.edit(name, text.trim() ? text : '{}\n', entry, force);
   }
 }

@@ -2,6 +2,17 @@
 
 [English](INSTALL-VERIFICATION.md) · [安装指南](INSTALL.zh-CN.md)
 
+## 版本 1.1.0 — 2026-10-19
+
+- 44 项安装器测试通过，覆盖配置/Skill 强制替换、备份、并发编辑、扩展路径记忆及路径重叠拒绝。
+- Windows 实际安装 1.0.0 后执行 `install --upgrade`、重复安装与 `install --force`。原有 13 个 `.local` 文件 SHA-256 均不变，扩展身份保持不变。
+- 包含中文和空格的外置扩展目录被正确记忆。强制覆盖前备份自定义内容，保留无关文件；`doctor` 和 `extension` 使用记录的位置。
+- 最终 tarball 在另一隔离 home 和外置扩展目录完成全新安装，其单独 `upgrade` 命令也在此前安装上成功执行。
+- 升级后的 MCP 可执行文件从其他工作目录实际启动，中英文各返回 12 个工具，报告 1.1.0，stderr 为空。
+- 验收使用 `--no-register --no-open`，MCP 检查禁用 Broker 自动启动。本次安装器改动未重复浏览器加载与真实页面 RPC 验收。
+
+## 历史验收
+
 2026-10-11，在 Windows、Node 24.9.0、Python 3.12 环境验证：
 
 - `npm test`：14 项测试，覆盖五种宿主的路径/配置格式、JSONC/TOML 保留、幂等、冲突、备份、完整 Skill 复制、初始化期间改动检测、dry-run、浏览器触发计划和注册跳过选项。

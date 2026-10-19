@@ -29,3 +29,5 @@ node bin/tether.mjs extension --runtime PATH --browser chrome --open-browser
 ```
 
 Here `PATH` is the installed runtime. The user enables Developer mode, chooses **Load unpacked**, and selects its `extension` directory. This command may launch the selected browser; use it only during requested browser setup. Browser loading and MCP tool discovery do not establish live connectivity. Only if the user explicitly asked to keep Broker stopped, set `BB_BROKER_AUTOSTART=0`; otherwise the MCP server auto-starts Broker on demand. Follow [connection setup](setup.md) for `capabilities` verification or manual startup.
+
+Use `--extension-dir PATH` for a separate extension folder; later upgrades remember it. `install --upgrade` upgrades the managed runtime and selected skills. `--force` backs up and replaces conflicting Tether files/configuration and reinstalls the runtime. Preview with `--dry-run`, then reload the extension in the browser.

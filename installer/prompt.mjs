@@ -24,7 +24,7 @@ export class Prompt {
       agent: Interactive.AGENT, scope: Interactive.SCOPE, project: Interactive.PROJECT,
       home: Interactive.HOME, runtime: Interactive.RUNTIME, python: Interactive.PYTHON,
       browser: Interactive.BROWSER, language: Interactive.LANGUAGE, register: Interactive.REGISTER,
-      open: Interactive.OPEN, dry: Interactive.DRY
+      open: Interactive.OPEN, dry: Interactive.DRY, extensionDir: Interactive.EXTENSION_DIR, force: Interactive.FORCE, upgrade: Interactive.UPGRADE
     };
     const askValue = async (key, valid, fallback) => {
       while (true) {
@@ -35,7 +35,7 @@ export class Prompt {
         if (key === 'scope') throw new Error(zh ? '范围只能是 auto、project 或 user。' : 'Scope must be auto, project or user.');
         if (key === 'browser') throw new Error(zh ? '浏览器只能是 chrome 或 edge。' : 'Browser must be chrome or edge.');
         if (key === 'language') throw new Error(zh ? '语言只能是 en 或 zh-CN。' : 'Language must be en or zh-CN.');
-        if (key === 'register' || key === 'open' || key === 'dry') throw new Error(zh ? '请输入 yes 或 no。' : 'Please enter yes or no.');
+        if (key === 'register' || key === 'open' || key === 'dry' || key === 'force' || key === 'upgrade') throw new Error(zh ? '请输入 yes 或 no。' : 'Please enter yes or no.');
       }
     };
     const agent = (await askValue('agent', value => value === Interactive.AUTO || value.split(',').every(name => Interactive.AGENTS.slice(1).includes(name.trim())), Interactive.AUTO)).split(',').map(name => name.trim()).join(',');
@@ -49,6 +49,9 @@ export class Prompt {
     const register = await askValue('register', value => Interactive.YES.includes(value), Interactive.YES_VALUE);
     const open = await askValue('open', value => Interactive.YES.includes(value), Interactive.YES_VALUE);
     const dry = await askValue('dry', value => Interactive.YES.includes(value), Interactive.NO_VALUE);
+    const extensionDir = await askValue('extensionDir');
+    const force = await askValue('force', value => Interactive.YES.includes(value), Interactive.NO_VALUE);
+    const upgrade = await askValue('upgrade', value => Interactive.YES.includes(value), Interactive.NO_VALUE);
     const args = ['install', '--agent', agent, '--project', project, '--browser', browser];
     if (scope !== Interactive.AUTO) args.push('--scope', scope);
     if (runtime) args.push('--runtime', runtime);
@@ -58,6 +61,9 @@ export class Prompt {
     if (register === Interactive.NO_VALUE) args.push('--no-register');
     if (open === Interactive.NO_VALUE) args.push('--no-open');
     if (dry === Interactive.YES_VALUE) args.push('--dry-run');
+    if (extensionDir) args.push('--extension-dir', extensionDir);
+    if (force === Interactive.YES_VALUE) args.push('--force');
+    if (upgrade === Interactive.YES_VALUE) args.push('--upgrade');
     return args;
   }
 }

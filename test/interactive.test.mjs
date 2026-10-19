@@ -5,7 +5,7 @@ import { Prompt } from '../installer/prompt.mjs';
 import { PassThrough } from 'node:stream';
 
 test('interactive answers map to existing install options', async () => {
-  const answers = ['', 'user', 'C:\\project', '', '', '', 'edge', 'zh-CN', 'no', 'no', 'yes'];
+  const answers = ['', 'user', 'C:\\project', '', '', '', 'edge', 'zh-CN', 'no', 'no', 'yes', '', 'no', 'no'];
   const questions = [];
   const args = await Prompt.collect(async question => {
     questions.push(question);
@@ -23,11 +23,11 @@ test('interactive answers map to existing install options', async () => {
   assert.equal(options['dry-run'], true);
   assert.equal(options.runtime, undefined);
   assert.equal(options.home, undefined);
-  assert.equal(questions.length, 11);
+  assert.equal(questions.length, 14);
 });
 
 test('interactive runtime selection suppresses install-home selection', async () => {
-  const answers = ['codex,gemini', 'project', 'C:\\project', 'C:\\runtime', '', 'chrome', 'en', 'yes', 'yes', 'no'];
+  const answers = ['codex,gemini', 'project', 'C:\\project', 'C:\\runtime', '', 'chrome', 'en', 'yes', 'yes', 'no', '', 'no', 'no'];
   const args = await Prompt.collect(async () => answers.shift());
   const { options } = Cli.parse(args);
   assert.equal(options.agent, 'codex,gemini');
@@ -41,7 +41,7 @@ test('interactive agent input rejects unknown agents clearly', async () => {
 });
 
 test('interactive defaults preserve per-agent scope and normalize comma-separated names', async () => {
-  const answers = ['codex, opencode', '', '', '', '', '', '', '', '', '', 'yes'];
+  const answers = ['codex, opencode', '', '', '', '', '', '', '', '', '', 'yes', '', 'no', 'no'];
   const { options } = Cli.parse(await Prompt.collect(async () => answers.shift()));
   assert.equal(options.agent, 'codex,opencode');
   assert.equal(options.scope, undefined);
@@ -52,7 +52,7 @@ test('interactive defaults preserve per-agent scope and normalize comma-separate
 test('interactive readline completes a dry-run questionnaire', async () => {
   const input = new PassThrough();
   const output = new PassThrough();
-  const answers = ['codex', 'project', '', '', '', '', 'chrome', 'en', 'no', 'no', 'yes'];
+  const answers = ['codex', 'project', '', '', '', '', 'chrome', 'en', 'no', 'no', 'yes', '', 'no', 'no'];
   output.on('data', () => { const answer = answers.shift(); if (answer !== undefined) setImmediate(() => input.write(`${answer}\n`)); });
   const args = await Prompt.run(input, output);
   assert.equal(Cli.parse(args).options['dry-run'], true);

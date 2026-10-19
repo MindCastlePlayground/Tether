@@ -20,11 +20,23 @@ With a terminal attached, running `node bin/tether.mjs` with no arguments starts
 
 `--agent` is optional and defaults to `auto`, which detects installed `codex`, `claude`, `cursor`, `opencode`, and `gemini` hosts and configures all of them; pass a comma-separated selection to restrict it. Omit `--scope` for `project` (OpenCode defaults to user scope, `~/.config/opencode`) and `--project` for the current directory; `--scope user` installs across projects. The durable home defaults to `%LOCALAPPDATA%\Tether`; its runtime is `%LOCALAPPDATA%\Tether\runtime`. Fresh setup copies the prototype there, installs locked Node dependencies, builds it, creates an isolated Python environment, installs Python requirements, generates local credentials/certificates, compiles launchers, and registers Native Messaging for both Chrome and Edge under the current Windows user. After success it opens the extension manager page and the extension folder; `--no-open` skips that, and a missing browser only prints a notice. The installer itself never starts Broker; once loaded, the extension manages it in default `auto` mode. MCP and Native Host can start Broker for the same runtime after TLS, certificate pin, and authentication checks (see below).
 
-The installer adds only the Tether MCP entry and copies the complete `skills/tether-browser/` folder with a non-secret `installation.json` locator. Existing configuration comments and unrelated keys are preserved. A config change receives a same-directory backup. Existing conflicting Tether entries or skill files cause the installer to stop; there is no force or replace option. Repeating an install for the same version is idempotent. The installer itself does not start Broker. Once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker only for the same runtime after TLS, certificate pin, and authentication checks. It never kills or reuses an unrelated service and never switches ports. Broker startup failures set minimum backoff delays of 1, 2, 4, 8, and 16 seconds; probes normally run about every 30 seconds and Chrome may delay them. Five consecutive failures enter `blocked`. Native Host reconnects independently with backoff capped at 30 seconds. Shared runtime mode `off` prevents MCP from starting Broker again. When an older runtime is detected, the installer points to `tether upgrade`:
+The installer adds only the Tether MCP entry and copies the complete `skills/tether-browser/` folder with a non-secret `installation.json` locator. Existing configuration comments and unrelated keys are preserved. A config change receives a same-directory backup. Existing conflicting Tether entries or skill files stop normal installation; use the explicit upgrade or force options below to replace managed content. Repeating an install for the same version is idempotent. The installer itself does not start Broker. Once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker only for the same runtime after TLS, certificate pin, and authentication checks. It never kills or reuses an unrelated service and never switches ports. Broker startup failures set minimum backoff delays of 1, 2, 4, 8, and 16 seconds; probes normally run about every 30 seconds and Chrome may delay them. Five consecutive failures enter `blocked`. Native Host reconnects independently with backoff capped at 30 seconds. Shared runtime mode `off` prevents MCP from starting Broker again. To upgrade the runtime separately, run:
 
 ```powershell
 node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
 ```
+
+### Custom extension directory, upgrades and forced replacement
+
+`--extension-dir PATH` selects the extension folder loaded by the browser, including another drive or a path with spaces or Unicode. When omitted, the recorded location is reused; the first install defaults to `<runtime>/extension`. Subsequent `upgrade`, `extension` and `doctor` commands use that location. Reload the extension in the browser after upgrading; select the new folder in the browser when moving it.
+
+```powershell
+.\install.bat install --agent codex --home "D:\Apps\Tether" --extension-dir "E:\浏览器扩展\Tether"
+.\install.bat install --agent codex --home "D:\Apps\Tether" --upgrade
+.\install.bat install --agent codex --home "D:\Apps\Tether" --force
+```
+
+`install --upgrade` upgrades the managed runtime and updates the selected agents' Tether skills. `--force` reinstalls the same version and backs up conflicting Tether MCP entries, skills and extension files before replacing them. Unrelated MCP entries and local credentials are preserved. Normal installation still stops on conflicts; use `--dry-run` to inspect paths before replacing customized content. Interactive installation also offers extension directory, upgrade and forced replacement options.
 
 Stop the old Broker before upgrading from 0.x, then reload the unpacked extension after upgrading. Old Brokers lack the authenticated lifecycle endpoints and are treated as an occupied port. The upgrade replaces the runtime sources, preserves `.local` (credentials, certificates, policy) and `.venv`, keeps the extension ID unchanged, re-runs `npm ci`/build and the Python install, and leaves agent configuration untouched.
 
@@ -109,7 +121,7 @@ The package is private and not published to npm. A local tarball is the reproduc
 ```powershell
 npm ci
 npm pack --pack-destination work
-npx --yes --package ./work/mindcastleplayground-tether-1.0.0.tgz tether install --agent codex --project PATH --home PATH
+npx --yes --package ./work/mindcastleplayground-tether-1.1.0.tgz tether install --agent codex --project PATH --home PATH
 ```
 
 The tarball contains the CLI and prototype sources needed to prepare a fresh runtime. Using a GitHub source with `npx` may require authorized Git access; prefer the local tarball when available.

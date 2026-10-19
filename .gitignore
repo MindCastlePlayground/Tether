@@ -20,7 +20,12 @@
 /mindcastleplayground-tether-*.tgz
 /RENAME-STATUS.md
 /prototype/work/
-**/evidence/*.jsonl
+**/evidence/
+/.playwright-mcp/
+/notes/
+/assets/preview-verification.json
+*.tether-backup-*
+*.tether-temp-*
 
 # Editor and OS metadata
 .DS_Store

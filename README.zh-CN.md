@@ -6,7 +6,7 @@
 
 <p align="center"><strong>连接你的浏览器。</strong></p>
 
-[English](README.md) · [安装指南](docs/INSTALL.zh-CN.md) · [Install guide](docs/INSTALL.md) · [完整原型指南（英文）](prototype/README.md) · [完整原型指南（简体中文）](prototype/README.zh-CN.md) · [验收记录](prototype/VERIFICATION.zh-CN.md) · [品牌资源](assets/README.zh-CN.md)
+[English](README.md) · [安装指南](docs/INSTALL.zh-CN.md) · [Install guide](docs/INSTALL.md) · [运行指南（英文）](prototype/README.md) · [运行指南（简体中文）](prototype/README.zh-CN.md) · [验收摘要](prototype/VERIFICATION.zh-CN.md) · [品牌资源](assets/README.zh-CN.md)
 
 Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的本地客户端控制已运行 Chrome 中明确授予的页面。它不会启动浏览器，也不要求使用独立浏览器 profile。
 
@@ -30,7 +30,7 @@ Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的�
 
 ## 快速开始
 
-使用[安装指南](docs/INSTALL.zh-CN.md)通过 CLI 安装 Windows runtime 并加载浏览器扩展。根目录 npm 包为私有包，未发布到 npm；请从检出目录或本地 tarball 安装。手动初始化原型和安全边界见[原型指南](prototype/README.zh-CN.md)。
+使用[安装指南](docs/INSTALL.zh-CN.md)通过 CLI 安装 Windows runtime 并加载浏览器扩展。根目录 npm 包为私有包，未发布到 npm；请从检出目录或本地 tarball 安装。历史目录名 `prototype/` 仍用于兼容路径，其中包含当前运行时源码和[运行指南](prototype/README.zh-CN.md)。
 
 ```powershell
 npm ci
@@ -49,12 +49,14 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 ## 目录
 
 - `assets/` — Tether 品牌资源。
-- `prototype/` — 当前扩展、Broker、SDK、MCP 服务、初始化脚本和验收证据。
-- `prototype/README.md` — 完整英文操作指南。
-- `prototype/README.zh-CN.md` — 完整简体中文操作指南。
+- `prototype/` — 当前扩展、Broker、SDK、MCP 服务及初始化/构建脚本；保留历史目录名以兼容已有路径。
+- `prototype/README.md` — 英文运行指南。
+- `prototype/README.zh-CN.md` — 简体中文运行指南。
 - [安装指南](docs/INSTALL.zh-CN.md) / [Install guide](docs/INSTALL.md) — 安装 CLI、配置支持的 Agent 并加载浏览器扩展。
 - [国际化指南](docs/I18N.zh-CN.md) / [Internationalization guide](docs/I18N.md) — 弹窗语言、语言偏好和翻译流程。
-- [M0 计划](prototype/PLAN.zh-CN.md) / [M0 plan](prototype/PLAN.md)、[验收记录](prototype/VERIFICATION.zh-CN.md) / [verification](prototype/VERIFICATION.md)，以及[品牌验收](assets/branding-verification.zh-CN.md) / [brand verification](assets/branding-verification.md)。
+- [验收摘要](prototype/VERIFICATION.zh-CN.md) / [Verification summary](prototype/VERIFICATION.md)。
+
+- [开发与发布](docs/DEVELOPMENT.zh-CN.md) — `dev` 开发集成与 `main` 发布流程。
 
 ## Agent Skill
 
@@ -64,6 +66,6 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 
 ## 状态
 
-仓库包含可运行原型，以及构建、模拟、协议和真实 Chrome 验收记录。具体通过项与未验证项见[验收记录](prototype/VERIFICATION.zh-CN.md)。Edge、第二台局域网机器和若干 M0 项仍未验收或未实现；现有证据不足以证明整个浏览器 profile 完全没有外部流量。
+仓库包含当前运行时源码，以及有日期的构建、安装、协议和真实 Chrome 验收记录。已记录结果与边界见[验收摘要](prototype/VERIFICATION.zh-CN.md)。现有证据不能证明所有浏览器均兼容，也不能保证整个浏览器 profile 没有外部流量。
 
 MCP 工具说明和初始化、注册、启动器生成提示也支持 `BB_LANGUAGE=en` 或 `BB_LANGUAGE=zh-CN`；配置方法见国际化指南。

@@ -1,5 +1,6 @@
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
+New-Item -ItemType Directory -Force -Path (Join-Path $root 'evidence') | Out-Null
 $proc=Start-Process -FilePath (Get-Command node.exe).Source -ArgumentList 'scripts/audit-client.mjs' -WorkingDirectory $root -WindowStyle Hidden -PassThru
 $all=Get-CimInstance Win32_Process
 $launchers=@($all | Where-Object {$_.ExecutablePath -in @((Join-Path $root '.local\broker.exe'),(Join-Path $root '.local\host.exe'))})

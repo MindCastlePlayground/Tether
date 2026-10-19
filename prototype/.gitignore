@@ -3,4 +3,4 @@ node_modules/
 .local/
 dist/
 __pycache__/
-evidence/*.jsonl
+evidence/

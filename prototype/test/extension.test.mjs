@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExtensionController } from '../extension/controller.js';
-import { Broker, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
+import { Broker, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -321,12 +321,15 @@ test('revocation removes page grants before waiting for debugger detach', async 
   const { api, c, approved } = await approvedExisting();
   const ids = { clientId: clientA, sessionId: approved.sessionId, pageId: approved.pages[0].pageId };
   await c.dispatch(Wire.Attach, ids);
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
   let finish;
   api.debugger.detach = async () => new Promise(resolve => { finish = resolve; });
   const revoking = c.dispatch(Wire.Release, { clientId: clientA, sessionId: ids.sessionId });
   await Promise.resolve();
   assert.equal(c.sessions.size, 0);
   assert.equal(c.pages.size, 0);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Sessions).at(-1)?.items, []);
   finish();
   await revoking;
 });
@@ -394,6 +397,66 @@ test('native disconnect reconnects without restoring prior grants', async () => 
   assert.equal(c.sessions.size, 0);
   assert.equal(c.pages.size, 0);
   c.stop();
+});
+
+test('pending and session changes are broadcast to every open popup', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  const pushed = messages.filter(message => message.type === PopupMessage.Pending);
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].items[0].pendingId, pending.pendingId);
+  assert.ok(pushed[0].items[0].expires > Date.now());
+  await c.approve(pending.pendingId, 1);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Pending).at(-1).items, []);
+  const sessions = messages.filter(message => message.type === PopupMessage.Sessions);
+  assert.equal(sessions.at(-1).items[0].clientId, clientA);
+  await c.revoke(sessions.at(-1).items[0].sessionId);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Sessions).at(-1).items, []);
+});
+
+test('denied, expired, and auto approval changes push fresh popup lists', async () => {
+  const api = new FakeChrome();
+  let now = 1000;
+  const c = manual(new ExtensionController(api, () => now));
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  const denied = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  c.deny(denied.pendingId);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Pending).at(-1).items, []);
+  await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
+  now += Limits.PendingMs + 1;
+  c.sweep();
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Pending).at(-1).items, []);
+  messages.length = 0;
+  await c.popup({ type: PopupMessage.SetAutoApproval, enabled: false },
+    { url: api.runtime.getURL('popup.html') }, { postMessage() {} });
+  assert.equal(messages.filter(message => message.type === PopupMessage.Pending).length, 1);
+  assert.equal(messages.filter(message => message.type === PopupMessage.Sessions).length, 1);
+});
+
+test('auto approval of a closed tab denies the request instead of leaving it pending', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  api.tabs.data.delete(1);
+  const result = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  assert.equal(result.status, Wire.Denied);
+  assert.equal(c.pending.size, 0);
+});
+
+test('approval of a closed tab reports invalid_request instead of denying', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  api.tabs.data.delete(1);
+  await assert.rejects(c.approve(pending.pendingId, 1), /invalid_request/);
+  assert.notEqual(c.results.get(pending.pendingId)?.status, Wire.Denied);
+  const messages = [];
+  await c.popup({ type: PopupMessage.Approve, pendingId: pending.pendingId, tabId: 1 },
+    { url: api.runtime.getURL('popup.html') }, { postMessage: message => messages.push(message) });
+  assert.deepEqual(messages, [{ type: PopupMessage.Error, message: Failure.Invalid }]);
 });
 
 test('heartbeats renew a client lease and expiry removes the grant', async () => {

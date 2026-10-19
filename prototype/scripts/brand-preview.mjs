@@ -3,7 +3,8 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import assert from 'node:assert/strict';
-import { PopupMessage } from '../extension/protocol.js';
+import { Failure, PopupMessage } from '../extension/protocol.js';
+import { ErrorText, Text } from '../extension/i18n.js';
 
 class Preview {
   static Root = fileURLToPath(new URL('../extension/', import.meta.url));
@@ -13,6 +14,10 @@ class Preview {
   static Types = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 
   static async run() {
+    const catalogs = {};
+    for (const [language, directory] of [['en', 'en'], ['zh-CN', 'zh_CN']]) {
+      catalogs[language] = JSON.parse(await readFile(resolve(this.Root, `_locales/${directory}/messages.json`), 'utf8'));
+    }
     const browser = await chromium.launch({ channel: 'chrome', headless: true });
     try {
       const page = await browser.newPage({ viewport: { width: 380, height: 720 }, deviceScaleFactor: 2 });
@@ -52,56 +57,94 @@ class Preview {
         };
       }, events);
       await page.goto(`${this.Origin}/popup.html`);
-      await page.getByText('No active sessions.', { exact: true }).waitFor();
-      assert.equal(await page.title(), 'Tether — Browser access');
+      await page.getByText(catalogs.en[Text.NoSessions].message, { exact: true }).waitFor();
+      assert.equal(await page.title(), catalogs.en[Text.Title].message);
       assert.equal(await page.locator('header img').evaluate(img => img.complete && img.naturalWidth === 128), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await mkdir(this.Assets, { recursive: true });
       await page.screenshot({ path: resolve(this.Assets, 'popup-preview.png'), fullPage: true });
+
+      assert.equal(await page.locator('.pending-card').count(), 0);
+      await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+        { pendingId: 'live', clientId: 'agent-live', mode: 'newGroup', url: 'https://example.com/live', expires: Date.now() + 65000 }
+      ] }), events);
+      await page.getByText('agent-live', { exact: true }).waitFor();
+      assert.match(await page.locator('.countdown').textContent(), /^1:0[0-5]$/);
+
+      await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+        { pendingId: 'soon', clientId: 'agent-soon', mode: 'newGroup', url: 'https://example.com/soon', expires: Date.now() + 15000 }
+      ] }), events);
+      await page.locator('.countdown.warn').waitFor();
+      assert.match(await page.locator('.countdown.warn').textContent(), /^0:1[0-5]$/);
+
+      await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+        { pendingId: 'gone', clientId: 'agent-gone', mode: 'newGroup', url: 'https://example.com/gone', expires: Date.now() + 800 }
+      ] }), events);
+      const expiring = page.locator('.pending-card').filter({ hasText: 'agent-gone' });
+      await expiring.getByText(catalogs.en[Text.Expired].message, { exact: true }).waitFor({ timeout: 5000 });
+      assert.equal(await expiring.locator('button').count(), 0);
+      await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+        { pendingId: 'gone', clientId: 'agent-gone', mode: 'newGroup', url: 'https://example.com/gone', expires: Date.now() - 1000 }
+      ] }), events);
+      await expiring.getByText(catalogs.en[Text.Expired].message, { exact: true }).waitFor();
+      assert.equal(await expiring.locator('button').count(), 0);
+      await expiring.waitFor({ state: 'detached', timeout: 5000 });
+      await page.evaluate(events => window.port.receive({ type: events.Pending, items: [] }), events);
+      await page.getByText(catalogs.en[Text.NoPending].message, { exact: true }).waitFor();
+
       await page.locator('details.disclosure').first().locator('summary').click();
-      await page.getByRole('checkbox', { name: 'Auto-approve requests', exact: true }).uncheck();
+      const autoToggle = page.getByRole('checkbox', { name: catalogs.en[Text.AutoApprovalShort].message });
+      await autoToggle.uncheck();
       await page.locator('details.disclosure').first().locator('summary').click();
-      await page.getByText('Off: requests wait for your approval, and clients cannot enumerate tabs.', { exact: true }).waitFor();
+      await page.getByText(catalogs.en[Text.AutoOff].message, { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => window.approval), false);
       await page.keyboard.press('Tab');
-      await page.getByRole('checkbox', { name: 'Auto-approve requests', exact: true }).focus();
-      assert.equal(await page.getByRole('checkbox', { name: 'Auto-approve requests', exact: true }).evaluate(el => el.matches(':focus-visible')), true);
+      await autoToggle.focus();
+      assert.equal(await autoToggle.evaluate(el => el.matches(':focus-visible')), true);
       assert.deepEqual(errors, []);
-      const catalogs = {};
+
       for (const [language, directory] of [['en', 'en'], ['zh-CN', 'zh_CN']]) {
-        const catalog = JSON.parse(await readFile(resolve(this.Root, `_locales/${directory}/messages.json`), 'utf8'));
-        catalogs[language] = catalog;
+        const catalog = catalogs[language];
         const text = key => catalog[key].message;
         await page.locator('#language').selectOption(language);
-        await page.getByText(text('noSessions'), { exact: true }).waitFor();
+        await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
         assert.equal(await page.locator('html').getAttribute('lang'), language);
-        assert.equal(await page.title(), text('title'));
+        assert.equal(await page.title(), text(Text.Title));
         await page.reload();
-        await page.getByText(text('noSessions'), { exact: true }).waitFor();
+        await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
         assert.equal(await page.locator('#language').inputValue(), language);
-        await page.getByRole('checkbox', { name: text('autoApprovalShort'), exact: true }).uncheck();
+        const toggle = page.getByRole('checkbox', { name: text(Text.AutoApprovalShort) });
+        await toggle.uncheck();
         await page.locator('details.disclosure').first().locator('summary').click();
-        await page.getByText(text('autoOff'), { exact: true }).waitFor();
+        await page.getByText(text(Text.AutoOff), { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => window.approval), false);
-        await page.evaluate(events => {
-          window.port.receive({ type: events.Pending, items: [
-            { pendingId: 'new', clientId: 'agent-new', mode: 'newGroup' },
-            { pendingId: 'existing', clientId: 'agent-existing', mode: 'attachExisting' }
-          ] });
-          window.port.receive({ type: events.Sessions, items: [
-            { sessionId: 'session', clientId: 'agent-active', pages: [{ url: 'https://example.com' }] }
-          ] });
-        }, events);
-        await page.getByRole('button', { name: text('approve'), exact: true }).click();
+
+        assert.equal(await page.locator('.pending-card').count(), 0);
+        await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+          { pendingId: 'new', clientId: 'agent-new', mode: 'newGroup', url: 'https://example.com/new', expires: Date.now() + 65000 },
+          { pendingId: 'existing', clientId: 'agent-existing', mode: 'attachExisting', url: 'https://example.com/existing', expires: Date.now() + 90000 }
+        ] }), events);
+        await page.getByText('agent-new', { exact: true }).waitFor();
+        assert.equal(await page.locator('.countdown').count(), 2);
+        assert.match(await page.locator('.countdown').first().textContent(), /^1:0[0-5]$/);
+        await page.evaluate(events => window.port.receive({ type: events.Sessions, items: [
+          { sessionId: 'session', clientId: 'agent-active', pages: [{ url: 'https://example.com' }] }
+        ] }), events);
+        await page.getByRole('button', { name: text(Text.Approve), exact: true }).click();
         assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.Approve, pendingId: 'new', tabId: undefined });
-        await page.getByRole('button', { name: text('deny'), exact: true }).first().click();
+        await page.getByRole('button', { name: text(Text.Deny), exact: true }).first().click();
         assert.equal(await page.evaluate(() => window.lastMessage.type), events.Deny);
-        await page.getByRole('button', { name: text('revoke'), exact: true }).click();
+        await page.getByRole('button', { name: text(Text.Revoke), exact: true }).click();
         assert.equal(await page.evaluate(() => window.lastMessage.sessionId), 'session');
-        await page.getByRole('button', { name: text('choose'), exact: true }).click();
+        await page.getByRole('button', { name: text(Text.Choose), exact: true }).click();
         assert.equal(await page.evaluate(() => window.lastMessage.pendingId), 'existing');
         await page.evaluate(events => window.port.receive({ type: events.Tabs, pendingId: 'existing', tabs: [] }), events);
-        await page.getByText(text('noTabs'), { exact: true }).waitFor();
+        await page.getByText(text(Text.NoTabs), { exact: true }).waitFor();
+        await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+          { pendingId: 'push', clientId: 'agent-push', mode: 'newGroup', url: 'https://example.com/push', expires: Date.now() + 60000 }
+        ] }), events);
+        await page.getByText(text(Text.NoTabs), { exact: true }).waitFor();
+        assert.equal(await page.locator('.pending-card').count(), 0);
         await page.evaluate(events => window.port.receive({ type: events.Tabs, pendingId: 'existing', tabs: [
           { tabId: 17, title: 'Example', url: 'https://example.com' }
         ] }), events);
@@ -111,31 +154,38 @@ class Preview {
         await page.locator('#language').selectOption(other);
         await page.getByRole('button', { name: 'Example' }).waitFor();
         await page.locator('#language').selectOption(language);
-        await page.getByRole('button', { name: text('back'), exact: true }).click();
-        await page.getByText(text('noSessions'), { exact: true }).waitFor();
-        await page.evaluate(events => window.port.receive({ type: events.Error }), events);
-        await page.getByText(text('error'), { exact: true }).waitFor();
-        await page.locator('#language').selectOption(other);
-        await page.locator('#language').selectOption(language);
-        await page.getByText(text('error'), { exact: true }).waitFor();
+        await page.getByRole('button', { name: text(Text.Back), exact: true }).click();
+        await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
+
+        for (const code of [Failure.Forbidden, Failure.Missing, Failure.Invalid, Failure.Failed]) {
+          await page.evaluate(({ events, code }) => window.port.receive({ type: events.Error, message: code }), { events, code });
+          await page.getByText(text(ErrorText.Keys[code]), { exact: true }).first().waitFor();
+          await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
+            { pendingId: 'error-push', clientId: 'agent-error', mode: 'newGroup', url: 'https://example.com/error', expires: Date.now() + 60000 }
+          ] }), events);
+          await page.getByText(text(ErrorText.Keys[code]), { exact: true }).first().waitFor();
+          await page.getByRole('button', { name: text(Text.Refresh), exact: true }).click();
+          await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
+        }
+
         await page.reload();
-        await page.getByText(text('noSessions'), { exact: true }).waitFor();
+        await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         await page.screenshot({ path: resolve(this.Assets, language === 'en' ? 'popup-preview.png' : 'popup-preview.zh-CN.png'), fullPage: true });
       }
       assert.deepEqual(Object.keys(catalogs.en).sort(), Object.keys(catalogs['zh-CN']).sort());
       await page.locator('#language').selectOption('auto');
-      await page.getByText(catalogs.en.noSessions.message, { exact: true }).waitFor();
+      await page.getByText(catalogs.en[Text.NoSessions].message, { exact: true }).waitFor();
       await page.evaluate(() => localStorage.setItem('language', 'invalid'));
       await page.reload();
-      await page.getByText(catalogs.en.noSessions.message, { exact: true }).waitFor();
+      await page.getByText(catalogs.en[Text.NoSessions].message, { exact: true }).waitFor();
       assert.equal(await page.locator('#language').inputValue(), 'auto');
       await page.evaluate(() => localStorage.setItem('systemLanguage', 'zh-TW'));
       await page.reload();
-      await page.getByText(catalogs['zh-CN'].noSessions.message, { exact: true }).waitFor();
+      await page.getByText(catalogs['zh-CN'][Text.NoSessions].message, { exact: true }).waitFor();
       assert.equal(await page.locator('html').getAttribute('lang'), 'zh-CN');
       assert.deepEqual(errors, []);
-      const report = { at: new Date().toISOString(), fixture: 'mock extension runtime; no Native Host or Broker', languages: ['en', 'zh-CN'], states: ['empty', 'auto-approval', 'pending', 'sessions', 'tab chooser', 'no tabs', 'error'], persistence: 'reload passed', systemLanguage: 'en-US and zh-TW passed', invalidPreference: 'falls back to browser', localeKeys: Object.keys(catalogs.en).length, logo: '128px loaded', overflow: false, keyboardFocus: 'passed', pageErrors: errors };
+      const report = { at: new Date().toISOString(), fixture: 'mock extension runtime; no Native Host or Broker', languages: ['en', 'zh-CN'], states: ['empty', 'live push', 'countdown', 'countdown warning', 'expired removal', 'auto-approval', 'pending', 'sessions', 'tab chooser', 'no tabs', 'error codes'], persistence: 'reload passed', systemLanguage: 'en-US and zh-TW passed', invalidPreference: 'falls back to browser', localeKeys: Object.keys(catalogs.en).length, logo: '128px loaded', overflow: false, keyboardFocus: 'passed', pageErrors: errors };
       await writeFile(resolve(this.Assets, 'preview-verification.json'), JSON.stringify(report, null, 2));
       console.log(JSON.stringify(report));
     } finally {

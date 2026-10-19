@@ -93,6 +93,27 @@ export class ExtensionController {
     for (const port of this.popups) { try { port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus }); } catch { this.popups.delete(port); } }
   }
 
+  publishPending() { this.publish(PopupMessage.Pending, this.pendingItems()); }
+
+  publishSessions() { this.publish(PopupMessage.Sessions, this.sessionItems()); }
+
+  publish(type, items) {
+    for (const port of this.popups) { try { port.postMessage({ type, items }); } catch { this.popups.delete(port); } }
+  }
+
+  pendingItems() {
+    return [...this.pending].map(([pendingId, x]) => ({
+      pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
+    }));
+  }
+
+  sessionItems() {
+    return [...this.sessions.values()].map(s => ({ sessionId: s.sessionId, clientId: s.clientId, mode: s.mode,
+      pages: [...s.pages].map(id => {
+        const p = this.pages.get(id); return p ? { pageId: id, url: p.url } : null;
+      }).filter(Boolean) }));
+  }
+
   async save() {
     try { await this.api.storage.local.set({ [Storage.AutoApprove]: this.autoApprove }); } catch { /* Keep the choice in memory. */ }
   }
@@ -206,10 +227,13 @@ export class ExtensionController {
     const pendingId = this.id();
     this.pending.set(pendingId, { clientId: p.clientId, mode: p.mode, url, expires: this.clock() + Limits.PendingMs });
     this.statusSet(pendingId, p.clientId, { status: Wire.Pending });
+    this.publishPending();
     this.api.action.setBadgeText({ text: BrowserAction.BadgePending });
     this.api.action.setBadgeBackgroundColor({ color: BrowserAction.BadgeColor });
-    if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined)))
-      await this.approve(pendingId, p.tabId);
+    if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined))) {
+      try { await this.approve(pendingId, p.tabId); }
+      catch { if (this.pending.has(pendingId)) this.deny(pendingId); }
+    }
     const result = this.results.get(pendingId);
     if (result?.status === Wire.Approved) return { pendingId, ...result.value, status: result.status };
     return { pendingId, status: result?.status ?? Wire.Pending };
@@ -236,9 +260,7 @@ export class ExtensionController {
         await this.setBrokerMode(msg.mode);
         port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus });
       } else if (msg?.type === PopupMessage.Pending) {
-        port.postMessage({ type: msg.type, items: [...this.pending].map(([pendingId, x]) => ({
-          pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
-        })) });
+        port.postMessage({ type: msg.type, items: this.pendingItems() });
       } else if (msg?.type === PopupMessage.AutoApproval) {
         await this.ready;
         port.postMessage({ type: msg.type, enabled: this.autoApprove });
@@ -246,29 +268,37 @@ export class ExtensionController {
         this.autoApprove = msg.enabled === true;
         await this.save();
         port.postMessage({ type: PopupMessage.AutoApproval, enabled: this.autoApprove });
+        this.publishPending();
+        this.publishSessions();
       } else if (msg?.type === PopupMessage.Tabs) {
         const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });
         port.postMessage({ type: msg.type, pendingId: msg.pendingId, tabs: tabs.map(t => ({
           tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1
         })) });
       } else if (msg?.type === PopupMessage.Sessions) {
-        port.postMessage({ type: msg.type, items: [...this.sessions.values()].map(s => ({ sessionId: s.sessionId,
-          clientId: s.clientId, mode: s.mode, pages: [...s.pages].map(id => {
-            const p = this.pages.get(id); return p ? { pageId: id, url: p.url } : null;
-          }).filter(Boolean) })) });
+        port.postMessage({ type: msg.type, items: this.sessionItems() });
       } else if (msg?.type === PopupMessage.Revoke) {
         if (!this.sessions.has(msg.sessionId)) throw new Error(Failure.Missing);
         await this.revoke(msg.sessionId);
-        port.postMessage({ type: PopupMessage.Sessions, items: [...this.sessions.values()].map(s => ({ sessionId: s.sessionId, clientId: s.clientId, mode: s.mode, pages: [...s.pages].map(id => { const p = this.pages.get(id); return p ? { pageId: id, url: p.url } : null; }).filter(Boolean) })) });
-      } else if (msg?.type === PopupMessage.Approve) { await this.approve(msg.pendingId, msg.tabId); await this.popup({type:PopupMessage.Pending},sender,port); await this.popup({type:PopupMessage.Sessions},sender,port); }
-      else if (msg?.type === PopupMessage.Deny) { this.deny(msg.pendingId); await this.popup({type:PopupMessage.Pending},sender,port); }
-    } catch { port.postMessage({ type: PopupMessage.Error, message: Failure.Failed }); }
+      } else if (msg?.type === PopupMessage.Approve) {
+        await this.approve(msg.pendingId, msg.tabId);
+      } else if (msg?.type === PopupMessage.Deny) {
+        this.deny(msg.pendingId);
+      }
+    } catch (err) {
+      port.postMessage({ type: PopupMessage.Error, message: Object.values(Failure).includes(err?.message) ? err.message : Failure.Failed });
+    }
   }
 
   async approve(id, tabId) {
     if (this.approving.has(id)) return;
     const p = this.pending.get(id);
-    if (!p || p.expires <= this.clock()) { this.pending.delete(id); this.statusSet(id, p?.clientId, { status: Wire.Expired }); return; }
+    if (!p || p.expires <= this.clock()) {
+      this.pending.delete(id);
+      this.statusSet(id, p?.clientId, { status: Wire.Expired });
+      this.publishPending();
+      throw new Error(Failure.Forbidden);
+    }
     this.approving.add(id);
     let tab;
     let groupId = null;
@@ -286,8 +316,9 @@ export class ExtensionController {
         this.validPending(id,p);
         if(tab.url !== BrowserAction.NewTab || tab.groupId !== groupId) throw new Error(Failure.Forbidden);
       } else {
-        if (!Number.isInteger(tabId)) throw new Error(Failure.Invalid);
-        tab = await this.api.tabs.get(tabId);
+        if (!Number.isInteger(tabId)) throw new Error(Failure.Failed);
+        try { tab = await this.api.tabs.get(tabId); }
+        catch { throw new Error(Failure.Invalid); }
         this.safeUrl(tab.url, false);
         groupId = tab.groupId ?? -1;
       }
@@ -319,19 +350,25 @@ export class ExtensionController {
       this.results.set(id, { clientId: p.clientId, status: Wire.Approved,
         value: { sessionId, pages: [{ pageId, url: finalTab.url }], groupId } });
       this.pending.delete(id);
+      this.publishPending();
+      this.publishSessions();
     } catch (err) {
       if (owned && tab?.id != null) {
         try { const current=await this.api.tabs.get(tab.id);if(current.url===BrowserAction.NewTab&&current.groupId===groupId)await this.api.tabs.remove(tab.id); } catch { /* best effort rollback */ }
       }
       if (createdSessionId) await this.revoke(createdSessionId);
-      this.deny(id);
+      if (err?.message === Failure.Busy) { this.deny(id); return; }
+      throw err?.message === Failure.Forbidden ? new Error(Failure.Failed) : err;
     } finally { this.approving.delete(id); }
   }
 
   deny(id) {
     const p = this.pending.get(id);
     this.pending.delete(id);
-    if (p) this.statusSet(id, p.clientId, { status: Wire.Denied });
+    if (p) {
+      this.statusSet(id, p.clientId, { status: Wire.Denied });
+      this.publishPending();
+    }
   }
 
   statusSet(id, clientId, value) {
@@ -392,6 +429,7 @@ export class ExtensionController {
       this.pages.set(pageId, page); session.pages.add(pageId); session.owned.add(pageId);
       if (url !== BrowserAction.NewTab) await this.navigate({ session, page }, { url, _approval: true });
       this.grant({ clientId: session.clientId, sessionId: session.sessionId, pageId });
+      this.publishSessions();
       return { pageId, url };
     } catch (err) { try { const current=await this.api.tabs.get(tab.id);if(current.url===BrowserAction.NewTab)await this.api.tabs.remove(tab.id); } catch { /* rollback */ } throw err; }
   }
@@ -413,7 +451,8 @@ export class ExtensionController {
     if (!s) return;
     this.sessions.delete(sessionId);
     const pages = [...s.pages].map(id => this.pages.get(id)).filter(Boolean);
-    for (const p of pages) this.dropPage(p.pageId);
+    for (const p of pages) this.dropPage(p.pageId, false);
+    this.publishSessions();
     await Promise.all(pages.filter(p => p.attached).map(p => this.detachPage(p)));
   }
 
@@ -425,7 +464,9 @@ export class ExtensionController {
   }
 
   async revokeClient(clientId) {
-    for (const [id, p] of this.pending) if (p.clientId === clientId) this.pending.delete(id);
+    let dropped = false;
+    for (const [id, p] of this.pending) if (p.clientId === clientId) { this.pending.delete(id); dropped = true; }
+    if (dropped) this.publishPending();
     for (const [id, s] of [...this.sessions]) if (s.clientId === clientId) await this.revoke(id);
     this.lease.delete(clientId);
   }
@@ -544,7 +585,7 @@ export class ExtensionController {
     for (const p of [...this.pages.values()]) if (p.tabId === tabId) void this.revokePage(p.pageId);
   }
 
-  dropPage(id) {
+  dropPage(id, broadcast = true) {
     const p = this.pages.get(id);
     if (!p) return;
     this.pages.delete(id);
@@ -553,13 +594,16 @@ export class ExtensionController {
       s.pages.delete(id); s.owned.delete(id);
       if (![...s.pages].some(pageId => this.pages.get(pageId)?.groupId === s.managedGroupId)) s.managedGroupId = null;
     }
+    if (broadcast) this.publishSessions();
   }
 
   sweep() {
     const now = this.clock();
+    let expired = false;
     for (const [id, p] of this.pending) if (p.expires <= now) {
-      this.pending.delete(id); this.statusSet(id, p.clientId, { status: Wire.Expired });
+      this.pending.delete(id); this.statusSet(id, p.clientId, { status: Wire.Expired }); expired = true;
     }
+    if (expired) this.publishPending();
     for (const [id, s] of [...this.sessions]) if (s.expires <= now) this.revoke(id);
     for (const [id, at] of this.lease) if (at <= now) this.revokeClient(id);
     if (!this.pending.size) this.api.action.setBadgeText({ text: '' });
@@ -570,6 +614,8 @@ export class ExtensionController {
     this.approving.clear();
     await Promise.all([...this.sessions.keys()].map(id => this.revoke(id)));
     this.pending.clear(); this.lease.clear(); this.results.clear();
+    this.publishPending();
+    this.publishSessions();
   }
 
   validPending(id,p){if(this.pending.get(id)!==p||p.expires<=this.clock())throw new Error(Failure.Forbidden);}

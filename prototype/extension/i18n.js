@@ -1,5 +1,6 @@
 import en from './_locales/en/messages.json' with { type: 'json' };
 import zh from './_locales/zh_CN/messages.json' with { type: 'json' };
+import { Failure } from './protocol.js';
 
 export class Text {
   static Enabled = 'enabled';
@@ -49,6 +50,23 @@ export class Text {
   static AutoApprovalShort = 'autoApprovalShort';
   static AccessDetails = 'accessDetails';
   static PolicyDetails = 'policyDetails';
+  static Expired = 'expired';
+  static Refresh = 'refresh';
+  static ErrorExpired = 'errorExpired';
+  static ErrorSession = 'errorSession';
+  static ErrorTab = 'errorTab';
+}
+
+export class ErrorText {
+  static Keys = Object.freeze({
+    [Failure.Invalid]: Text.ErrorTab,
+    [Failure.Forbidden]: Text.ErrorExpired,
+    [Failure.Missing]: Text.ErrorSession,
+    [Failure.Busy]: Text.Error,
+    [Failure.GroupFull]: Text.Error,
+    [Failure.Unsupported]: Text.Error,
+    [Failure.Failed]: Text.Error
+  });
 }
 
 export class Locale {

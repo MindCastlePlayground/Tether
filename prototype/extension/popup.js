@@ -1,5 +1,5 @@
-import { Broker, NativeStatus, PopupMessage } from './protocol.js';
-import { Locale, Text } from './i18n.js';
+import { Broker, Failure, NativeStatus, PopupMessage } from './protocol.js';
+import { ErrorText, Locale, Text } from './i18n.js';
 
 class Popup {
   constructor(api = chrome, doc = document) {
@@ -13,9 +13,15 @@ class Popup {
     this.brokerStatus = { state: Broker.StateStarting };
     this.locale = new Locale(api);
     this.view = null;
+    this.error = Failure.Failed;
     this.status = { state: NativeStatus.Waiting };
+    this.countdowns = new Map();
+    this.fading = new Map();
+    this.timeouts = new Map();
     this.port = api.runtime.connect({ name: PopupMessage.Port });
     this.port.onMessage.addListener(msg => this.receive(msg));
+    this.port.onDisconnect?.addListener(() => this.close());
+    this.timer = setInterval(() => this.tick(), 1000);
   }
 
   async init() {
@@ -41,6 +47,8 @@ class Popup {
   }
 
   start() {
+    this.view = null;
+    this.reset();
     this.port.postMessage({ type: PopupMessage.Status });
     this.port.postMessage({ type: PopupMessage.Pending });
     this.port.postMessage({ type: PopupMessage.Sessions });
@@ -49,13 +57,33 @@ class Popup {
   }
 
   receive(msg) {
-    if (msg.type === PopupMessage.Status) { this.status = msg; this.render(); }
-    if (msg.type === PopupMessage.Pending) { this.pending = msg.items ?? []; this.render(); }
-    if (msg.type === PopupMessage.Sessions) { this.sessions = msg.items ?? []; this.render(); }
-    if (msg.type === PopupMessage.AutoApproval) { this.autoApproval = msg.enabled === true; this.render(); }
-    if (msg.type === PopupMessage.BrokerStatus) { this.brokerStatus = msg; this.brokerMode = msg.mode ?? this.brokerMode; this.render(); }
+    if (msg.type === PopupMessage.Status) { this.status = msg; if (this.view === null) this.render(); }
+    if (msg.type === PopupMessage.Pending) {
+      const now = Date.now();
+      const items = msg.items ?? [];
+      const incoming = new Set(items.map(item => item.pendingId));
+      for (const item of items) {
+        if (!Number.isFinite(item.expires) || item.expires > now) {
+          this.fading.delete(item.pendingId);
+          const timeout = this.timeouts.get(item.pendingId);
+          if (timeout !== undefined) { clearTimeout(timeout); this.timeouts.delete(item.pendingId); }
+        }
+      }
+      for (const item of this.pending) {
+        if (!incoming.has(item.pendingId) && Number.isFinite(item.expires) && item.expires <= now) this.fade(item);
+      }
+      for (const [id, item] of this.fading) if (!incoming.has(id)) items.push(item);
+      this.pending = items;
+      if (this.view === null) this.render();
+    }
+    if (msg.type === PopupMessage.Sessions) {
+      this.sessions = msg.items ?? [];
+      if (this.view === null) this.render();
+    }
+    if (msg.type === PopupMessage.AutoApproval) { this.autoApproval = msg.enabled === true; if (this.view === null) this.render(); }
+    if (msg.type === PopupMessage.BrokerStatus) { this.brokerStatus = msg; this.brokerMode = msg.mode ?? this.brokerMode; if (this.view === null) this.render(); }
     if (msg.type === PopupMessage.Tabs) this.renderTabs(msg.pendingId, msg.tabs ?? []);
-    if (msg.type === PopupMessage.Error) this.renderError();
+    if (msg.type === PopupMessage.Error) this.renderError(msg.message);
   }
 
   render() {
@@ -182,27 +210,40 @@ class Popup {
   }
 
   renderPendingSection() {
+    const items = this.pending;
     const sec = this.el('section', '', 'section');
     const head = this.el('div', '', 'section-head');
     head.append(this.el('h2', this.locale.get(Text.Pending), 'section-title'));
-    if (this.pending.length > 0) {
-      head.append(this.el('span', String(this.pending.length), 'section-badge highlight'));
+    if (items.length > 0) {
+      head.append(this.el('span', String(items.length), 'section-badge highlight'));
     }
     sec.append(head);
 
-    if (!this.pending.length) {
+    if (!items.length) {
       sec.append(this.el('div', this.locale.get(Text.NoPending), 'empty'));
       return sec;
     }
 
-    for (const item of this.pending) {
-      const card = this.el('article', '', 'card pending-card');
+    for (const item of items) {
+      let fading = this.fading.has(item.pendingId);
+      if (!fading && Number.isFinite(item.expires) && item.expires <= Date.now()) {
+        this.fade(item);
+        fading = true;
+      }
+      const card = this.el('article', '', `card pending-card${fading ? ' expired' : ''}`);
 
       const top = this.el('div', '', 'item-top');
-      top.append(
-        this.el('span', item.clientId, 'client-tag'),
-        this.el('span', item.mode === 'newGroup' ? this.locale.get(Text.NewGroup) : this.locale.get(Text.Attach), 'mode-tag')
-      );
+      const side = this.el('div', '', 'item-side');
+      side.append(this.el('span', item.mode === 'newGroup' ? this.locale.get(Text.NewGroup) : this.locale.get(Text.Attach), 'mode-tag'));
+      if (fading) {
+        side.append(this.el('span', this.locale.get(Text.Expired), 'countdown expired'));
+      } else if (Number.isFinite(item.expires)) {
+        const left = item.expires - Date.now();
+        const clock = this.el('span', this.format(left), `countdown${left <= 20000 ? ' warn' : ''}`);
+        this.countdowns.set(item.pendingId, { node: clock, card, expires: item.expires, item, expired: false });
+        side.append(clock);
+      }
+      top.append(this.el('span', item.clientId, 'client-tag'), side);
       card.append(top);
 
       if (item.url && item.url !== 'about:blank') {
@@ -226,7 +267,7 @@ class Popup {
         this.port.postMessage({ type: PopupMessage.Deny, pendingId: item.pendingId })
       );
       actions.append(allowBtn, denyBtn);
-      card.append(actions);
+      if (!fading) card.append(actions);
 
       // Access permission disclosure
       const details = this.el('details', '', 'disclosure');
@@ -311,13 +352,66 @@ class Popup {
     this.root.append(sec);
   }
 
-  renderError() {
+  renderError(message = this.error) {
+    this.error = message ?? Failure.Failed;
     this.view = { error: true };
+    this.reset();
     this.clear();
     const card = this.el('section', '', 'card alert-box alert-err');
     card.append(this.el('div', this.locale.get(Text.Error), 'alert-title'));
-    card.append(this.button(this.locale.get(Text.Back), 'btn-deny btn-sm', () => this.start()));
+    card.append(this.el('div', this.locale.get(ErrorText.Keys[this.error] ?? Text.Error)));
+    card.append(this.button(this.locale.get(Text.Refresh), 'btn-deny btn-sm', () => this.start()));
     this.root.append(card);
+  }
+
+  tick() {
+    const now = Date.now();
+    for (const item of this.countdowns.values()) {
+      const left = item.expires - now;
+      if (left > 0) {
+        item.node.textContent = this.format(left);
+        item.node.classList.toggle('warn', left <= 20000);
+        continue;
+      }
+      if (item.expired) continue;
+      item.expired = true;
+      this.fade(item.item);
+      item.node.textContent = this.locale.get(Text.Expired);
+      item.node.classList.remove('warn');
+      item.node.classList.add('expired');
+      item.card.classList.add('expired');
+      item.card.querySelector('.actions-row')?.remove();
+    }
+  }
+
+  fade(item) {
+    if (this.fading.has(item.pendingId)) return;
+    this.fading.set(item.pendingId, item);
+    const timeout = setTimeout(() => {
+      if (this.timeouts.get(item.pendingId) === timeout) this.timeouts.delete(item.pendingId);
+      if (this.fading.get(item.pendingId) !== item) return;
+      this.fading.delete(item.pendingId);
+      this.countdowns.delete(item.pendingId);
+      this.pending = this.pending.filter(pending => pending.pendingId !== item.pendingId);
+      if (this.view === null) this.render();
+    }, 2000);
+    this.timeouts.set(item.pendingId, timeout);
+  }
+
+  reset() {
+    this.fading.clear();
+    for (const timeout of this.timeouts.values()) clearTimeout(timeout);
+    this.timeouts.clear();
+  }
+
+  close() {
+    clearInterval(this.timer);
+    this.reset();
+  }
+
+  format(ms) {
+    const seconds = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   }
 
   approve(pendingId, tabId) {
@@ -338,6 +432,7 @@ class Popup {
   }
 
   clear() {
+    this.countdowns.clear();
     this.root.replaceChildren();
   }
 }

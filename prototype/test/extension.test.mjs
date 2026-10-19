@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ExtensionController } from '../extension/controller.js';
-import { Broker, BrowserAction, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
+import { Broker, BrowserAction, Failure, GuideMark, GuideStep, Limits, NativeStatus, PolicySummary, PopupMessage, SetupGuide, Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -94,6 +95,35 @@ test('native diagnosis survives disconnect, pushes to popup, and clears on recov
   assert.equal(c.status.code, undefined);
   assert.equal(api.native.messages.length, 0);
 });
+test('setup guide derives done, failed, and pending marks from host setup errors', () => {
+  assert.equal(SetupGuide.marks('broker_unavailable'), null);
+  const config = SetupGuide.marks(NativeStatus.Config);
+  assert.equal(config[GuideStep.Install], GuideMark.Failed);
+  assert.equal(config[GuideStep.Register], GuideMark.Pending);
+  assert.equal(config[GuideStep.Broker], GuideMark.Pending);
+  const host = SetupGuide.marks(NativeStatus.Host);
+  assert.equal(host[GuideStep.Install], GuideMark.Pending);
+  assert.equal(host[GuideStep.Register], GuideMark.Failed);
+  assert.equal(host[GuideStep.Broker], GuideMark.Pending);
+  const origin = SetupGuide.marks(NativeStatus.Origin);
+  assert.equal(origin[GuideStep.Install], GuideMark.Done);
+  assert.equal(origin[GuideStep.Register], GuideMark.Failed);
+  assert.equal(origin[GuideStep.Broker], GuideMark.Pending);
+  assert.deepEqual(new Set(Object.values(GuideMark.Icon)), new Set(['✓', '✗', '…']));
+});
+
+test('popup live regions are stable and stay outside the rebuilt list', () => {
+  const html = readFileSync(new URL('../extension/popup.html', import.meta.url), 'utf8');
+  for (const id of ['live-status', 'live-pending', 'live-sessions']) {
+    const tag = html.match(new RegExp(`<div id="${id}"[^>]*>`));
+    assert.ok(tag);
+    assert.match(tag[0], /aria-live="polite"/);
+    assert.match(tag[0], /aria-atomic="true"/);
+  }
+  const main = html.match(/<main id="items">([\s\S]*?)<\/main>/)[1];
+  assert.equal(main.includes('aria-live'), false);
+});
+
 const clientB = 'client-bravo-0002';
 
 async function approvedExisting() {
@@ -204,6 +234,22 @@ test('native broker status is forwarded to popup without changing native websock
     api.native.onMessage.fire({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateBackoff, code: Broker.PortInUse, attempt: 2 });
     assert.equal(c.status.state, NativeStatus.Waiting);
     assert.ok(sent.some(m => m.type === PopupMessage.BrokerStatus && m.code === Broker.PortInUse));
+  } finally { c.stop(); }
+});
+
+test('native broker status forwards the policy summary unchanged to popups', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  c.start();
+  const sent = [];
+  try {
+    c.popups.add({ postMessage: m => sent.push(m) });
+    const policy = { [PolicySummary.Default]: PolicySummary.Allow, [PolicySummary.Rules]: 2 };
+    api.native.onMessage.fire({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateRunning, [PolicySummary.Field]: policy });
+    const message = sent.find(m => m.type === PopupMessage.BrokerStatus);
+    assert.deepEqual(message[PolicySummary.Field], policy);
+    api.native.onMessage.fire({ type: Broker.Status, mode: Broker.On, state: Broker.StateRunning, [PolicySummary.Field]: { [PolicySummary.Default]: PolicySummary.Deny, [PolicySummary.Rules]: 0 } });
+    assert.equal(sent.at(-1)[PolicySummary.Field][PolicySummary.Default], PolicySummary.Deny);
   } finally { c.stop(); }
 });
 

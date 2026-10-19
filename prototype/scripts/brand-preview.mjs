@@ -3,7 +3,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import assert from 'node:assert/strict';
-import { Broker, Diagnostics, Failure, PopupMessage } from '../extension/protocol.js';
+import { Broker, Diagnostics, Failure, GuideMark, GuideStep, NativeStatus, PolicySummary, PopupMessage } from '../extension/protocol.js';
 import { ErrorText, Text } from '../extension/i18n.js';
 
 class Preview {
@@ -71,16 +71,50 @@ class Preview {
       assert.equal(await page.locator('#version').textContent(), 'v1.1.0');
       assert.equal(await page.locator('#auto-badge').isVisible(), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      for (const id of ['live-status', 'live-pending', 'live-sessions']) {
+        assert.equal(await page.locator(`#${id}`).getAttribute('aria-live'), 'polite');
+      }
+      assert.equal(await page.locator('#items [aria-live]').count(), 0);
 
-      await page.evaluate(events => window.port.receive({ type: events.Status, state: 'error', code: 'native_host_failed', detail: 'host missing' }), events);
-      await page.locator('.command').waitFor();
-      assert.equal(await page.locator('.command').textContent(), Diagnostics.Command);
-      await page.getByRole('button', { name: catalogs.en[Text.CopyCommand].message, exact: true }).click();
-      assert.equal(await page.evaluate(() => window.copied), Diagnostics.Command);
-      await page.getByRole('button', { name: catalogs.en[Text.Copied].message, exact: true }).waitFor();
+      const guideCases = [
+        { code: NativeStatus.Config, marks: [GuideMark.Icon.failed, GuideMark.Icon.pending, GuideMark.Icon.pending], commands: [Diagnostics.Install, Diagnostics.Register, Diagnostics.Command] },
+        { code: NativeStatus.Host, marks: [GuideMark.Icon.pending, GuideMark.Icon.failed, GuideMark.Icon.pending], commands: [Diagnostics.Install, Diagnostics.Register, Diagnostics.Command] },
+        { code: NativeStatus.Origin, marks: [GuideMark.Icon.done, GuideMark.Icon.failed, GuideMark.Icon.pending], commands: [null, null, Diagnostics.Command] }
+      ];
+      for (const guideCase of guideCases) {
+        await page.evaluate(({ events, code }) => window.port.receive({ type: events.Status, state: 'error', code }), { events, code: guideCase.code });
+        await page.locator('.guide-list').waitFor();
+        assert.deepEqual(await page.locator('.guide-mark').allTextContents(), guideCase.marks);
+        for (let index = 0; index < GuideStep.All.length; index++) {
+          const command = page.locator(`.guide-step[data-step="${GuideStep.All[index]}"] .command`);
+          if (guideCase.commands[index]) assert.equal(await command.textContent(), guideCase.commands[index]);
+          else assert.equal(await command.count(), 0);
+        }
+        const hint = page.locator(`.guide-step[data-step="${GuideStep.Register}"] .guide-hint`);
+        if (guideCase.code === NativeStatus.Origin) {
+          assert.equal(await hint.textContent(), catalogs.en[Text.NativeOrigin].message);
+          assert.equal(await page.locator(`.guide-step[data-step="${GuideStep.Register}"] button`).count(), 0);
+        } else {
+          assert.equal(await hint.count(), 0);
+        }
+        if (guideCase.code === NativeStatus.Config) {
+          await page.locator('.guide-step[data-step="install"]').getByRole('button', { name: catalogs.en[Text.CopyCommand].message, exact: true }).click();
+          assert.equal(await page.evaluate(() => window.copied), Diagnostics.Install);
+        }
+      }
+      const policy = { [PolicySummary.Default]: PolicySummary.Allow, [PolicySummary.Rules]: 2 };
+      await page.evaluate(({ events, policy }) => {
+        window.port.receive({ type: events.Status, state: 'connected' });
+        window.port.receive({ type: events.BrokerStatus, mode: 'auto', state: 'running', policy });
+      }, { events, policy });
+      await page.getByText(catalogs.en[Text.NoSessions].message, { exact: true }).waitFor();
+      assert.equal(await page.locator('.guide-list').count(), 0);
+      assert.equal(await page.locator('#live-status').textContent(), `${catalogs.en[Text.NativeConnected].message} · ${catalogs.en[Text.BrokerAutoShort].message}`);
+
+      await page.evaluate(events => window.port.receive({ type: events.Status, state: 'error', code: 'broker_unavailable', detail: 'host missing' }), events);
       await page.getByRole('button', { name: catalogs.en[Text.CopyDiagnostics].message, exact: true }).click();
       const copied = await page.evaluate(() => window.copied);
-      assert.match(copied, /^error: native_host_failed$/m);
+      assert.match(copied, /^error: broker_unavailable$/m);
       assert.match(copied, /^detail: host missing$/m);
       assert.match(copied, /^extension: 1\.1\.0$/m);
       assert.match(copied, /^broker: .* auto$/m);
@@ -88,6 +122,15 @@ class Preview {
       assert.match(copied, /^time: .+$/m);
       await page.evaluate(events => window.port.receive({ type: events.Status, state: 'waiting' }), events);
       await page.getByText(catalogs.en[Text.NoSessions].message, { exact: true }).waitFor();
+
+      const policyLine = catalogs.en[Text.PolicySummary].message
+        .replace('$1', catalogs.en[Text.PolicyAllow].message)
+        .replace('$2', '2');
+      await page.locator('details.disclosure').first().locator('summary').click();
+      await page.getByText(policyLine, { exact: true }).waitFor();
+      assert.equal(await page.locator('.policy-summary').count(), 1);
+      await page.evaluate(events => window.port.receive({ type: events.BrokerStatus, mode: 'auto', state: 'running' }), events);
+      assert.equal(await page.locator('.policy-summary').count(), 0);
 
       await mkdir(this.Assets, { recursive: true });
       await page.screenshot({ path: resolve(this.Assets, 'popup-preview.png'), fullPage: true });
@@ -182,6 +225,9 @@ class Preview {
         assert.deepEqual(await existingCard.locator('.perm-tag').allTextContents(), [
           text(Text.PermRead), text(Text.PermControl), text(Text.PermNavigate)
         ]);
+        const pendingCount = text(Text.PendingCount).replace('$1', '2');
+        assert.equal(await page.locator('.section-badge.highlight').getAttribute('aria-label'), pendingCount);
+        assert.equal(await page.locator('#live-pending').textContent(), pendingCount);
         await page.evaluate(events => window.port.receive({ type: events.Sessions, items: [
           { sessionId: 'session', clientId: 'agent-active', started: Date.now() - 180000, pages: [
             { tabId: 42, title: 'Example Domain', url: 'https://example.com' },
@@ -197,6 +243,12 @@ class Preview {
         assert.equal(await blank.evaluate(node => node.textContent.includes('null')), false);
         assert.equal(await namedBlank.locator('.page-title').textContent(), 'New Tab');
         assert.equal(await namedBlank.locator('.page-domain').textContent(), 'about:blank');
+        const sessionCount = text(Text.SessionCount).replace('$1', '1');
+        assert.equal(await page.locator('.section-badge:not(.highlight)').getAttribute('aria-label'), sessionCount);
+        assert.equal(await page.locator('#live-sessions').textContent(), sessionCount);
+        for (const id of ['live-status', 'live-pending', 'live-sessions']) {
+          assert.doesNotMatch(await page.locator(`#${id}`).textContent(), /\d+:\d{2}/);
+        }
         await page.locator('.page-row').first().click();
         assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.Focus, tabId: 42 });
         await page.getByRole('button', { name: text(Text.RevokeAll), exact: true }).click();
@@ -260,6 +312,14 @@ class Preview {
           await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
         }
 
+        assert.equal(await page.locator('button').evaluateAll(buttons => buttons.every(button => (button.getAttribute('aria-label') ?? button.textContent).trim().length > 0)), true);
+        await page.evaluate(({ events, policy }) => window.port.receive({ type: events.BrokerStatus, mode: 'auto', state: 'running', policy }), { events, policy });
+        const localizedPolicy = text(Text.PolicySummary)
+          .replace('$1', text(Text.PolicyAllow))
+          .replace('$2', '2');
+        await page.locator('details.disclosure').first().locator('summary').click();
+        await page.getByText(localizedPolicy, { exact: true }).waitFor();
+        await page.locator('details.disclosure').first().locator('summary').click();
         await page.reload();
         await page.getByText(text(Text.NoSessions), { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -277,7 +337,7 @@ class Preview {
       await page.getByText(catalogs['zh-CN'][Text.NoSessions].message, { exact: true }).waitFor();
       assert.equal(await page.locator('html').getAttribute('lang'), 'zh-CN');
       assert.deepEqual(errors, []);
-      const report = { at: new Date().toISOString(), fixture: 'mock extension runtime; no Native Host or Broker', languages: ['en', 'zh-CN'], states: ['empty', 'live push', 'countdown', 'countdown warning', 'expired removal', 'auto-approval', 'pending', 'sessions', 'inline tab chooser', 'matched and current flags', 'no tabs', 'diagnostics copy', 'error codes'], persistence: 'reload passed', systemLanguage: 'en-US and zh-TW passed', invalidPreference: 'falls back to browser', localeKeys: Object.keys(catalogs.en).length, logo: '128px loaded', overflow: false, keyboardFocus: 'passed', pageErrors: errors };
+      const report = { at: new Date().toISOString(), fixture: 'mock extension runtime; no Native Host or Broker', languages: ['en', 'zh-CN'], states: ['empty', 'setup guide', 'live push', 'countdown', 'countdown warning', 'expired removal', 'auto-approval', 'pending', 'sessions', 'inline tab chooser', 'matched and current flags', 'no tabs', 'diagnostics copy', 'policy summary', 'live regions', 'error codes'], persistence: 'reload passed', systemLanguage: 'en-US and zh-TW passed', invalidPreference: 'falls back to browser', localeKeys: Object.keys(catalogs.en).length, logo: '128px loaded', overflow: false, keyboardFocus: 'passed', pageErrors: errors };
       await writeFile(resolve(this.Assets, 'preview-verification.json'), JSON.stringify(report, null, 2));
       console.log(JSON.stringify(report));
     } finally {

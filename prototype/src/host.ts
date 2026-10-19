@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import { Config } from './config.js';
 import { BrokerLifecycle } from './lifecycle.js';
-import { Limit, NativeStatus as Status, BrokerControl as C } from './protocol.js';
+import { Limit, NativeStatus as Status, BrokerControl as C, PolicyKey } from './protocol.js';
 
 export class NativeHost {
   private input=Buffer.alloc(0);
@@ -27,7 +27,8 @@ export class NativeHost {
     const prior=this.life.state();
     const change=mode&&(!restore||mode!==prior.mode);
     const state=change ? await this.life.set(mode!) : prior.mode===C.Auto ? await this.life.ensure() : await this.life.inspect();
-    NativeHost.write(Buffer.from(JSON.stringify({type:C.Status,...state})));
+    const policy=this.life.policy();
+    NativeHost.write(Buffer.from(JSON.stringify({type:C.Status,...state,...(policy?{[PolicyKey.Summary]:policy}:{})})));
     if(state.state===C.Running){this.connect();return;}
     if(state.state===C.Starting&&this.ws?.readyState===WebSocket.OPEN)return;
     if(this.ws){this.ws.terminate();this.ws=undefined;}

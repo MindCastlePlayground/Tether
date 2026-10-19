@@ -80,5 +80,17 @@
   "notificationOpen": { "message": "打开 Tether" },
   "copyCommand": { "message": "复制命令" },
   "copyDiagnostics": { "message": "复制诊断信息" },
-  "copied": { "message": "已复制" }
+  "copied": { "message": "已复制" },
+  "guideTitle": { "message": "完成首次设置" },
+  "guideInstall": { "message": "安装 CLI 运行时" },
+  "guideRegister": { "message": "注册原生主机" },
+  "guideBroker": { "message": "Broker 已连接" },
+  "guideDone": { "message": "已完成" },
+  "guideFailed": { "message": "需要处理" },
+  "guidePending": { "message": "待检查" },
+  "pendingCount": { "message": "$1 个待批准请求" },
+  "sessionCount": { "message": "$1 个活跃会话" },
+  "policyAllow": { "message": "默认放行" },
+  "policyDeny": { "message": "默认拒绝" },
+  "policySummary": { "message": "策略：$1，$2 条规则" }
 }

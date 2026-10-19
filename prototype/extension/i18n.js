@@ -8,6 +8,7 @@ export class Text {
   static NativeConnected = 'nativeConnected';
   static NativeWaiting = 'nativeWaiting';
   static NativeHost = 'nativeHost';
+  static NativeOrigin = 'nativeOrigin';
   static Title = 'title';
   static Tagline = 'tagline';
   static Loading = 'loading';
@@ -26,7 +27,6 @@ export class Text {
   static AccessHint = 'accessHint';
   static Deny = 'deny';
   static Approve = 'approve';
-  static Choose = 'choose';
   static ChooseTab = 'chooseTab';
   static Cancel = 'cancel';
   static Match = 'match';
@@ -77,6 +77,18 @@ export class Text {
   static CopyCommand = 'copyCommand';
   static CopyDiagnostics = 'copyDiagnostics';
   static Copied = 'copied';
+  static GuideTitle = 'guideTitle';
+  static GuideInstall = 'guideInstall';
+  static GuideRegister = 'guideRegister';
+  static GuideBroker = 'guideBroker';
+  static GuideDone = 'guideDone';
+  static GuideFailed = 'guideFailed';
+  static GuidePending = 'guidePending';
+  static PendingCount = 'pendingCount';
+  static SessionCount = 'sessionCount';
+  static PolicyAllow = 'policyAllow';
+  static PolicyDeny = 'policyDeny';
+  static PolicySummary = 'policySummary';
 }
 
 export class ErrorText {

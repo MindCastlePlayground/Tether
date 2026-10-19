@@ -80,5 +80,17 @@
   "notificationOpen": { "message": "Open Tether" },
   "copyCommand": { "message": "Copy command" },
   "copyDiagnostics": { "message": "Copy diagnostics" },
-  "copied": { "message": "Copied" }
+  "copied": { "message": "Copied" },
+  "guideTitle": { "message": "Finish setup" },
+  "guideInstall": { "message": "Install the CLI runtime" },
+  "guideRegister": { "message": "Register the native host" },
+  "guideBroker": { "message": "Broker connected" },
+  "guideDone": { "message": "Done" },
+  "guideFailed": { "message": "Needs attention" },
+  "guidePending": { "message": "Not checked yet" },
+  "pendingCount": { "message": "$1 pending requests" },
+  "sessionCount": { "message": "$1 active sessions" },
+  "policyAllow": { "message": "Allow by default" },
+  "policyDeny": { "message": "Deny by default" },
+  "policySummary": { "message": "Policy: $1, $2 rules" }
 }

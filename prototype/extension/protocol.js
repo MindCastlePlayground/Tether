@@ -80,14 +80,53 @@ export class NativeStatus {
   static Error = 'error';
   static Waiting = 'waiting';
   static Host = 'native_host_failed';
+  static Config = 'host_config_failed';
+  static Origin = 'host_origin_mismatch';
   static Hints = Object.freeze({
-    host_config_failed: 'nativeConfig', host_origin_mismatch: 'nativeOrigin',
+    [NativeStatus.Config]: 'nativeConfig', [NativeStatus.Origin]: 'nativeOrigin',
     broker_unavailable: 'nativeOffline', broker_tls_failed: 'nativeTLS',
     broker_auth_failed: 'nativeAuth', broker_disconnected: 'nativeClosed',
-    native_frame_invalid: 'nativeFrame', native_host_failed: 'nativeHost',
+    native_frame_invalid: 'nativeFrame', [NativeStatus.Host]: 'nativeHost',
     broker_stopped: 'brokerStopped', broker_control_failed: 'brokerStartFailed',
     broker_port_in_use: 'brokerPortBusy', broker_start_failed: 'brokerStartFailed'
   });
+  static SetupCodes = new Set([NativeStatus.Config, NativeStatus.Origin, NativeStatus.Host]);
+}
+
+export class GuideStep {
+  static Install = 'install';
+  static Register = 'register';
+  static Broker = 'broker';
+  static All = [GuideStep.Install, GuideStep.Register, GuideStep.Broker];
+}
+
+export class GuideMark {
+  static Done = 'done';
+  static Failed = 'failed';
+  static Pending = 'pending';
+  static Icon = Object.freeze({
+    [GuideMark.Done]: '✓', [GuideMark.Failed]: '✗', [GuideMark.Pending]: '…'
+  });
+}
+
+export class SetupGuide {
+  static marks(code) {
+    if (!NativeStatus.SetupCodes.has(code)) return null;
+    return {
+      [GuideStep.Install]: code === NativeStatus.Origin ? GuideMark.Done
+        : code === NativeStatus.Config ? GuideMark.Failed : GuideMark.Pending,
+      [GuideStep.Register]: code === NativeStatus.Config ? GuideMark.Pending : GuideMark.Failed,
+      [GuideStep.Broker]: GuideMark.Pending
+    };
+  }
+}
+
+export class PolicySummary {
+  static Field = 'policy';
+  static Default = 'default';
+  static Rules = 'rules';
+  static Allow = 'allow';
+  static Deny = 'deny';
 }
 
 export class Failure {
@@ -135,6 +174,8 @@ export class BrowserAction {
 
 export class Diagnostics {
   static Command = 'node bin/tether.mjs doctor';
+  static Install = 'node bin/tether.mjs install';
+  static Register = 'powershell -NoProfile -ExecutionPolicy Bypass -File prototype/scripts/register.ps1';
 }
 
 export class Limits {

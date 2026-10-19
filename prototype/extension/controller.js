@@ -1,4 +1,4 @@
-import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, SessionMode, Storage, Wire } from './protocol.js';
+import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PolicySummary, PopupMessage, SessionMode, Storage, Wire } from './protocol.js';
 import { Locale, Text } from './i18n.js';
 
 export class ExtensionController {
@@ -97,7 +97,8 @@ export class ExtensionController {
     if (![Broker.Auto, Broker.On, Broker.Off].includes(mode)) return;
     this.brokerMode = mode;
     await this.saveBrokerMode();
-    this.brokerStatus = { mode, state: mode === Broker.Off ? Broker.StateStopped : Broker.StateStarting };
+    const keep = this.brokerStatus[PolicySummary.Field];
+    this.brokerStatus = { mode, state: mode === Broker.Off ? Broker.StateStopped : Broker.StateStarting, ...(keep ? { [PolicySummary.Field]: keep } : {}) };
     this.sendBroker(Broker.ModeAction);
     this.publishBrokerStatus();
   }

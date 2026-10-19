@@ -1,4 +1,4 @@
-import { Broker, Diagnostics, Failure, NativeStatus, PopupMessage, SessionMode } from './protocol.js';
+import { Broker, Diagnostics, Failure, GuideMark, GuideStep, NativeStatus, PolicySummary, PopupMessage, SessionMode, SetupGuide } from './protocol.js';
 import { ErrorText, Locale, Text } from './i18n.js';
 
 class Popup {
@@ -121,7 +121,9 @@ class Popup {
 
   render() {
     this.view = null;
+    this.clearCopyTimers();
     this.syncHeader();
+    this.syncLive();
     this.clear();
     this.root.append(
       this.renderBrokerPanel(),
@@ -136,45 +138,20 @@ class Popup {
   }
 
   renderBrokerPanel() {
+    const code = this.status.state === NativeStatus.Error ? this.status.code : null;
+    const marks = SetupGuide.marks(code);
+    if (marks) return this.renderGuide(marks, code);
+
     const panel = this.el('section', '', 'card panel-broker');
+    const isBlocked = this.brokerStatus.state === Broker.StateBlocked;
+    const isError = this.status.state === NativeStatus.Error;
+    const isBackoff = this.brokerStatus.state === Broker.StateBackoff;
 
     // Status Row
     const statusRow = this.el('div', '', 'status-row');
     const badge = this.el('div', '', 'status-badge');
-    const dot = this.el('span', '', 'dot');
-
-    const isStopped = this.brokerStatus.mode === Broker.Off || this.brokerMode === Broker.Off;
-    const isBlocked = this.brokerStatus.state === Broker.StateBlocked;
-    const isError = this.status.state === NativeStatus.Error;
-    const isBackoff = this.brokerStatus.state === Broker.StateBackoff;
-    const isConnected = this.status.state === NativeStatus.Connected && this.brokerStatus.state === Broker.StateRunning;
-
-    let statusKey = Text.BrokerStarting;
-    if (isStopped) {
-      dot.className = 'dot off';
-      statusKey = Text.BrokerStopped;
-    } else if (isBlocked) {
-      dot.className = 'dot err';
-      statusKey = Text.BrokerBlocked;
-    } else if (isError) {
-      dot.className = 'dot err';
-      statusKey = Text.NativeWaiting;
-    } else if (isBackoff) {
-      dot.className = 'dot warn';
-      statusKey = Text.BrokerBackoff;
-    } else if (isConnected) {
-      dot.className = 'dot ok';
-      statusKey = Text.NativeConnected;
-    } else {
-      dot.className = 'dot warn';
-      statusKey = Text.BrokerStarting;
-    }
-
-    const modeKey = this.brokerMode === Broker.Auto ? Text.BrokerAutoShort : this.brokerMode === Broker.On ? Text.ModeOn : Text.ModeOff;
-    const statusText = isStopped
-      ? this.locale.get(statusKey)
-      : `${this.locale.get(statusKey)} · ${this.locale.get(modeKey)}`;
-    badge.append(dot, this.el('span', statusText));
+    const info = this.statusInfo();
+    badge.append(this.el('span', '', `dot ${info.dot}`), this.el('span', info.text));
     statusRow.append(badge);
     panel.append(statusRow);
 
@@ -284,9 +261,11 @@ class Popup {
     );
     notifyLabel.append(notifyInput, this.doc.createTextNode(this.locale.get(Text.NotifyNew)));
     notifyItem.append(notifyLabel);
+    const policyText = this.policyText();
     body.append(
       this.el('p', this.autoApproval ? this.locale.get(Text.AutoOn) : this.locale.get(Text.AutoOff)),
       this.el('p', this.locale.get(Text.AutoHint)),
+      ...(policyText ? [this.el('p', policyText, 'policy-summary')] : []),
       notifyItem
     );
     details.append(summary, body);
@@ -295,13 +274,116 @@ class Popup {
     return panel;
   }
 
+  statusInfo() {
+    const isStopped = this.brokerStatus.mode === Broker.Off || this.brokerMode === Broker.Off;
+    const isBlocked = this.brokerStatus.state === Broker.StateBlocked;
+    const isError = this.status.state === NativeStatus.Error;
+    const isBackoff = this.brokerStatus.state === Broker.StateBackoff;
+    const isConnected = this.status.state === NativeStatus.Connected && this.brokerStatus.state === Broker.StateRunning;
+
+    let statusKey = Text.BrokerStarting;
+    let dot = 'warn';
+    if (isStopped) {
+      dot = 'off';
+      statusKey = Text.BrokerStopped;
+    } else if (isBlocked) {
+      dot = 'err';
+      statusKey = Text.BrokerBlocked;
+    } else if (isError) {
+      dot = 'err';
+      statusKey = Text.NativeWaiting;
+    } else if (isBackoff) {
+      statusKey = Text.BrokerBackoff;
+    } else if (isConnected) {
+      dot = 'ok';
+      statusKey = Text.NativeConnected;
+    }
+
+    const modeKey = this.brokerMode === Broker.Auto ? Text.BrokerAutoShort : this.brokerMode === Broker.On ? Text.ModeOn : Text.ModeOff;
+    const text = isStopped
+      ? this.locale.get(statusKey)
+      : `${this.locale.get(statusKey)} · ${this.locale.get(modeKey)}`;
+    return { text, dot };
+  }
+
+  renderGuide(marks, code) {
+    const panel = this.el('section', '', 'card panel-broker guide-panel');
+    panel.append(this.el('h2', this.locale.get(Text.GuideTitle), 'section-title'));
+    const list = this.el('ol', '', 'guide-list');
+    const labels = {
+      [GuideStep.Install]: Text.GuideInstall,
+      [GuideStep.Register]: Text.GuideRegister,
+      [GuideStep.Broker]: Text.GuideBroker
+    };
+    const states = {
+      [GuideMark.Done]: Text.GuideDone,
+      [GuideMark.Failed]: Text.GuideFailed,
+      [GuideMark.Pending]: Text.GuidePending
+    };
+    const commands = {
+      [GuideStep.Install]: Diagnostics.Install,
+      [GuideStep.Register]: Diagnostics.Register,
+      [GuideStep.Broker]: Diagnostics.Command
+    };
+    for (const step of GuideStep.All) {
+      const mark = marks[step];
+      const item = this.el('li', '', `guide-step ${mark}`);
+      item.dataset.step = step;
+      const icon = this.el('span', GuideMark.Icon[mark], 'guide-mark');
+      icon.setAttribute('aria-hidden', 'true');
+      const body = this.el('div', '', 'guide-body');
+      body.append(this.el('span', this.locale.get(labels[step]), 'guide-label'));
+      if (mark !== GuideMark.Done) {
+        if (step === GuideStep.Register && code === NativeStatus.Origin) {
+          body.append(this.el('div', this.locale.get(Text.NativeOrigin), 'guide-hint'));
+        } else {
+          const row = this.el('div', '', 'command-row');
+          row.append(this.el('code', commands[step], 'command'), this.copyButton(Text.CopyCommand, commands[step]));
+          body.append(row);
+        }
+      }
+      item.append(icon, this.el('span', this.locale.get(states[mark]), 'sr-only'), body);
+      list.append(item);
+    }
+    panel.append(list);
+    return panel;
+  }
+
+  syncLive() {
+    this.announce('live-status', this.statusInfo().text);
+    this.announceCount('live-pending', Text.PendingCount, this.pending.length);
+    this.announceCount('live-sessions', Text.SessionCount, this.sessions.length);
+  }
+
+  announceCount(id, key, count) {
+    this.announce(id, this.locale.get(key).replace('$1', String(count)));
+  }
+
+  announce(id, text) {
+    const node = this.doc.getElementById(id);
+    if (node && node.textContent !== text) node.textContent = text;
+  }
+
+  policyText() {
+    const policy = this.brokerStatus[PolicySummary.Field];
+    if (!policy || !Number.isInteger(policy[PolicySummary.Rules])) return null;
+    const key = policy[PolicySummary.Default] === PolicySummary.Allow ? Text.PolicyAllow
+      : policy[PolicySummary.Default] === PolicySummary.Deny ? Text.PolicyDeny : null;
+    if (!key) return null;
+    return this.locale.get(Text.PolicySummary)
+      .replace('$1', this.locale.get(key))
+      .replace('$2', String(policy[PolicySummary.Rules]));
+  }
+
   renderPendingSection() {
     const items = this.pending;
     const sec = this.el('section', '', 'section');
     const head = this.el('div', '', 'section-head');
     head.append(this.el('h2', this.locale.get(Text.Pending), 'section-title'));
     if (items.length > 0) {
-      head.append(this.el('span', String(items.length), 'section-badge highlight'));
+      const badge = this.el('span', String(items.length), 'section-badge highlight');
+      badge.setAttribute('aria-label', this.locale.get(Text.PendingCount).replace('$1', String(items.length)));
+      head.append(badge);
     }
     sec.append(head);
 
@@ -432,7 +514,9 @@ class Popup {
     const left = this.el('div', '', 'section-head-left');
     left.append(this.el('h2', this.locale.get(Text.Sessions), 'section-title'));
     if (this.sessions.length > 0) {
-      left.append(this.el('span', String(this.sessions.length), 'section-badge'));
+      const badge = this.el('span', String(this.sessions.length), 'section-badge');
+      badge.setAttribute('aria-label', this.locale.get(Text.SessionCount).replace('$1', String(this.sessions.length)));
+      left.append(badge);
     }
     const right = this.el('div', '', 'section-head-right');
     if (this.revokedNotice) {
@@ -516,8 +600,12 @@ class Popup {
       const value = typeof text === 'function' ? text() : text;
       try { await this.doc.defaultView.navigator.clipboard.writeText(value); }
       catch { return; }
+      if (!button.isConnected) return;
       button.textContent = this.locale.get(Text.Copied);
-      clearTimeout(button.copiedTimer);
+      if (button.copiedTimer !== undefined) {
+        clearTimeout(button.copiedTimer);
+        this.copyTimers.delete(button.copiedTimer);
+      }
       const timer = setTimeout(() => {
         button.textContent = this.locale.get(key);
         this.copyTimers.delete(timer);
@@ -543,7 +631,9 @@ class Popup {
   renderError(message = this.error) {
     this.error = message ?? Failure.Failed;
     this.view = { error: true };
+    this.clearCopyTimers();
     this.reset();
+    for (const id of ['live-status', 'live-pending', 'live-sessions']) this.announce(id, '');
     this.clear();
     const card = this.el('section', '', 'card alert-box alert-err');
     card.append(this.el('div', this.locale.get(Text.Error), 'alert-title'));
@@ -595,6 +685,10 @@ class Popup {
     this.fading.clear();
     for (const timeout of this.timeouts.values()) clearTimeout(timeout);
     this.timeouts.clear();
+    this.clearCopyTimers();
+  }
+
+  clearCopyTimers() {
     for (const timer of this.copyTimers) clearTimeout(timer);
     this.copyTimers.clear();
   }

@@ -367,6 +367,54 @@
       padding: 5px 8px;
     }
 
+    .guide-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      list-style: none;
+    }
+
+    .guide-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .guide-mark {
+      width: 16px;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .guide-step.done .guide-mark { color: var(--status-ok); }
+    .guide-step.failed .guide-mark { color: var(--status-err); }
+    .guide-step.pending .guide-mark { color: var(--ink-muted); }
+
+    .guide-body {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .guide-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .guide-hint {
+      font-size: 11px;
+      color: var(--ink-muted);
+    }
+
+    .policy-summary {
+      color: var(--ink-secondary);
+    }
+
     .section {
       display: flex;
       flex-direction: column;
@@ -837,6 +885,9 @@
     </div>
     <span id="auto-badge" class="auto-badge" data-i18n="autoApprovalBadge" hidden>Auto-approving</span>
   </header>
+  <div id="live-status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="live-pending" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="live-sessions" class="sr-only" aria-live="polite" aria-atomic="true"></div>
   <main id="items">
     <div class="empty" data-i18n="loading">Checking for access requests…</div>
   </main>

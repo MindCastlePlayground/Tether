@@ -12,6 +12,7 @@
       --ink-muted: #526b7e;
       --on-teal: #ffffff;
       --teal: #007f82;
+      --teal-ink: #007f82;
       --teal-hover: #00686b;
       --teal-active: #005456;
       --teal-subtle: #eef7f8;
@@ -42,10 +43,11 @@
     @media (prefers-color-scheme: dark) {
       :root {
         --ink: #e2e8f0;
-        --ink-secondary: #94a3b8;
+        --ink-secondary: #cbd5e1;
         --ink-muted: #94a3b8;
         --on-teal: #ffffff;
         --teal: #007f82;
+        --teal-ink: #2eb8b8;
         --teal-hover: #00686b;
         --teal-active: #005456;
         --teal-subtle: #0f292e;
@@ -447,7 +449,7 @@
     .mode-tag {
       font-size: 11px;
       font-weight: 600;
-      color: var(--teal);
+      color: var(--teal-ink);
     }
 
     .item-side {
@@ -576,7 +578,7 @@
       border-radius: 50%;
       background: var(--teal-subtle);
       border: 1px solid var(--teal-border);
-      color: var(--teal);
+      color: var(--teal-ink);
       font-size: 10px;
       font-weight: 700;
       display: inline-flex;
@@ -618,18 +620,34 @@
       border-radius: var(--radius-sm);
     }
 
+    .tab-chooser {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line-subtle);
+    }
+
+    .chooser-hint {
+      font-size: 11px;
+      color: var(--ink-secondary);
+    }
+
+    .chooser-empty {
+      padding: 8px 10px;
+    }
+
     .tab-list {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      margin: 6px 0;
     }
 
     .tab {
       display: block;
       width: 100%;
       text-align: left;
-      background: var(--surface);
+      background: var(--surface-alt);
       border: 1px solid var(--line);
       border-radius: var(--radius-md);
       padding: 8px 10px;
@@ -639,15 +657,55 @@
       border-color: var(--teal);
       background: var(--teal-subtle);
     }
-    .tab strong {
-      display: block;
+    .tab-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .tab-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--teal-subtle);
+      border: 1px solid var(--teal-border);
+      color: var(--teal-ink);
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
+    .tab-name {
       font-size: 12.5px;
+      font-weight: 600;
       color: var(--ink);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      min-width: 0;
+      flex: 1;
     }
-    .tab span {
+    .tab-flag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+    }
+    .tab-flag.match {
+      color: var(--teal-ink);
+      background: var(--teal-subtle);
+      border: 1px solid var(--teal-border);
+    }
+    .tab-flag.current {
+      color: var(--status-ok);
+      background: var(--status-ok-bg);
+      border: 1px solid var(--status-ok-border);
+    }
+    .tab-url {
       display: block;
       font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
       font-size: 11px;
@@ -670,7 +728,7 @@
       font-weight: 500;
     }
     details.disclosure summary:hover {
-      color: var(--teal);
+      color: var(--teal-ink);
     }
 
     .disclosure-body {
@@ -713,6 +771,40 @@
       margin-top: 4px;
       opacity: 0.9;
       word-break: break-all;
+    }
+
+    .command-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .command {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 10.5px;
+      padding: 4px 6px;
+      background: var(--surface);
+      border: 1px solid currentColor;
+      border-radius: var(--radius-sm);
+      word-break: break-all;
+    }
+
+    .alert-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .btn-copy {
+      background: var(--surface);
+      color: var(--ink);
+      border-color: var(--line);
+    }
+
+    .btn-copy:hover {
+      background: var(--surface-hover);
+      border-color: var(--line-hover);
     }
 
     footer {

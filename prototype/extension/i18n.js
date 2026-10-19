@@ -27,12 +27,15 @@ export class Text {
   static Deny = 'deny';
   static Approve = 'approve';
   static Choose = 'choose';
+  static ChooseTab = 'chooseTab';
+  static Cancel = 'cancel';
+  static Match = 'match';
+  static CurrentTab = 'currentTab';
   static Sessions = 'sessions';
   static NoSessions = 'noSessions';
   static Revoke = 'revoke';
   static ChooseHint = 'chooseHint';
   static NoTabs = 'noTabs';
-  static Back = 'back';
   static Error = 'error';
   static Broker = 'broker';
   static BrokerOn = 'brokerOn';
@@ -65,6 +68,15 @@ export class Text {
   static Revoked = 'revoked';
   static SessionDuration = 'sessionDuration';
   static AutoApprovalBadge = 'autoApprovalBadge';
+  static AppName = 'appName';
+  static NotifyNew = 'notifyNew';
+  static NotifyBody = 'notificationBody';
+  static NotifyApprove = 'notificationApprove';
+  static NotifyDeny = 'notificationDeny';
+  static NotifyOpen = 'notificationOpen';
+  static CopyCommand = 'copyCommand';
+  static CopyDiagnostics = 'copyDiagnostics';
+  static Copied = 'copied';
 }
 
 export class ErrorText {

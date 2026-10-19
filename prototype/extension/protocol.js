@@ -46,11 +46,14 @@ export class PopupMessage {
   static SetAutoApproval = 'popup.setAutoApproval';
   static BrokerStatus = 'popup.brokerStatus';
   static SetBrokerMode = 'popup.setBrokerMode';
+  static Notify = 'popup.notify';
+  static SetNotify = 'popup.setNotify';
 }
 
 export class Storage {
   static AutoApprove = 'autoApprove';
   static BrokerMode = 'brokerMode';
+  static Notify = 'notify';
 }
 
 export class Broker {
@@ -121,8 +124,17 @@ export class BrowserAction {
   static Http = 'http:';
   static Https = 'https:';
   static BadgeColor = '#b45309';
-  static BadgePending = '!';
+  static BadgeSession = '•';
+  static BadgeSessionColor = '#0e7490';
+  static BadgeError = '×';
+  static BadgeErrorColor = '#64748b';
+  static NotificationBasic = 'basic';
+  static NotificationIcon = 'icons/icon-128.png';
   static DebuggerVersion = '1.3';
+}
+
+export class Diagnostics {
+  static Command = 'node bin/tether.mjs doctor';
 }
 
 export class Limits {

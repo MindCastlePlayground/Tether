@@ -1,4 +1,4 @@
-import { Broker, Failure, NativeStatus, PopupMessage, SessionMode } from './protocol.js';
+import { Broker, Diagnostics, Failure, NativeStatus, PopupMessage, SessionMode } from './protocol.js';
 import { ErrorText, Locale, Text } from './i18n.js';
 
 class Popup {
@@ -19,6 +19,9 @@ class Popup {
     this.durations = [];
     this.fading = new Map();
     this.timeouts = new Map();
+    this.copyTimers = new Set();
+    this.choosers = new Map();
+    this.notifyNew = true;
     this.revokedNotice = false;
     this.revokedTimer = null;
     this.port = api.runtime.connect({ name: PopupMessage.Port });
@@ -37,7 +40,6 @@ class Popup {
       await this.locale.set(event.target.value);
       this.localize();
       if (this.view?.error) this.renderError();
-      else if (this.view) this.renderTabs(this.view.id, this.view.tabs);
       else this.render();
     });
     this.start();
@@ -54,12 +56,14 @@ class Popup {
 
   start() {
     this.view = null;
+    this.choosers.clear();
     this.reset();
     this.port.postMessage({ type: PopupMessage.Status });
     this.port.postMessage({ type: PopupMessage.Pending });
     this.port.postMessage({ type: PopupMessage.Sessions });
     this.port.postMessage({ type: PopupMessage.AutoApproval });
     this.port.postMessage({ type: PopupMessage.BrokerStatus });
+    this.port.postMessage({ type: PopupMessage.Notify });
   }
 
   receive(msg) {
@@ -79,6 +83,7 @@ class Popup {
         if (!incoming.has(item.pendingId) && Number.isFinite(item.expires) && item.expires <= now) this.fade(item);
       }
       for (const [id, item] of this.fading) if (!incoming.has(id)) items.push(item);
+      for (const id of this.choosers.keys()) if (!incoming.has(id)) this.choosers.delete(id);
       this.pending = items;
       if (this.view === null) this.render();
     }
@@ -100,7 +105,17 @@ class Popup {
         if (focusRadio) this.root.querySelector('.seg-btn[aria-checked="true"]')?.focus();
       }
     }
-    if (msg.type === PopupMessage.Tabs) this.renderTabs(msg.pendingId, msg.tabs ?? []);
+    if (msg.type === PopupMessage.Notify) {
+      this.notifyNew = msg.enabled === true;
+      const input = this.doc.getElementById('notify-new');
+      if (input) input.checked = this.notifyNew;
+    }
+    if (msg.type === PopupMessage.Tabs) {
+      const chooser = this.choosers.get(msg.pendingId);
+      if (!chooser) return;
+      chooser.tabs = msg.tabs ?? [];
+      if (this.view === null) this.render();
+    }
     if (msg.type === PopupMessage.Error) this.renderError(msg.message);
   }
 
@@ -221,8 +236,19 @@ class Popup {
       } else if (this.brokerStatus.state === Broker.StateBackoff || isBlocked) {
         hintKey = this.brokerStatus.code === Broker.PortInUse ? Text.BrokerPortBusy : Text.BrokerStartFailed;
       }
-      if (hintKey) alert.append(this.el('div', this.locale.get(hintKey)));
+      if (hintKey) {
+        const hint = this.locale.get(hintKey);
+        alert.append(this.el('div', hint));
+        if (hint.includes(Diagnostics.Command)) {
+          const row = this.el('div', '', 'command-row');
+          row.append(this.el('code', Diagnostics.Command, 'command'), this.copyButton(Text.CopyCommand, Diagnostics.Command));
+          alert.append(row);
+        }
+      }
       if (this.status.detail) alert.append(this.el('div', this.status.detail, 'alert-detail'));
+      const actions = this.el('div', '', 'alert-actions');
+      actions.append(this.copyButton(Text.CopyDiagnostics, () => this.diagnostics()));
+      alert.append(actions);
       panel.append(alert);
     }
 
@@ -247,9 +273,21 @@ class Popup {
     const details = this.el('details', '', 'disclosure');
     const summary = this.el('summary', this.locale.get(Text.PolicyDetails));
     const body = this.el('div', '', 'disclosure-body');
+    const notifyItem = this.el('label', '', 'toggle-item');
+    const notifyLabel = this.el('div', '', 'toggle-label');
+    const notifyInput = this.doc.createElement('input');
+    notifyInput.type = 'checkbox';
+    notifyInput.id = 'notify-new';
+    notifyInput.checked = this.notifyNew;
+    notifyInput.addEventListener('change', () =>
+      this.port.postMessage({ type: PopupMessage.SetNotify, enabled: notifyInput.checked })
+    );
+    notifyLabel.append(notifyInput, this.doc.createTextNode(this.locale.get(Text.NotifyNew)));
+    notifyItem.append(notifyLabel);
     body.append(
       this.el('p', this.autoApproval ? this.locale.get(Text.AutoOn) : this.locale.get(Text.AutoOff)),
-      this.el('p', this.locale.get(Text.AutoHint))
+      this.el('p', this.locale.get(Text.AutoHint)),
+      notifyItem
     );
     details.append(summary, body);
     panel.append(details);
@@ -282,7 +320,7 @@ class Popup {
 
       const top = this.el('div', '', 'item-top');
       const side = this.el('div', '', 'item-side');
-      side.append(this.el('span', item.mode === 'newGroup' ? this.locale.get(Text.NewGroup) : this.locale.get(Text.Attach), 'mode-tag'));
+      side.append(this.el('span', item.mode === SessionMode.NewGroup ? this.locale.get(Text.NewGroup) : this.locale.get(Text.Attach), 'mode-tag'));
       if (fading) {
         side.append(this.el('span', this.locale.get(Text.Expired), 'countdown expired'));
       } else if (Number.isFinite(item.expires)) {
@@ -308,16 +346,19 @@ class Popup {
       for (const key of permKeys) perms.append(this.el('span', this.locale.get(key), 'perm-tag'));
       card.append(perms);
 
+      const chooser = this.choosers.get(item.pendingId);
+      if (chooser) card.append(this.renderChooser(item, chooser));
+
       const actions = this.el('div', '', 'actions-row');
       const denyBtn = this.button(this.locale.get(Text.Deny), 'btn-deny', () =>
         this.port.postMessage({ type: PopupMessage.Deny, pendingId: item.pendingId })
       );
       const allowBtn = this.button(
-        item.mode === 'newGroup' ? this.locale.get(Text.Approve) : this.locale.get(Text.Choose),
+        item.mode === SessionMode.NewGroup ? this.locale.get(Text.Approve) : this.locale.get(chooser ? Text.Cancel : Text.ChooseTab),
         'btn-approve',
         () => {
-          if (item.mode === 'newGroup') this.approve(item.pendingId);
-          else this.port.postMessage({ type: PopupMessage.Tabs, pendingId: item.pendingId });
+          if (item.mode === SessionMode.NewGroup) this.approve(item.pendingId);
+          else this.toggleChooser(item);
         }
       );
       actions.append(denyBtn, allowBtn);
@@ -334,6 +375,55 @@ class Popup {
     }
 
     return sec;
+  }
+
+  toggleChooser(item) {
+    const chooser = this.choosers.get(item.pendingId);
+    if (chooser) {
+      this.choosers.delete(item.pendingId);
+      this.render();
+      return;
+    }
+    this.choosers.set(item.pendingId, { tabs: null });
+    this.render();
+    this.port.postMessage({ type: PopupMessage.Tabs, pendingId: item.pendingId });
+  }
+
+  renderChooser(item, chooser) {
+    const box = this.el('div', '', 'tab-chooser');
+    box.append(this.el('div', this.locale.get(Text.ChooseHint), 'chooser-hint'));
+    if (!chooser.tabs) {
+      box.append(this.el('div', this.locale.get(Text.Loading), 'empty chooser-empty'));
+      return box;
+    }
+    if (!chooser.tabs.length) {
+      box.append(this.el('div', this.locale.get(Text.NoTabs), 'empty chooser-empty'));
+      return box;
+    }
+    let origin = null;
+    try { origin = item.url ? new URL(item.url).origin : null; } catch { /* No source origin to match. */ }
+    const tabs = chooser.tabs.map((tab, index) => {
+      let match = false;
+      try { match = Boolean(origin) && new URL(tab.url).origin === origin; } catch { /* Keep unmatched. */ }
+      return { tab, index, match };
+    }).sort((a, b) => Number(b.match) - Number(a.match) || a.index - b.index);
+    const list = this.el('div', '', 'tab-list');
+    for (const { tab, match } of tabs) {
+      const button = this.el('button', '', `tab${tab.active ? ' current' : ''}`);
+      button.title = tab.url;
+      const head = this.el('div', '', 'tab-head');
+      let host = tab.url;
+      try { host = new URL(tab.url).hostname || tab.url; } catch { /* Keep raw url. */ }
+      const initial = (host.replace(/^www\./i, '')[0] || '•').toUpperCase();
+      head.append(this.el('span', initial, 'tab-icon'), this.el('strong', tab.title || tab.url, 'tab-name'));
+      if (match) head.append(this.el('span', this.locale.get(Text.Match), 'tab-flag match'));
+      if (tab.active) head.append(this.el('span', this.locale.get(Text.CurrentTab), 'tab-flag current'));
+      button.append(head, this.el('span', tab.url, 'tab-url'));
+      button.addEventListener('click', () => this.approve(item.pendingId, tab.tabId));
+      list.append(button);
+    }
+    box.append(list);
+    return box;
   }
 
   renderSessionsSection() {
@@ -421,33 +511,33 @@ class Popup {
     return this.locale.get(Text.SessionDuration).replace('$1', String(minutes));
   }
 
-  renderTabs(id, tabs) {
-    this.view = { id, tabs };
-    this.clear();
-    const sec = this.el('section', '', 'section');
-    const head = this.el('div', '', 'section-head');
-    head.append(this.el('h2', this.locale.get(Text.Choose), 'section-title'));
-    sec.append(head);
-    sec.append(this.el('div', this.locale.get(Text.ChooseHint), 'disclosure-body'));
+  copyButton(key, text) {
+    const button = this.button(this.locale.get(key), 'btn-copy btn-sm', async () => {
+      const value = typeof text === 'function' ? text() : text;
+      try { await this.doc.defaultView.navigator.clipboard.writeText(value); }
+      catch { return; }
+      button.textContent = this.locale.get(Text.Copied);
+      clearTimeout(button.copiedTimer);
+      const timer = setTimeout(() => {
+        button.textContent = this.locale.get(key);
+        this.copyTimers.delete(timer);
+      }, 1500);
+      button.copiedTimer = timer;
+      this.copyTimers.add(timer);
+    });
+    return button;
+  }
 
-    if (!tabs.length) {
-      sec.append(this.el('div', this.locale.get(Text.NoTabs), 'empty'));
-    } else {
-      const tabList = this.el('div', '', 'tab-list');
-      for (const tab of tabs) {
-        const button = this.el('button', '', 'tab');
-        button.append(
-          this.el('strong', tab.title || tab.url),
-          this.el('span', tab.url)
-        );
-        button.addEventListener('click', () => this.approve(id, tab.tabId));
-        tabList.append(button);
-      }
-      sec.append(tabList);
-    }
-
-    sec.append(this.button(this.locale.get(Text.Back), 'btn-deny btn-sm', () => this.start()));
-    this.root.append(sec);
+  diagnostics() {
+    const version = this.api.runtime.getManifest?.()?.version ?? '';
+    return [
+      `error: ${this.status.code || this.brokerStatus.code || ''}`,
+      `detail: ${this.status.detail || ''}`,
+      `extension: ${version}`,
+      `broker: ${this.brokerStatus.state || ''} ${this.brokerMode}`,
+      `language: ${this.locale.language}`,
+      `time: ${new Date().toISOString()}`
+    ].join('\n');
   }
 
   renderError(message = this.error) {
@@ -482,6 +572,8 @@ class Popup {
       item.node.classList.add('expired');
       item.card.classList.add('expired');
       item.card.querySelector('.actions-row')?.remove();
+      item.card.querySelector('.tab-chooser')?.remove();
+      this.choosers.delete(item.item.pendingId);
     }
   }
 
@@ -503,6 +595,8 @@ class Popup {
     this.fading.clear();
     for (const timeout of this.timeouts.values()) clearTimeout(timeout);
     this.timeouts.clear();
+    for (const timer of this.copyTimers) clearTimeout(timer);
+    this.copyTimers.clear();
   }
 
   close() {

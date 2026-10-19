@@ -1,4 +1,5 @@
-import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from './protocol.js';
+import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, SessionMode, Storage, Wire } from './protocol.js';
+import { Locale, Text } from './i18n.js';
 
 export class ExtensionController {
   constructor(api = globalThis.chrome, clock = () => Date.now(), userAgent = () => globalThis.navigator.userAgent) {
@@ -25,6 +26,9 @@ export class ExtensionController {
     this.retryTimer = null;
     this.wasConnected = false;
     this.popups = new Set();
+    this.notifyNew = true;
+    this.notices = new Set();
+    this.locale = new Locale(api);
   }
 
   start() {
@@ -37,6 +41,7 @@ export class ExtensionController {
     });
     this.api.alarms?.onAlarm?.addListener(alarm => { if (alarm.name === Broker.Alarm) this.probe(); });
     this.api.alarms?.create?.(Broker.Alarm, { periodInMinutes: 0.5 });
+    this.api.notifications?.onButtonClicked?.addListener((id, index) => this.notificationClicked(id, index));
     this.api.tabs.onRemoved.addListener(tabId => this.dropTab(tabId));
     this.api.tabs.onReplaced.addListener((added, removed) => { this.dropTab(removed); });
     this.api.tabs.onUpdated.addListener((tabId, change) => {
@@ -65,12 +70,16 @@ export class ExtensionController {
   }
 
   async load() {
+    await this.locale.load();
     try {
       const data = await this.api.storage.local.get(Storage.AutoApprove);
       const broker = await this.api.storage.local.get(Storage.BrokerMode);
+      const notice = await this.api.storage.local.get(Storage.Notify);
       if (typeof data?.[Storage.AutoApprove] === 'boolean') this.autoApprove = data[Storage.AutoApprove];
       if ([Broker.Auto, Broker.On, Broker.Off].includes(broker?.[Storage.BrokerMode])) this.brokerMode = broker[Storage.BrokerMode];
+      if (typeof notice?.[Storage.Notify] === 'boolean') this.notifyNew = notice[Storage.Notify];
     } catch { /* Keep the default when preferences are unavailable. */ }
+    this.updateBadge();
   }
 
   async saveBrokerMode() { try { await this.api.storage.local.set({ [Storage.BrokerMode]: this.brokerMode }); } catch { /* Retain the choice in memory. */ } }
@@ -95,11 +104,25 @@ export class ExtensionController {
 
   publishBrokerStatus() {
     for (const port of this.popups) { try { port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus }); } catch { this.popups.delete(port); } }
+    this.updateBadge();
   }
 
-  publishPending() { this.publish(PopupMessage.Pending, this.pendingItems()); }
+  publishPending() { this.publish(PopupMessage.Pending, this.pendingItems()); this.updateBadge(); }
 
-  publishSessions() { this.publish(PopupMessage.Sessions, this.sessionItems()); }
+  publishSessions() { this.publish(PopupMessage.Sessions, this.sessionItems()); this.updateBadge(); }
+
+  updateBadge() {
+    const failed = this.status.state === NativeStatus.Error || this.brokerStatus.state === Broker.StateBlocked;
+    let text = '';
+    let color = BrowserAction.BadgeColor;
+    if (this.pending.size) text = String(Math.min(this.pending.size, 99));
+    else if (failed) { text = BrowserAction.BadgeError; color = BrowserAction.BadgeErrorColor; }
+    else if (this.sessions.size) { text = BrowserAction.BadgeSession; color = BrowserAction.BadgeSessionColor; }
+    try {
+      this.api.action.setBadgeText({ text });
+      this.api.action.setBadgeBackgroundColor({ color });
+    } catch { /* Badge updates are best effort. */ }
+  }
 
   publish(type, items) {
     for (const port of this.popups) { try { port.postMessage({ type, items }); } catch { this.popups.delete(port); } }
@@ -169,6 +192,7 @@ export class ExtensionController {
     for (const port of this.popups) {
       try { port.postMessage({ type: PopupMessage.Status, ...status }); } catch { this.popups.delete(port); }
     }
+    this.updateBadge();
   }
 
   async receive(msg) {
@@ -234,13 +258,14 @@ export class ExtensionController {
     if ([...this.pending.values()].some(x => x.clientId === p.clientId)) throw new Error(Failure.Busy);
     if (!['newGroup', 'attachExisting'].includes(p.mode)) throw new Error(Failure.Invalid);
     if (p.tabId !== undefined && !Number.isInteger(p.tabId)) throw new Error(Failure.Invalid);
-    const url = p.mode === 'newGroup' ? this.safeUrl(p.url ?? BrowserAction.NewTab, true) : null;
+    let url = null;
+    if (p.mode === SessionMode.NewGroup) url = this.safeUrl(p.url ?? BrowserAction.NewTab, true);
+    else if (typeof p.url === 'string') { try { url = this.safeUrl(p.url, false); } catch { url = null; } }
     const pendingId = this.id();
     this.pending.set(pendingId, { clientId: p.clientId, mode: p.mode, url, expires: this.clock() + Limits.PendingMs });
     this.statusSet(pendingId, p.clientId, { status: Wire.Pending });
     this.publishPending();
-    this.api.action.setBadgeText({ text: BrowserAction.BadgePending });
-    this.api.action.setBadgeBackgroundColor({ color: BrowserAction.BadgeColor });
+    await this.notify(pendingId, p);
     if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined))) {
       try { await this.approve(pendingId, p.tabId); }
       catch { if (this.pending.has(pendingId)) this.deny(pendingId); }
@@ -248,6 +273,42 @@ export class ExtensionController {
     const result = this.results.get(pendingId);
     if (result?.status === Wire.Approved) return { pendingId, ...result.value, status: result.status };
     return { pendingId, status: result?.status ?? Wire.Pending };
+  }
+
+  async notify(id, p) {
+    if (this.autoApprove || !this.notifyNew || !this.pending.has(id)) return;
+    this.notices.add(id);
+    await this.locale.load();
+    if (!this.pending.has(id)) return;
+    const keys = p.mode === SessionMode.NewGroup ? [Text.NotifyApprove] : [Text.NotifyOpen];
+    const buttons = [...keys, Text.NotifyDeny].map(key => ({ title: this.locale.get(key) }));
+    try {
+      await this.api.notifications?.create?.(id, {
+        type: BrowserAction.NotificationBasic,
+        iconUrl: this.api.runtime.getURL(BrowserAction.NotificationIcon),
+        title: this.locale.get(Text.AppName),
+        message: this.locale.get(Text.NotifyBody).replace('$1', () => p.clientId),
+        buttons
+      });
+      if (!this.pending.has(id)) this.clearNotice(id);
+    } catch { /* Notifications may be unavailable. */ }
+  }
+
+  clearNotice(id) {
+    this.notices.delete(id);
+    try { Promise.resolve(this.api.notifications?.clear?.(id)).catch(() => {}); } catch { /* Ignore. */ }
+  }
+
+  notificationClicked(id, index) {
+    const p = this.pending.get(id);
+    if (!p) { this.clearNotice(id); return; }
+    if (index > 0) { this.deny(id); return; }
+    if (p.mode === SessionMode.NewGroup) { void this.approve(id).catch(() => {}); return; }
+    void this.openPopup();
+  }
+
+  async openPopup() {
+    try { await this.api.action.openPopup?.(); } catch { /* Popups cannot always be opened programmatically. */ }
   }
 
   async approvalStatus(p) {
@@ -281,10 +342,17 @@ export class ExtensionController {
         port.postMessage({ type: PopupMessage.AutoApproval, enabled: this.autoApprove });
         this.publishPending();
         this.publishSessions();
+      } else if (msg?.type === PopupMessage.Notify) {
+        await this.ready;
+        port.postMessage({ type: msg.type, enabled: this.notifyNew });
+      } else if (msg?.type === PopupMessage.SetNotify) {
+        this.notifyNew = msg.enabled === true;
+        try { await this.api.storage.local.set({ [Storage.Notify]: this.notifyNew }); } catch { /* Retain the choice in memory. */ }
+        port.postMessage({ type: PopupMessage.Notify, enabled: this.notifyNew });
       } else if (msg?.type === PopupMessage.Tabs) {
         const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });
         port.postMessage({ type: msg.type, pendingId: msg.pendingId, tabs: tabs.map(t => ({
-          tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1
+          tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1, active: t.active === true
         })) });
       } else if (msg?.type === PopupMessage.Sessions) {
         port.postMessage({ type: msg.type, items: this.sessionItems() });
@@ -313,6 +381,7 @@ export class ExtensionController {
     if (!p || p.expires <= this.clock()) {
       this.pending.delete(id);
       this.statusSet(id, p?.clientId, { status: Wire.Expired });
+      this.clearNotice(id);
       this.publishPending();
       throw new Error(Failure.Forbidden);
     }
@@ -370,6 +439,7 @@ export class ExtensionController {
       this.results.set(id, { clientId: p.clientId, status: Wire.Approved,
         value: { sessionId, pages: [{ pageId, url: finalTab.url }], groupId } });
       this.pending.delete(id);
+      this.clearNotice(id);
       this.publishPending();
       this.publishSessions();
     } catch (err) {
@@ -387,6 +457,7 @@ export class ExtensionController {
     this.pending.delete(id);
     if (p) {
       this.statusSet(id, p.clientId, { status: Wire.Denied });
+      this.clearNotice(id);
       this.publishPending();
     }
   }
@@ -485,7 +556,7 @@ export class ExtensionController {
 
   async revokeClient(clientId) {
     let dropped = false;
-    for (const [id, p] of this.pending) if (p.clientId === clientId) { this.pending.delete(id); dropped = true; }
+    for (const [id, p] of this.pending) if (p.clientId === clientId) { this.pending.delete(id); this.clearNotice(id); dropped = true; }
     if (dropped) this.publishPending();
     for (const [id, s] of [...this.sessions]) if (s.clientId === clientId) await this.revoke(id);
     this.lease.delete(clientId);
@@ -581,8 +652,8 @@ export class ExtensionController {
 
   checkUrl(tabId, url) {
     const page = [...this.pages.values()].find(x => x.tabId === tabId);
-    if (!page) return;
-    try { this.safeUrl(url, page.owned); page.url = url; }
+    if (!page || page.url === url) return;
+    try { this.safeUrl(url, page.owned); page.url = url; this.publishSessions(); }
     catch { this.dropTab(tabId); }
   }
 
@@ -622,12 +693,11 @@ export class ExtensionController {
     const now = this.clock();
     let expired = false;
     for (const [id, p] of this.pending) if (p.expires <= now) {
-      this.pending.delete(id); this.statusSet(id, p.clientId, { status: Wire.Expired }); expired = true;
+      this.pending.delete(id); this.statusSet(id, p.clientId, { status: Wire.Expired }); this.clearNotice(id); expired = true;
     }
     if (expired) this.publishPending();
     for (const [id, s] of [...this.sessions]) if (s.expires <= now) this.revoke(id);
     for (const [id, at] of this.lease) if (at <= now) this.revokeClient(id);
-    if (!this.pending.size) this.api.action.setBadgeText({ text: '' });
   }
 
   async disconnected(keepPort = false) {
@@ -635,6 +705,7 @@ export class ExtensionController {
     this.approving.clear();
     await Promise.all([...this.sessions.keys()].map(id => this.revoke(id)));
     this.pending.clear(); this.lease.clear(); this.results.clear();
+    for (const id of [...this.notices]) this.clearNotice(id);
     this.publishPending();
     this.publishSessions();
   }

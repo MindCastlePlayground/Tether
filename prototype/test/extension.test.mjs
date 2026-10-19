@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExtensionController } from '../extension/controller.js';
-import { Broker, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
+import { Broker, BrowserAction, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -19,7 +19,19 @@ class FakeChrome {
     };
     this.nativeConnections = 0;
     this.native = { onMessage: new Event(), onDisconnect: new Event(), messages: [], postMessage: m => this.native.messages.push(m) };
-    this.action = { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} };
+    this.i18n = { getUILanguage: () => 'en-US' };
+    this.action = {
+      badge: { text: '', color: null },
+      opened: 0,
+      setBadgeText: async ({ text }) => { this.action.badge.text = text; },
+      setBadgeBackgroundColor: async ({ color }) => { this.action.badge.color = color; },
+      openPopup: async () => { this.action.opened++; }
+    };
+    this.notifications = {
+      created: [], cleared: [], onButtonClicked: new Event(),
+      create: async (id, options) => { this.notifications.created.push({ id, ...options }); },
+      clear: async id => { this.notifications.cleared.push(id); }
+    };
     this.storage = {
       data: {},
       local: {
@@ -192,6 +204,166 @@ test('native broker status is forwarded to popup without changing native websock
     api.native.onMessage.fire({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateBackoff, code: Broker.PortInUse, attempt: 2 });
     assert.equal(c.status.state, NativeStatus.Waiting);
     assert.ok(sent.some(m => m.type === PopupMessage.BrokerStatus && m.code === Broker.PortInUse));
+  } finally { c.stop(); }
+});
+
+test('toolbar badge tracks pending count, active sessions, and broker failure', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  c.updateBadge();
+  assert.equal(api.action.badge.text, '');
+  const first = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  assert.equal(api.action.badge.text, '1');
+  assert.equal(api.action.badge.color, BrowserAction.BadgeColor);
+  const second = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
+  assert.equal(api.action.badge.text, '2');
+  c.deny(second.pendingId);
+  assert.equal(api.action.badge.text, '1');
+  await c.approve(first.pendingId, 1);
+  assert.equal(api.action.badge.text, BrowserAction.BadgeSession);
+  assert.equal(api.action.badge.color, BrowserAction.BadgeSessionColor);
+  c.setStatus({ state: NativeStatus.Error, code: 'native_host_failed' });
+  assert.equal(api.action.badge.text, BrowserAction.BadgeError);
+  assert.equal(api.action.badge.color, BrowserAction.BadgeErrorColor);
+  c.setStatus({ state: NativeStatus.Connected });
+  assert.equal(api.action.badge.text, BrowserAction.BadgeSession);
+  c.brokerStatus = { mode: Broker.Auto, state: Broker.StateBlocked };
+  c.publishBrokerStatus();
+  assert.equal(api.action.badge.text, BrowserAction.BadgeError);
+  await c.revoke([...c.sessions.keys()][0]);
+  c.brokerStatus = { mode: Broker.Auto, state: Broker.StateRunning };
+  c.publishBrokerStatus();
+  assert.equal(api.action.badge.text, '');
+});
+
+test('pending requests notify with mode-specific actions and clear when finished', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  c.start();
+  const attach = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', url: 'https://example.test/a' });
+  assert.equal(api.notifications.created.length, 1);
+  const notice = api.notifications.created[0];
+  assert.equal(notice.id, attach.pendingId);
+  assert.equal(notice.title, 'Tether');
+  assert.equal(notice.message, `${clientA} requests browser access`);
+  assert.deepEqual(notice.buttons.map(button => button.title), ['Open Tether', 'Deny']);
+  api.notifications.onButtonClicked.fire(attach.pendingId, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(api.action.opened, 1);
+  c.deny(attach.pendingId);
+  assert.deepEqual(api.notifications.cleared, [attach.pendingId]);
+
+  const group = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'newGroup' });
+  const groupNotice = api.notifications.created.at(-1);
+  assert.equal(groupNotice.id, group.pendingId);
+  assert.deepEqual(groupNotice.buttons.map(button => button.title), ['Approve', 'Deny']);
+  api.notifications.onButtonClicked.fire(group.pendingId, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(c.sessions.size, 1);
+  assert.ok(api.notifications.cleared.includes(group.pendingId));
+
+  const denied = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  api.notifications.onButtonClicked.fire(denied.pendingId, 1);
+  assert.equal((await c.approvalStatus({ clientId: clientA, pendingId: denied.pendingId })).status, Wire.Denied);
+  assert.ok(api.notifications.cleared.includes(denied.pendingId));
+  c.stop();
+});
+
+test('a notification resolving after denial is cleared and leaves no lingering notice', async () => {
+  const api = new FakeChrome();
+  const releases = [];
+  api.notifications.create = async (id, options) => {
+    api.notifications.created.push({ id, ...options });
+    await new Promise(resolve => releases.push(resolve));
+  };
+  const c = manual(new ExtensionController(api));
+  const request = c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  await new Promise(resolve => setImmediate(resolve));
+  const pendingId = [...c.pending.keys()][0];
+  assert.ok(pendingId);
+  assert.equal(api.notifications.created.length, 1);
+  c.deny(pendingId);
+  for (const release of releases) release();
+  assert.equal((await request).status, Wire.Denied);
+  assert.ok(api.notifications.cleared.includes(pendingId));
+  assert.equal(c.notices.size, 0);
+});
+
+test('a notification resolving after disconnect is cleared and leaves no lingering notice', async () => {
+  const api = new FakeChrome();
+  const releases = [];
+  api.notifications.create = async (id, options) => {
+    api.notifications.created.push({ id, ...options });
+    await new Promise(resolve => releases.push(resolve));
+  };
+  const c = manual(new ExtensionController(api));
+  const request = c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  await new Promise(resolve => setImmediate(resolve));
+  const pendingId = [...c.pending.keys()][0];
+  await c.disconnected();
+  for (const release of releases) release();
+  await request;
+  assert.ok(api.notifications.cleared.includes(pendingId));
+  assert.equal(c.notices.size, 0);
+  assert.equal(c.pending.size, 0);
+});
+
+test('an unusable attach url still reaches pending approval', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const first = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', url: 'file:///secret' });
+  assert.equal(first.status, Wire.Pending);
+  assert.equal(c.pending.get(first.pendingId).url, null);
+  const second = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', url: 'https://user:pass@example.test/private' });
+  assert.equal(second.status, Wire.Pending);
+  assert.equal(c.pending.get(second.pendingId).url, null);
+  assert.equal(c.pending.size, 2);
+});
+
+test('expired requests clear notifications and the preference disables them', async () => {
+  const api = new FakeChrome();
+  let now = 1000;
+  const c = manual(new ExtensionController(api, () => now));
+  const expired = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  now += Limits.PendingMs + 1;
+  c.sweep();
+  assert.ok(api.notifications.cleared.includes(expired.pendingId));
+  const sender = { url: api.runtime.getURL('popup.html') };
+  const sent = [];
+  await c.popup({ type: PopupMessage.SetNotify, enabled: false }, sender, { postMessage: m => sent.push(m) });
+  assert.equal(api.storage.data[Storage.Notify], false);
+  assert.deepEqual(sent, [{ type: PopupMessage.Notify, enabled: false }]);
+  await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
+  assert.equal(api.notifications.created.length, 1);
+});
+
+test('tab chooser responses include the active flag and keep the requested URL', async () => {
+  const api = new FakeChrome();
+  api.tabs.data.get(1).active = true;
+  const c = manual(new ExtensionController(api));
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', url: 'https://example.test/a' });
+  assert.equal(messages.find(message => message.type === PopupMessage.Pending).items[0].url, 'https://example.test/a');
+  const sent = [];
+  await c.popup({ type: PopupMessage.Tabs, pendingId: pending.pendingId },
+    { url: api.runtime.getURL('popup.html') }, { postMessage: message => sent.push(message) });
+  assert.deepEqual(sent[0].tabs[0], {
+    tabId: 1, title: 'Example', url: 'https://example.test/a', groupId: -1, active: true
+  });
+});
+
+test('same-title navigation broadcasts the updated page URL', async () => {
+  const { api, c } = await approvedExisting();
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  c.start();
+  try {
+    api.tabs.data.get(1).url = 'https://example.test/b';
+    api.tabs.onUpdated.fire(1, { url: 'https://example.test/b' });
+    const sessions = messages.filter(message => message.type === PopupMessage.Sessions);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].items[0].pages[0].url, 'https://example.test/b');
   } finally { c.stop(); }
 });
 

@@ -48,5 +48,11 @@
   "brokerBackoff": { "message": "退避后重试中" },
   "brokerBlocked": { "message": "启动受阻" },
   "brokerPortBusy": { "message": "Broker 端口已被占用。请检查占用程序，或修正 runtime 端口/证书；处理后点击开启或重新勾选自动守护以重试。" },
-  "brokerStartFailed": { "message": "Broker 启动失败。请检查 runtime 配置，处理后点击开启或重新勾选自动守护以重试。" }
+  "brokerStartFailed": { "message": "Broker 启动失败。请检查 runtime 配置，处理后点击开启或重新勾选自动守护以重试。" },
+  "enabled": { "message": "已开启" },
+  "disabled": { "message": "已关闭" },
+  "brokerAutoShort": { "message": "自动守护运行" },
+  "autoApprovalShort": { "message": "自动批准请求" },
+  "accessDetails": { "message": "权限范围详情" },
+  "policyDetails": { "message": "授权机制详情" }
 }

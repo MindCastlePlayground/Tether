@@ -58,12 +58,14 @@ class Preview {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await mkdir(this.Assets, { recursive: true });
       await page.screenshot({ path: resolve(this.Assets, 'popup-preview.png'), fullPage: true });
-      await page.getByRole('checkbox', { name: 'Automatically approve new groups and existing tabs', exact: true }).uncheck();
+      await page.locator('details.disclosure').first().locator('summary').click();
+      await page.getByRole('checkbox', { name: 'Auto-approve requests', exact: true }).uncheck();
+      await page.locator('details.disclosure').first().locator('summary').click();
       await page.getByText('Off: requests wait for your approval, and clients cannot enumerate tabs.', { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => window.approval), false);
       await page.keyboard.press('Tab');
-      await page.getByRole('checkbox', { name: 'Automatically approve new groups and existing tabs', exact: true }).focus();
-      assert.equal(await page.getByRole('checkbox', { name: 'Automatically approve new groups and existing tabs', exact: true }).evaluate(el => el.matches(':focus-visible')), true);
+      await page.getByRole('checkbox', { name: 'Auto-approve requests', exact: true }).focus();
+      assert.equal(await page.getByRole('checkbox', { name: 'Auto-approve requests', exact: true }).evaluate(el => el.matches(':focus-visible')), true);
       assert.deepEqual(errors, []);
       const catalogs = {};
       for (const [language, directory] of [['en', 'en'], ['zh-CN', 'zh_CN']]) {
@@ -77,7 +79,8 @@ class Preview {
         await page.reload();
         await page.getByText(text('noSessions'), { exact: true }).waitFor();
         assert.equal(await page.locator('#language').inputValue(), language);
-        await page.getByRole('checkbox', { name: text('autoApproval'), exact: true }).uncheck();
+        await page.getByRole('checkbox', { name: text('autoApprovalShort'), exact: true }).uncheck();
+        await page.locator('details.disclosure').first().locator('summary').click();
         await page.getByText(text('autoOff'), { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => window.approval), false);
         await page.evaluate(events => {

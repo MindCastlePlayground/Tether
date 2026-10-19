@@ -2,6 +2,8 @@ import en from './_locales/en/messages.json' with { type: 'json' };
 import zh from './_locales/zh_CN/messages.json' with { type: 'json' };
 
 export class Text {
+  static Enabled = 'enabled';
+  static Disabled = 'disabled';
   static NativeConnected = 'nativeConnected';
   static NativeWaiting = 'nativeWaiting';
   static NativeHost = 'nativeHost';
@@ -43,6 +45,10 @@ export class Text {
   static BrokerStarting = 'brokerStarting';
   static BrokerBackoff = 'brokerBackoff';
   static BrokerBlocked = 'brokerBlocked';
+  static BrokerAutoShort = 'brokerAutoShort';
+  static AutoApprovalShort = 'autoApprovalShort';
+  static AccessDetails = 'accessDetails';
+  static PolicyDetails = 'policyDetails';
 }
 
 export class Locale {

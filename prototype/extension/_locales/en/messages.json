@@ -48,5 +48,11 @@
   "brokerBackoff": { "message": "Retrying with backoff" },
   "brokerBlocked": { "message": "Startup blocked" },
   "brokerPortBusy": { "message": "The Broker port is occupied. Check the listening program or correct the runtime port/certificate. Then click Start or re-enable automatic mode to retry." },
-  "brokerStartFailed": { "message": "Broker could not start. Check runtime configuration, then click Start or re-enable automatic mode to retry." }
+  "brokerStartFailed": { "message": "Broker could not start. Check runtime configuration, then click Start or re-enable automatic mode to retry." },
+  "enabled": { "message": "On" },
+  "disabled": { "message": "Off" },
+  "brokerAutoShort": { "message": "Keep broker running" },
+  "autoApprovalShort": { "message": "Auto-approve requests" },
+  "accessDetails": { "message": "Permission details" },
+  "policyDetails": { "message": "Approval policy" }
 }

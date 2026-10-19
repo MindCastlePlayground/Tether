@@ -5,44 +5,548 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Tether — Browser access</title>
   <style>
-    :root{color-scheme:light;--ink:#182c46;--teal:#007f82;--paper:#f3f8f9;--line:#d6e4e7;--muted:#526778}
-    *{box-sizing:border-box}
-    body{font:14px/1.5 "Segoe UI",system-ui,sans-serif;width:380px;margin:0;padding:20px;color:var(--ink);background:var(--paper)}
-    header{display:flex;align-items:center;gap:10px;padding:0 0 18px;border-bottom:1px solid var(--line);margin-bottom:18px}
-    header img{width:48px;height:48px;object-fit:contain}
-    h1{font:700 27px/1.15 "Trebuchet MS","Segoe UI",sans-serif;letter-spacing:-1px;margin:0}
-    header p{color:var(--muted);font-size:12px;margin:3px 0 0}
-    h2{font-size:12px;font-weight:650;letter-spacing:.04em;margin:22px 0 6px;color:var(--muted)}
-    .empty{color:var(--muted);padding:12px 0 16px;border-bottom:1px solid var(--line)}
-    .card{background:white;border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0;overflow-wrap:anywhere}
-    label{display:flex;align-items:flex-start;gap:8px;font-weight:600}input{accent-color:var(--teal);margin-top:5px;flex-shrink:0}
-    .label{font-size:12px;color:var(--muted);margin-bottom:5px}.url{font-weight:600;margin:5px 0 10px}
-    button{border:1px solid transparent;border-radius:8px;padding:8px 11px;cursor:pointer;font:600 13px/1.4 "Segoe UI",sans-serif}
-    button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
-    .approve{background:var(--teal);color:white}.approve:hover{background:#00696c}
-    .deny{background:#edf3f5;color:var(--ink);margin-left:6px}.deny:hover{border-color:#b8cdd3}
-    .tab{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);margin:6px 0}
-    .tab:hover{border-color:var(--teal)}
-    .tab strong,.tab span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .tab span{font-size:12px;color:var(--muted);margin-top:3px}.hint{font-size:12px;line-height:1.55;color:var(--muted);margin:8px 0}
-    .locale{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
-    select{max-width:210px;border:1px solid var(--line);border-radius:6px;padding:6px;color:var(--ink);background:white;font:inherit}
-    footer{font-size:11px;color:var(--muted);margin-top:20px;padding-top:12px;border-top:1px solid var(--line)}
+    :root {
+      color-scheme: light;
+      --ink: #14253d;
+      --ink-secondary: #4a6074;
+      --ink-muted: #526b7e;
+      --teal: #007f82;
+      --teal-hover: #00686b;
+      --teal-active: #005456;
+      --teal-subtle: #eef7f8;
+      --teal-border: #9ec9cc;
+      --paper: #f4f7f9;
+      --surface: #ffffff;
+      --surface-alt: #f8fafb;
+      --line: #d8e4e8;
+      --line-subtle: #e9f0f3;
+      --status-ok: #0a8754;
+      --status-ok-bg: #edf8f2;
+      --status-ok-border: #bce5ce;
+      --status-warn: #b45309;
+      --status-warn-bg: #fef7ec;
+      --status-warn-border: #f8dfb4;
+      --status-err: #b91c1c;
+      --status-err-bg: #fdf2f2;
+      --status-err-border: #f8c9c9;
+      --status-off: #5a7082;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 380px;
+      font: 13px/1.45 "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .brand img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .brand-text {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      line-height: 1.2;
+    }
+
+    .tagline {
+      font-size: 11px;
+      color: var(--ink-muted);
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .lang-picker {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .lang-select {
+      height: 24px;
+      padding: 0 6px;
+      font-size: 11px;
+      font-family: inherit;
+      color: var(--ink-secondary);
+      background: var(--surface-alt);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+
+    main {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 11px 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .panel-broker {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--ink);
+      min-width: 0;
+    }
+
+    .status-badge span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot.ok { background: var(--status-ok); }
+    .dot.warn { background: var(--status-warn); }
+    .dot.err { background: var(--status-err); }
+    .dot.off { background: var(--status-off); }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .toggles-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line-subtle);
+    }
+
+    .toggle-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .toggle-item input[type="checkbox"] {
+      accent-color: var(--teal);
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .toggle-status {
+      font-size: 11px;
+      color: var(--ink-muted);
+      flex-shrink: 0;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.1s ease, border-color 0.1s ease;
+    }
+
+    button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--teal);
+      outline-offset: 2px;
+    }
+
+    .btn-approve {
+      background: var(--teal);
+      color: #ffffff;
+      border-color: var(--teal);
+    }
+    .btn-approve:hover {
+      background: var(--teal-hover);
+      border-color: var(--teal-hover);
+    }
+    .btn-approve:active {
+      background: var(--teal-active);
+    }
+
+    .btn-deny {
+      background: var(--surface-alt);
+      color: var(--ink);
+      border-color: var(--line);
+    }
+    .btn-deny:hover {
+      background: #edf3f5;
+      border-color: #bcccd1;
+    }
+
+    .btn-revoke {
+      background: var(--surface);
+      color: var(--ink-secondary);
+      border-color: var(--line);
+      font-size: 11px;
+      padding: 4px 8px;
+    }
+    .btn-revoke:hover {
+      color: var(--status-err);
+      border-color: #f8c9c9;
+      background: var(--status-err-bg);
+    }
+
+    .btn-sm {
+      font-size: 11.5px;
+      padding: 5px 8px;
+    }
+
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink-secondary);
+    }
+
+    .section-badge {
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--line-subtle);
+      color: var(--ink-secondary);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    .section-badge.highlight {
+      background: var(--status-warn-bg);
+      color: var(--status-warn);
+      border: 1px solid var(--status-warn-border);
+    }
+
+    .empty {
+      color: var(--ink-muted);
+      font-size: 12px;
+      padding: 10px 12px;
+      background: var(--surface-alt);
+      border: 1px dashed var(--line);
+      border-radius: var(--radius-md);
+      text-align: center;
+    }
+
+    .pending-card {
+      border-color: var(--teal-border);
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .client-tag {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--teal-subtle);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--teal-border);
+    }
+
+    .mode-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--teal);
+    }
+
+    .url-box {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 11.5px;
+      color: var(--ink);
+      background: var(--surface-alt);
+      border: 1px solid var(--line-subtle);
+      padding: 5px 8px;
+      border-radius: var(--radius-sm);
+      word-break: break-all;
+    }
+
+    .actions-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .session-card {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .session-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .session-client {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .session-pages {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .page-row {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 11px;
+      color: var(--ink-secondary);
+      background: var(--surface-alt);
+      border: 1px solid var(--line-subtle);
+      padding: 3px 6px;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tab-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 6px 0;
+    }
+
+    .tab {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+    .tab:hover {
+      border-color: var(--teal);
+      background: var(--teal-subtle);
+    }
+    .tab strong {
+      display: block;
+      font-size: 12.5px;
+      color: var(--ink);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tab span {
+      display: block;
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 11px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    details.disclosure {
+      font-size: 11px;
+      color: var(--ink-muted);
+    }
+
+    details.disclosure summary {
+      cursor: pointer;
+      user-select: none;
+      color: var(--ink-secondary);
+      font-weight: 500;
+    }
+    details.disclosure summary:hover {
+      color: var(--teal);
+    }
+
+    .disclosure-body {
+      padding: 6px 0 2px;
+      line-height: 1.45;
+      color: var(--ink-secondary);
+    }
+
+    .disclosure-body p + p {
+      margin-top: 4px;
+    }
+
+    .alert-box {
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-size: 11.5px;
+      line-height: 1.45;
+    }
+
+    .alert-err {
+      background: var(--status-err-bg);
+      border: 1px solid var(--status-err-border);
+      color: #7f1d1d;
+    }
+
+    .alert-warn {
+      background: var(--status-warn-bg);
+      border: 1px solid var(--status-warn-border);
+      color: #78350f;
+    }
+
+    .alert-title {
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .alert-detail {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 10.5px;
+      margin-top: 4px;
+      opacity: 0.9;
+      word-break: break-all;
+    }
+
+    footer {
+      font-size: 11px;
+      color: var(--ink-muted);
+      padding: 10px 14px 12px;
+      border-top: 1px solid var(--line);
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <header>
-    <img src="icons/icon-128.png" alt="" width="48" height="48">
-    <div><h1>Tether</h1><p data-i18n="tagline">Your browser. Connected.</p></div>
+    <div class="brand">
+      <img src="icons/icon-128.png" alt="" width="22" height="22">
+      <div class="brand-text">
+        <h1>Tether</h1>
+        <span class="tagline" data-i18n="tagline">Your browser. Connected.</span>
+      </div>
+    </div>
+    <div class="lang-picker">
+      <label for="language" class="sr-only" data-i18n="language">Language</label>
+      <select id="language" class="lang-select">
+        <option value="auto" data-i18n="auto">Follow browser</option>
+        <option value="en" data-i18n="english">English</option>
+        <option value="zh-CN" data-i18n="chinese">简体中文</option>
+      </select>
+    </div>
   </header>
-  <div class="locale"><label for="language" data-i18n="language">Language</label>
-    <select id="language">
-      <option value="auto" data-i18n="auto">Follow browser</option>
-      <option value="en" data-i18n="english">English</option>
-      <option value="zh-CN" data-i18n="chinese">简体中文</option>
-    </select>
-  </div>
-  <main id="items"><div class="empty" data-i18n="loading">Checking for access requests…</div></main>
+  <main id="items">
+    <div class="empty" data-i18n="loading">Checking for access requests…</div>
+  </main>
   <footer data-i18n="footer">Manage who can use your browser tabs.</footer>
   <script type="module" src="popup.js"></script>
 </body>

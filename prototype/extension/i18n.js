@@ -10,7 +10,6 @@ export class Text {
   static NativeHost = 'nativeHost';
   static Title = 'title';
   static Tagline = 'tagline';
-  static Footer = 'footer';
   static Loading = 'loading';
   static Language = 'language';
   static Auto = 'auto';
@@ -55,6 +54,17 @@ export class Text {
   static ErrorExpired = 'errorExpired';
   static ErrorSession = 'errorSession';
   static ErrorTab = 'errorTab';
+  static ModeAuto = 'modeAuto';
+  static ModeOn = 'modeOn';
+  static ModeOff = 'modeOff';
+  static PermRead = 'permRead';
+  static PermControl = 'permControl';
+  static PermNavigate = 'permNavigate';
+  static PermTabs = 'permTabs';
+  static RevokeAll = 'revokeAll';
+  static Revoked = 'revoked';
+  static SessionDuration = 'sessionDuration';
+  static AutoApprovalBadge = 'autoApprovalBadge';
 }
 
 export class ErrorText {

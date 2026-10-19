@@ -6,10 +6,11 @@
   <title>Tether — Browser access</title>
   <style>
     :root {
-      color-scheme: light;
+      color-scheme: light dark;
       --ink: #14253d;
       --ink-secondary: #4a6074;
       --ink-muted: #526b7e;
+      --on-teal: #ffffff;
       --teal: #007f82;
       --teal-hover: #00686b;
       --teal-active: #005456;
@@ -18,20 +19,57 @@
       --paper: #f4f7f9;
       --surface: #ffffff;
       --surface-alt: #f8fafb;
+      --surface-hover: #edf3f5;
       --line: #d8e4e8;
+      --line-hover: #bcccd1;
       --line-subtle: #e9f0f3;
       --status-ok: #0a8754;
       --status-ok-bg: #edf8f2;
       --status-ok-border: #bce5ce;
       --status-warn: #b45309;
+      --status-warn-ink: #78350f;
       --status-warn-bg: #fef7ec;
       --status-warn-border: #f8dfb4;
       --status-err: #b91c1c;
+      --status-err-ink: #7f1d1d;
       --status-err-bg: #fdf2f2;
       --status-err-border: #f8c9c9;
       --status-off: #5a7082;
       --radius-sm: 4px;
       --radius-md: 8px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e2e8f0;
+        --ink-secondary: #94a3b8;
+        --ink-muted: #94a3b8;
+        --on-teal: #ffffff;
+        --teal: #007f82;
+        --teal-hover: #00686b;
+        --teal-active: #005456;
+        --teal-subtle: #0f292e;
+        --teal-border: #1e4e54;
+        --paper: #0b131e;
+        --surface: #111c2d;
+        --surface-alt: #17263b;
+        --surface-hover: #1e3148;
+        --line: #23354d;
+        --line-hover: #334b68;
+        --line-subtle: #1a2a40;
+        --status-ok: #10b981;
+        --status-ok-bg: #0c2922;
+        --status-ok-border: #154d3c;
+        --status-warn: #f59e0b;
+        --status-warn-ink: #fcd34d;
+        --status-warn-bg: #291d0a;
+        --status-warn-border: #523710;
+        --status-err: #ef4444;
+        --status-err-ink: #fca5a5;
+        --status-err-bg: #2b1215;
+        --status-err-border: #571f24;
+        --status-off: #64748b;
+      }
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,6 +86,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       padding: 10px 14px;
       background: var(--surface);
       border-bottom: 1px solid var(--line);
@@ -89,6 +128,22 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .auto-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--status-warn);
+      background: var(--status-warn-bg);
+      border: 1px solid var(--status-warn-border);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .auto-badge[hidden] {
+      display: none;
     }
 
     .lang-picker {
@@ -177,11 +232,35 @@
     .dot.err { background: var(--status-err); }
     .dot.off { background: var(--status-off); }
 
-    .controls-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      padding: 2px;
+      background: var(--surface-alt);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+    }
+
+    .seg-btn {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--ink-secondary);
+      border: 1px solid transparent;
+      border-radius: 3px;
+    }
+
+    .seg-btn:hover {
+      color: var(--ink);
+      background: var(--surface-hover);
+    }
+
+    .seg-btn[aria-checked="true"] {
+      background: var(--teal);
+      color: var(--on-teal);
+      border-color: var(--teal);
     }
 
     .toggles-grid {
@@ -247,7 +326,7 @@
 
     .btn-approve {
       background: var(--teal);
-      color: #ffffff;
+      color: var(--on-teal);
       border-color: var(--teal);
     }
     .btn-approve:hover {
@@ -264,8 +343,8 @@
       border-color: var(--line);
     }
     .btn-deny:hover {
-      background: #edf3f5;
-      border-color: #bcccd1;
+      background: var(--surface-hover);
+      border-color: var(--line-hover);
     }
 
     .btn-revoke {
@@ -277,7 +356,7 @@
     }
     .btn-revoke:hover {
       color: var(--status-err);
-      border-color: #f8c9c9;
+      border-color: var(--status-err-border);
       background: var(--status-err-bg);
     }
 
@@ -296,7 +375,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       margin-top: 4px;
+    }
+
+    .section-head-left, .section-head-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
     .section-title {
@@ -334,7 +420,7 @@
 
     .pending-card {
       border-color: var(--teal-border);
-      background: #ffffff;
+      background: var(--surface);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -402,6 +488,22 @@
       word-break: break-all;
     }
 
+    .perm-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .perm-tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--ink-secondary);
+      background: var(--surface-alt);
+      border: 1px solid var(--line-subtle);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+    }
+
     .actions-row {
       display: flex;
       align-items: center;
@@ -421,11 +523,24 @@
       gap: 8px;
     }
 
+    .session-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
     .session-client {
       font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
       font-size: 11.5px;
       font-weight: 600;
       color: var(--ink);
+    }
+
+    .session-duration {
+      font-size: 11px;
+      color: var(--ink-muted);
+      white-space: nowrap;
     }
 
     .session-pages {
@@ -435,16 +550,72 @@
     }
 
     .page-row {
-      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
-      font-size: 11px;
-      color: var(--ink-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      width: 100%;
+      text-align: left;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--ink);
       background: var(--surface-alt);
       border: 1px solid var(--line-subtle);
-      padding: 3px 6px;
+      padding: 5px 7px;
       border-radius: var(--radius-sm);
+    }
+
+    button.page-row:hover {
+      border-color: var(--teal-border);
+      background: var(--teal-subtle);
+    }
+
+    .page-favicon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--teal-subtle);
+      border: 1px solid var(--teal-border);
+      color: var(--teal);
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
+
+    .page-title {
+      color: var(--ink);
+      font-weight: 500;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .page-domain {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 10.5px;
+      color: var(--ink-muted);
+      flex-shrink: 1;
+      min-width: 0;
+      max-width: 46%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .revoked-notice {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--status-ok);
+      background: var(--status-ok-bg);
+      border: 1px solid var(--status-ok-border);
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
     }
 
     .tab-list {
@@ -522,13 +693,13 @@
     .alert-err {
       background: var(--status-err-bg);
       border: 1px solid var(--status-err-border);
-      color: #7f1d1d;
+      color: var(--status-err-ink);
     }
 
     .alert-warn {
       background: var(--status-warn-bg);
       border: 1px solid var(--status-warn-border);
-      color: #78350f;
+      color: var(--status-warn-ink);
     }
 
     .alert-title {
@@ -545,11 +716,21 @@
     }
 
     footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       font-size: 11px;
       color: var(--ink-muted);
-      padding: 10px 14px 12px;
+      padding: 8px 14px 10px;
       border-top: 1px solid var(--line);
-      text-align: center;
+      background: var(--surface);
+    }
+
+    .version {
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      font-size: 11px;
+      color: var(--ink-muted);
     }
   </style>
 </head>
@@ -562,6 +743,12 @@
         <span class="tagline" data-i18n="tagline">Your browser. Connected.</span>
       </div>
     </div>
+    <span id="auto-badge" class="auto-badge" data-i18n="autoApprovalBadge" hidden>Auto-approving</span>
+  </header>
+  <main id="items">
+    <div class="empty" data-i18n="loading">Checking for access requests…</div>
+  </main>
+  <footer>
     <div class="lang-picker">
       <label for="language" class="sr-only" data-i18n="language">Language</label>
       <select id="language" class="lang-select">
@@ -570,11 +757,8 @@
         <option value="zh-CN" data-i18n="chinese">简体中文</option>
       </select>
     </div>
-  </header>
-  <main id="items">
-    <div class="empty" data-i18n="loading">Checking for access requests…</div>
-  </main>
-  <footer data-i18n="footer">Manage who can use your browser tabs.</footer>
+    <span id="version" class="version"></span>
+  </footer>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

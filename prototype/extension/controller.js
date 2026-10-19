@@ -41,6 +41,10 @@ export class ExtensionController {
     this.api.tabs.onReplaced.addListener((added, removed) => { this.dropTab(removed); });
     this.api.tabs.onUpdated.addListener((tabId, change) => {
       if (change.url) this.checkUrl(tabId, change.url);
+      if (typeof change.title === 'string') {
+        const page = [...this.pages.values()].find(x => x.tabId === tabId);
+        if (page && page.title !== change.title) { page.title = change.title; this.publishSessions(); }
+      }
       if (Object.hasOwn(change, 'groupId')) this.checkTabGroup(tabId);
     });
     this.api.tabs.onDetached.addListener(tabId => this.dropTab(tabId));
@@ -108,10 +112,17 @@ export class ExtensionController {
   }
 
   sessionItems() {
-    return [...this.sessions.values()].map(s => ({ sessionId: s.sessionId, clientId: s.clientId, mode: s.mode,
+    return [...this.sessions.values()].map(s => ({
+      sessionId: s.sessionId, clientId: s.clientId, mode: s.mode, started: s.started,
       pages: [...s.pages].map(id => {
-        const p = this.pages.get(id); return p ? { pageId: id, url: p.url } : null;
-      }).filter(Boolean) }));
+        const p = this.pages.get(id);
+        return p ? {
+          pageId: id, url: p.url,
+          ...(p.tabId !== undefined ? { tabId: p.tabId } : {}),
+          ...(p.title ? { title: p.title } : {})
+        } : null;
+      }).filter(Boolean)
+    }));
   }
 
   async save() {
@@ -280,6 +291,12 @@ export class ExtensionController {
       } else if (msg?.type === PopupMessage.Revoke) {
         if (!this.sessions.has(msg.sessionId)) throw new Error(Failure.Missing);
         await this.revoke(msg.sessionId);
+      } else if (msg?.type === PopupMessage.RevokeAll) {
+        await Promise.all([...this.sessions.keys()].map(id => this.revoke(id)));
+      } else if (msg?.type === PopupMessage.Focus) {
+        if (!Number.isInteger(msg.tabId) || ![...this.pages.values()].some(p => p.tabId === msg.tabId)) throw new Error(Failure.Invalid);
+        const tab = await this.api.tabs.update(msg.tabId, { active: true });
+        if (tab?.windowId !== undefined && this.api.windows?.update) await this.api.windows.update(tab.windowId, { focused: true });
       } else if (msg?.type === PopupMessage.Approve) {
         await this.approve(msg.pendingId, msg.tabId);
       } else if (msg?.type === PopupMessage.Deny) {
@@ -327,11 +344,12 @@ export class ExtensionController {
       const sessionId = this.id();
       createdSessionId = sessionId;
       const pageId = this.id();
+      const now = this.clock();
       const session = { clientId: p.clientId, sessionId, mode: p.mode, groupId,
         managedGroupId: p.mode === 'newGroup' ? groupId : null,
-        pages: new Set(), owned: new Set(), seq: 0, expires: this.clock() + Limits.LeaseMs };
+        pages: new Set(), owned: new Set(), seq: 0, started: now, expires: now + Limits.LeaseMs };
       const page = { clientId: p.clientId, sessionId, pageId, tabId: tab.id, groupId,
-        owned, url: tab.url, seq: -1, attached: false };
+        owned, url: tab.url, title: tab.title ?? '', seq: -1, attached: false };
       this.sessions.set(sessionId, session);
       this.pages.set(pageId, page);
       session.pages.add(pageId);
@@ -347,6 +365,8 @@ export class ExtensionController {
       this.validPending(id, p);
       this.checkGroup(page, finalTab);
       this.safeUrl(finalTab.url, page.owned);
+      page.url = finalTab.url;
+      page.title = finalTab.title ?? '';
       this.results.set(id, { clientId: p.clientId, status: Wire.Approved,
         value: { sessionId, pages: [{ pageId, url: finalTab.url }], groupId } });
       this.pending.delete(id);
@@ -425,7 +445,7 @@ export class ExtensionController {
       if(current.url!==BrowserAction.NewTab||current.groupId!==groupId)throw new Error(Failure.Forbidden);
       const pageId = this.id();
       const page = { clientId: session.clientId, sessionId: session.sessionId, pageId,
-        tabId: tab.id, groupId, owned: true, url: BrowserAction.NewTab, seq: -1, attached: false };
+        tabId: tab.id, groupId, owned: true, url: BrowserAction.NewTab, title: current.title ?? '', seq: -1, attached: false };
       this.pages.set(pageId, page); session.pages.add(pageId); session.owned.add(pageId);
       if (url !== BrowserAction.NewTab) await this.navigate({ session, page }, { url, _approval: true });
       this.grant({ clientId: session.clientId, sessionId: session.sessionId, pageId });
@@ -534,6 +554,7 @@ export class ExtensionController {
     this.checkGroup(page, current);
     this.safeUrl(current.url, page.owned);
     page.url = current.url;
+    page.title = current.title ?? '';
     return { sideEffect: 'applied', url: current.url };
   }
 

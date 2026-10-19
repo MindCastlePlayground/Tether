@@ -29,13 +29,17 @@ class FakeChrome {
     };
     this.tabs = {
       onRemoved: new Event(), onReplaced: new Event(), onUpdated: new Event(), onAttached: new Event(), onDetached: new Event(),
-      data: new Map([[1, { id: 1, url: 'https://example.test/a', title: 'Example', groupId: -1 }]]), next: 2,
+      data: new Map([[1, { id: 1, windowId: 10, url: 'https://example.test/a', title: 'Example', groupId: -1 }]]), next: 2,
       query: async () => [...this.tabs.data.values()],
       get: async id => { const tab = this.tabs.data.get(id); if (!tab) throw new Error('missing'); return { ...tab }; },
-      create: async () => { const id = this.tabs.next++; const tab = { id, url: 'about:blank', title: '', groupId: -1 }; this.tabs.data.set(id, tab); return { ...tab }; },
+      create: async () => { const id = this.tabs.next++; const tab = { id, windowId: 10, url: 'about:blank', title: '', groupId: -1 }; this.tabs.data.set(id, tab); return { ...tab }; },
       group: async ({ tabIds, groupId }) => { const gid = groupId ?? 9; for (const id of tabIds) this.tabs.data.get(id).groupId = gid; return gid; },
       update: async (id, changes) => { const tab = this.tabs.data.get(id); Object.assign(tab, changes); return { ...tab }; },
       remove: async id => { this.tabs.data.delete(id); }
+    };
+    this.windows = {
+      focused: [],
+      update: async (windowId, info) => { this.windows.focused.push([windowId, info]); return { id: windowId, ...info }; }
     };
     this.tabGroups = { onUpdated: new Event(), update: async id => ({ id }) };
     this.debugger = {
@@ -267,9 +271,58 @@ test('the real popup can list and revoke an active session', async () => {
   const sender = { url: api.runtime.getURL('popup.html') };
   await c.popup({ type: 'popup.sessions' }, sender, port);
   assert.equal(messages[0].items[0].sessionId, approved.sessionId);
+  assert.ok(Number.isFinite(messages[0].items[0].started));
+  assert.equal(messages[0].items[0].pages[0].tabId, 1);
+  assert.equal(messages[0].items[0].pages[0].title, 'Example');
   await c.popup({ type: 'popup.revoke', sessionId: approved.sessionId }, sender, port);
   assert.equal(c.sessions.size, 0);
   assert.equal(c.pages.size, 0);
+});
+
+test('popup can focus an approved tab and revoke all active sessions', async () => {
+  const api = new FakeChrome();
+  let now = 5000;
+  const c = new ExtensionController(api, () => now);
+  const first = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  const second = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'newGroup', url: 'https://safe.test/page' });
+  assert.equal(c.sessions.size, 2);
+  const sender = { url: api.runtime.getURL('popup.html') };
+  const messages = [];
+  const port = { postMessage: value => messages.push(value) };
+  c.popups.add(port);
+  await c.popup({ type: PopupMessage.Sessions }, sender, port);
+  const items = messages.at(-1).items;
+  assert.equal(items.length, 2);
+  assert.equal(items[0].started, 5000);
+  assert.equal(items[0].pages[0].tabId, 1);
+  assert.equal(items[0].pages[0].title, 'Example');
+  await c.popup({ type: PopupMessage.Focus, tabId: 1 }, sender, port);
+  assert.equal(api.tabs.data.get(1).active, true);
+  assert.deepEqual(api.windows.focused, [[10, { focused: true }]]);
+  await c.popup({ type: PopupMessage.Focus, tabId: 999 }, sender, port);
+  assert.deepEqual(messages.at(-1), { type: PopupMessage.Error, message: Failure.Invalid });
+  await c.popup({ type: PopupMessage.RevokeAll }, sender, port);
+  assert.equal(c.sessions.size, 0);
+  assert.equal(c.pages.size, 0);
+  assert.deepEqual(messages.filter(m => m.type === PopupMessage.Sessions).at(-1).items, []);
+  void first; void second;
+});
+
+test('unchanged tab title does not republish sessions', async () => {
+  const { api, c } = await approvedExisting();
+  const messages = [];
+  c.popups.add({ postMessage: m => messages.push(m) });
+  c.start();
+  try {
+    api.tabs.onUpdated.fire(1, { title: 'Example' });
+    assert.equal(messages.filter(m => m.type === PopupMessage.Sessions).length, 0);
+    api.tabs.onUpdated.fire(1, { title: 'Renamed' });
+    const sent = messages.filter(m => m.type === PopupMessage.Sessions);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].items[0].pages[0].title, 'Renamed');
+  } finally {
+    c.stop();
+  }
 });
 
 test('grants are client and page scoped; release detaches but keeps a user-owned tab', async () => {

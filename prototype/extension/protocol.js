@@ -26,6 +26,10 @@ export class Wire {
   static Expired = 'expired';
 }
 
+export class SessionMode {
+  static NewGroup = 'newGroup';
+}
+
 export class PopupMessage {
   static Status = 'popup.status';
   static Port = 'popup';
@@ -35,6 +39,8 @@ export class PopupMessage {
   static Deny = 'popup.deny';
   static Sessions = 'popup.sessions';
   static Revoke = 'popup.revoke';
+  static RevokeAll = 'popup.revokeAll';
+  static Focus = 'popup.focus';
   static Error = 'popup.error';
   static AutoApproval = 'popup.autoApproval';
   static SetAutoApproval = 'popup.setAutoApproval';

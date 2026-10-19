@@ -3,7 +3,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import assert from 'node:assert/strict';
-import { Failure, PopupMessage } from '../extension/protocol.js';
+import { Broker, Failure, PopupMessage } from '../extension/protocol.js';
 import { ErrorText, Text } from '../extension/i18n.js';
 
 class Preview {
@@ -31,7 +31,9 @@ class Preview {
       });
       const events = Object.fromEntries(Object.getOwnPropertyNames(PopupMessage)
         .filter(key => typeof PopupMessage[key] === 'string').map(key => [key, PopupMessage[key]]));
-      await page.addInitScript(events => {
+      const broker = Object.fromEntries(Object.getOwnPropertyNames(Broker)
+        .filter(key => typeof Broker[key] === 'string').map(key => [key, Broker[key]]));
+      await page.addInitScript(({ events, broker }) => {
         class MockPort {
           onMessage = { addListener: fn => { this.receive = fn; } };
           postMessage(msg) {
@@ -41,6 +43,9 @@ class Preview {
               this.receive({ type: events.AutoApproval, enabled: msg.enabled });
             } else if (msg.type === events.AutoApproval) {
               this.receive({ type: msg.type, enabled: true });
+            } else if (msg.type === events.SetBrokerMode) {
+              window.brokerMode = msg.mode;
+              this.receive({ type: events.BrokerStatus, mode: msg.mode, state: msg.mode === broker.Off ? broker.StateStopped : broker.StateRunning });
             } else if (msg.type === events.Pending || msg.type === events.Sessions) {
               this.receive({ type: msg.type, items: [] });
             }
@@ -48,21 +53,42 @@ class Preview {
         }
         window.port = new MockPort();
         window.chrome = {
-          runtime: { connect: () => window.port },
+          runtime: { connect: () => window.port, getManifest: () => ({ version: '1.1.0' }) },
           i18n: { getUILanguage: () => localStorage.getItem('systemLanguage') || 'en-US' },
           storage: { local: {
             get: async key => ({ [key]: localStorage.getItem(key) }),
             set: async data => { for (const [key, value] of Object.entries(data)) localStorage.setItem(key, value); }
           } }
         };
-      }, events);
+      }, { events, broker });
       await page.goto(`${this.Origin}/popup.html`);
       await page.getByText(catalogs.en[Text.NoSessions].message, { exact: true }).waitFor();
       assert.equal(await page.title(), catalogs.en[Text.Title].message);
       assert.equal(await page.locator('header img').evaluate(img => img.complete && img.naturalWidth === 128), true);
+      assert.equal(await page.locator('#version').textContent(), 'v1.1.0');
+      assert.equal(await page.locator('#auto-badge').isVisible(), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await mkdir(this.Assets, { recursive: true });
       await page.screenshot({ path: resolve(this.Assets, 'popup-preview.png'), fullPage: true });
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await page.screenshot({ path: resolve(this.Assets, 'popup-preview.dark.png'), fullPage: true });
+      await page.emulateMedia({ colorScheme: 'light' });
+
+      const radioGroup = page.getByRole('radiogroup', { name: catalogs.en[Text.Broker].message });
+      const radioAuto = radioGroup.getByRole('radio', { name: catalogs.en[Text.ModeAuto].message });
+      const radioOn = radioGroup.getByRole('radio', { name: catalogs.en[Text.ModeOn].message });
+      const radioOff = radioGroup.getByRole('radio', { name: catalogs.en[Text.ModeOff].message });
+      assert.equal(await radioAuto.getAttribute('aria-checked'), 'true');
+      await radioOn.click();
+      assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.SetBrokerMode, mode: broker.On });
+      assert.equal(await radioOn.getAttribute('aria-checked'), 'true');
+      await radioOn.focus();
+      await page.keyboard.press('ArrowRight');
+      assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.SetBrokerMode, mode: broker.Off });
+      assert.equal(await radioOff.getAttribute('aria-checked'), 'true');
+      await page.keyboard.press('ArrowRight');
+      assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.SetBrokerMode, mode: broker.Auto });
+      assert.equal(await radioAuto.getAttribute('aria-checked'), 'true');
 
       assert.equal(await page.locator('.pending-card').count(), 0);
       await page.evaluate(events => window.port.receive({ type: events.Pending, items: [
@@ -127,9 +153,34 @@ class Preview {
         await page.getByText('agent-new', { exact: true }).waitFor();
         assert.equal(await page.locator('.countdown').count(), 2);
         assert.match(await page.locator('.countdown').first().textContent(), /^1:0[0-5]$/);
+        const newCard = page.locator('.pending-card').filter({ hasText: 'agent-new' });
+        const existingCard = page.locator('.pending-card').filter({ hasText: 'agent-existing' });
+        assert.deepEqual(await newCard.locator('.perm-tag').allTextContents(), [
+          text(Text.PermRead), text(Text.PermControl), text(Text.PermNavigate), text(Text.PermTabs)
+        ]);
+        assert.deepEqual(await existingCard.locator('.perm-tag').allTextContents(), [
+          text(Text.PermRead), text(Text.PermControl), text(Text.PermNavigate)
+        ]);
         await page.evaluate(events => window.port.receive({ type: events.Sessions, items: [
-          { sessionId: 'session', clientId: 'agent-active', pages: [{ url: 'https://example.com' }] }
+          { sessionId: 'session', clientId: 'agent-active', started: Date.now() - 180000, pages: [
+            { tabId: 42, title: 'Example Domain', url: 'https://example.com' },
+            { tabId: 43, url: 'about:blank' },
+            { tabId: 44, title: 'New Tab', url: 'about:blank' }
+          ] }
         ] }), events);
+        const blank = page.locator('.page-row').nth(1);
+        const namedBlank = page.locator('.page-row').nth(2);
+        assert.equal(await blank.locator('.page-title').textContent(), 'about:blank');
+        assert.equal(await blank.locator('.page-domain').count(), 0);
+        assert.equal(await blank.locator('.page-favicon').textContent(), 'A');
+        assert.equal(await blank.evaluate(node => node.textContent.includes('null')), false);
+        assert.equal(await namedBlank.locator('.page-title').textContent(), 'New Tab');
+        assert.equal(await namedBlank.locator('.page-domain').textContent(), 'about:blank');
+        await page.locator('.page-row').first().click();
+        assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.Focus, tabId: 42 });
+        await page.getByRole('button', { name: text(Text.RevokeAll), exact: true }).click();
+        assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.RevokeAll });
+        await page.getByText(text(Text.Revoked), { exact: true }).waitFor();
         await page.getByRole('button', { name: text(Text.Approve), exact: true }).click();
         assert.deepEqual(await page.evaluate(() => window.lastMessage), { type: events.Approve, pendingId: 'new', tabId: undefined });
         await page.getByRole('button', { name: text(Text.Deny), exact: true }).first().click();

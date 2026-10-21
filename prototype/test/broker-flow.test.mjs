@@ -35,3 +35,14 @@ test('oversized incoming WSS frame closes connection',async()=>{
 test('host disconnect invalidates client connection',async()=>{
  const ws=new WebSocket(base.url,Config.tls(base));await once(ws,'open');const closed=once(ws,'close');host.close();const[code]=await closed;assert.equal(code,1011);
 });
+test('write without a browser is refused before its seq is recorded, so the same seq can run later',async()=>{
+ await new Promise(r=>setTimeout(r,50));
+ const c=new BridgeClient(base);try{
+  const args={sessionId:'retry-session',seq:1,url:'http://127.0.0.1/retry'};
+  await assert.rejects(c.createTab(args),/host_unavailable/);
+  host=new WebSocket(hostCfg.url,Config.tls(hostCfg));await once(host,'open');calls=[];
+  host.on('message',raw=>{const msg=JSON.parse(raw);calls.push(msg);host.send(JSON.stringify({jsonrpc:'2.0',id:msg.id,result:{ok:true}}));});
+  const c2=new BridgeClient(base);try{assert.deepEqual(await c2.createTab(args),{ok:true});}finally{c2.close();}
+  assert.equal(calls.filter(x=>x.method==='createTab').length,1);
+ }finally{c.close();await new Promise(r=>setTimeout(r,30));}
+});

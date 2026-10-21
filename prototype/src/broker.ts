@@ -107,6 +107,8 @@ export class Broker {
     if(!WRITES.has(msg.method))return this.run(msg.method,params,pages);
     // Writes re-read pages inside the queue so earlier writes in the session are reflected.
     if(typeof params.sessionId!=='string'||!Number.isSafeInteger(params.seq)||params.seq<=0)throw Error('invalid_seq');
+    // Refuse before recording the seq, so host_unavailable always means "not executed" and is safe to retry.
+    if(!this.host||this.host.readyState!==WebSocket.OPEN)throw Error('host_unavailable');
     const key=`${clientId}/${params.sessionId}`;let l=this.ledger.get(key);
     if(!l){l={high:0,records:new Map(),tail:Promise.resolve()};this.ledger.set(key,l);}
     const body=JSON.stringify([msg.method,Object.entries(msg.params).sort(([a],[b])=>a.localeCompare(b))]);

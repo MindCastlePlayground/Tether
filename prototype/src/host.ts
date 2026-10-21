@@ -10,6 +10,8 @@ export class NativeHost {
   private stopped=false;
   private task=Promise.resolve();
   private life:BrokerLifecycle;
+  private retry?:NodeJS.Timeout;
+  private delay:number=C.RetryMs;
   constructor(private cfg:any,origin:string,file:string){
     if(origin!==`chrome-extension://${cfg.extensionId}/`)throw Error(Status.Origin);
     if(new URL(cfg.url).hostname!=='127.0.0.1')throw Error(Status.Config);
@@ -30,6 +32,7 @@ export class NativeHost {
     const policy=this.life.policy();
     NativeHost.write(Buffer.from(JSON.stringify({type:C.Status,...state,...(policy?{[PolicyKey.Summary]:policy}:{})})));
     if(state.state===C.Running){this.connect();return;}
+    if(state.mode!==C.Off)this.later();
     if(state.state===C.Starting&&this.ws?.readyState===WebSocket.OPEN)return;
     if(this.ws){this.ws.terminate();this.ws=undefined;}
     this.queue=[];
@@ -38,13 +41,19 @@ export class NativeHost {
   private connect():void {
     if(this.stopped||this.ws?.readyState===WebSocket.OPEN||this.ws?.readyState===WebSocket.CONNECTING)return;
     const ws=new WebSocket(this.cfg.url,{...Config.tls(this.cfg),handshakeTimeout:Status.Timeout});this.ws=ws;
-    ws.on('open',()=>{if(this.ws!==ws)return;NativeHost.status(Status.Connected);for(const body of this.queue)ws.send(body.toString('utf8'));this.queue=[];});
+    ws.on('open',()=>{if(this.ws!==ws)return;this.delay=C.RetryMs;NativeHost.status(Status.Connected);for(const body of this.queue)ws.send(body.toString('utf8'));this.queue=[];});
     ws.on('message',data=>{const body=Buffer.from(data.toString());if(body.length>Limit.Frame)return this.stop(Status.Frame);NativeHost.write(body);});
     let reported=false;
-    const failed=(code:string)=>{if(this.ws!==ws)return;this.ws=undefined;this.queue=[];reported=true;NativeHost.status(Status.Error,code);ws.terminate();};
+    const failed=(code:string)=>{if(this.ws!==ws)return;this.ws=undefined;this.queue=[];reported=true;NativeHost.status(Status.Error,code);ws.terminate();this.later();};
     ws.on('error',(err:NodeJS.ErrnoException)=>failed(err.code===Status.Refused?Status.Offline:Status.TLSCodes.has(err.code??'')||err.message===Status.Pin?Status.TLS:Status.Closed));
     ws.on('unexpected-response',(_req,response)=>{response.resume();failed(Status.Auth);});
     ws.on('close',()=>{if(!reported)failed(Status.Closed);});
+  }
+  // Recover on our own after a Broker restart; older extensions never send probes.
+  private later():void{
+    if(this.stopped||this.retry)return;
+    this.retry=setTimeout(()=>{this.retry=undefined;this.enqueue(()=>this.cycle());},this.delay);
+    this.delay=Math.min(this.delay*2,C.RetryMax);
   }
   private feed(data:Buffer):void{
     this.input=Buffer.concat([this.input,data]);
@@ -69,7 +78,7 @@ export class NativeHost {
   private static status(state:string,code?:string,done?:()=>void):void{NativeHost.write(Buffer.from(JSON.stringify({type:Status.Type,state,code})),done);}
   private static fail(code:string):void{process.stderr.write(`${code}\n`);NativeHost.status(Status.Error,code,()=>process.exit(1));}
   private stop(code?:string):void{
-    if(this.stopped)return;this.stopped=true;this.ws?.terminate();
+    if(this.stopped)return;this.stopped=true;clearTimeout(this.retry);this.ws?.terminate();
     if(code)NativeHost.fail(code);else process.exit(0);
   }
   static run():void{

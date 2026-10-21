@@ -105,4 +105,6 @@ export class BrokerControl {
   static readonly LockMs = 15000;
   static readonly Delays = [1000, 2000, 4000, 8000, 16000];
   static readonly Limit = 5;
+  static readonly RetryMs = 1000;
+  static readonly RetryMax = 30000;
 }

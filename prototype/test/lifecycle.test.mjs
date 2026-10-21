@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createServer } from 'node:net';
 import { request } from 'node:https';
@@ -9,7 +9,7 @@ import { once } from 'node:events';
 import { BrokerLifecycle } from '../dist/lifecycle.js';
 import { Autostart } from '../dist/autostart.js';
 import { Config } from '../dist/config.js';
-import { BrokerControl as C } from '../dist/protocol.js';
+import { BrokerControl as C, PolicyKey } from '../dist/protocol.js';
 import { BridgeClient } from '../dist/client.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -29,6 +29,21 @@ class Fixture {
   static async wait(fn){const end=Date.now()+7000;while(Date.now()<end){const v=await fn();if(v)return v;await new Promise(r=>setTimeout(r,25));}throw Error('wait_timeout');}
   static control(cfg,path,method='GET',headers={}){return new Promise((resolve,reject)=>{const url=new URL(cfg.url);url.protocol='https:';url.pathname=path;const req=request(url,{...Config.tls(cfg),method,headers:{...Config.tls(cfg).headers,...headers}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);req.end();});}
 }
+test('lifecycle reports the policy summary without starting Broker',()=>{
+  mkdirSync('work',{recursive:true});
+  const root=mkdtempSync(resolve('work/life-policy-'));
+  try{
+    const policy=join(root,PolicyKey.File);
+    writeFileSync(join(root,'broker.json'),JSON.stringify({port:1,policyFile:policy}));
+    writeFileSync(policy,JSON.stringify({version:1,default:'deny',rules:[{id:'one',client:'*',origin:'*',actions:['*'],effect:'deny'}]}));
+    const life=new BrokerLifecycle(join(root,'host.json'));
+    assert.deepEqual(life.policy(),{[PolicyKey.Default]:'deny',[PolicyKey.Rules]:1});
+    writeFileSync(policy,'{');
+    assert.equal(life.policy(),undefined);
+    rmSync(policy);
+    assert.deepEqual(life.policy(),{[PolicyKey.Default]:'allow',[PolicyKey.Rules]:0});
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
 test('MCP and host share startup; off prevents MCP respawn; explicit on restarts',async t=>{
   const f=await Fixture.create(t);
   const starts=await Promise.all([f.life.ensure(),f.host.ensure(),f.life.ensure()]);

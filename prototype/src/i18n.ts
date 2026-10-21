@@ -36,6 +36,14 @@ export class McpText {
   } as const;
 }
 
+export class McpHint {
+  /** $1 is the extension folder to load. */
+  static readonly BROWSER = {
+    en: "browser_not_connected: no browser with the Tether extension is connected. Tether tried to start Chrome/Edge in the background. Open the browser, make sure the Tether extension is enabled (Load unpacked: $1), then retry.",
+    "zh-CN": "browser_not_connected：没有已连接的浏览器扩展。Tether 已尝试在后台启动 Chrome/Edge。请打开浏览器并确认 Tether 扩展已启用（加载已解压的扩展程序：$1），然后重试。",
+  } as const;
+}
+
 export class I18n {
   static select(explicit?: string, systemLocale?: string): typeof Language.EN | typeof Language.ZH_CN {
     if (explicit !== undefined) {

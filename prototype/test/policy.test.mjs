@@ -23,6 +23,15 @@ test('missing file allows; origins, ports, order, unknown origins and reload',()
  put([rule,{...rule,origin:K.Any,actions:[K.Any]}]);assert.equal(p.check('script',Action.Click,null),Effect.Deny);
  put([{...rule,client:'other'}]);assert.equal(p.check('script',Action.Fill,'https://bank.com'),Effect.Allow);
 });
+test('summary reports the default effect and rule count for broker status',()=>{
+ const p=new Policy(file);
+ put([rule],Effect.Deny);
+ assert.deepEqual(p.summary(),{default:Effect.Deny,rules:1,valid:true});
+ put([],Effect.Allow);
+ assert.deepEqual(p.summary(),{default:Effect.Allow,rules:0,valid:true});
+ writeFileSync(file,'{');
+ assert.deepEqual(p.summary(),{default:Effect.Deny,rules:0,valid:false});
+});
 test('ask only for exactly session; broken JSON fails closed and recovers',()=>{
  const p=new Policy(file);
  for(const actions of [[Action.Fill],[K.Any],[Action.Session,Action.Fill]]){

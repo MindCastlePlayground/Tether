@@ -113,3 +113,33 @@ test('native transport preserves fragmented frames and exits cleanly on stdin EO
   assert.equal(probe.stderr, '');
   wss.close();
 });
+
+test('host reconnects by itself after the Broker drops the connection', { timeout: 10000 }, async t => {
+  const { server, cfg } = await HostProbe.server(t);
+  const wss = new WebSocketServer({ server });
+  const first = once(wss, 'connection');
+  const probe = new HostProbe(cfg);
+  t.after(() => probe.close());
+  const [ws] = await first;
+  const second = once(wss, 'connection');
+  ws.terminate();
+  await second;
+  assert.ok(probe.frames.some(f=>f.state===Status.Error&&f.code===Status.Closed));
+  assert.ok(probe.frames.filter(f=>f.state===Status.Connected).length>=1);
+  for (const c of wss.clients) c.terminate();
+  wss.close();
+});
+
+test('host reports the extension build found on disk', { timeout: 10000 }, async t => {
+  const { cfg } = await HostProbe.server(t);
+  const probe = new HostProbe(cfg);
+  t.after(() => probe.close());
+  const ext = join(probe.dir, 'ext');
+  mkdirSync(ext);
+  writeFileSync(join(ext, 'manifest.json'), JSON.stringify({ version: '9.0.0', version_name: '9.0.0 (stamp)' }));
+  writeFileSync(join(resolve(probe.dir, '..'), 'extension-location.json'), JSON.stringify({ path: ext }));
+  t.after(() => rmSync(join(resolve(probe.dir, '..'), 'extension-location.json'), { force: true }));
+  const end = Date.now() + 5000;
+  while (!probe.frames.some(f => f.extension?.build === '9.0.0 (stamp)') && Date.now() < end) await new Promise(r => setTimeout(r, 50));
+  assert.ok(probe.frames.some(f => f.extension?.build === '9.0.0 (stamp)'));
+});

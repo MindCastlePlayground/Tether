@@ -54,6 +54,7 @@ npm run build
 | --- | --- |
 | MCP 工具列表可用，但浏览器调用失败 | 工具列表是离线元数据。检查 Broker 监听状态，再检查扩展/Native Host 连接。 |
 | `browserConnected:false` 或 `host_unavailable` | 检查现有浏览器、已加载/启用的扩展、正确的 Native Host 注册和本地宿主可执行文件。 |
+| `browser_not_connected` | MCP 已尝试拉起 Broker 并启动浏览器，等待 15 秒仍未连接。请用户打开浏览器并按消息中的目录启用 Tether 扩展；60 秒内重试会立即失败。 |
 | 连接/TLS/固定校验失败 | 检查角色配置、匹配的公有证书、地址和证书有效期。保留 TLS 和固定校验。 |
 | 关闭自动批准时状态为 `pending` | 请用户在工具栏中批准；不要调用不存在的审批 RPC。 |
 | `not_authorized` | 检查身份、会话生命周期、页面 ID、分组和撤销状态；仅针对预期任务重新获取授权。 |

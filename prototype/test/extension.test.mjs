@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ExtensionController } from '../extension/controller.js';
-import { Broker, NativeStatus, PopupMessage, Storage, Wire } from '../extension/protocol.js';
+import { Broker, BrowserAction, Failure, GuideMark, GuideStep, Limits, NativeStatus, PolicySummary, PopupMessage, SetupGuide, Storage, Wire } from '../extension/protocol.js';
 
 class Event {
   listeners = [];
@@ -19,7 +20,19 @@ class FakeChrome {
     };
     this.nativeConnections = 0;
     this.native = { onMessage: new Event(), onDisconnect: new Event(), messages: [], postMessage: m => this.native.messages.push(m) };
-    this.action = { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} };
+    this.i18n = { getUILanguage: () => 'en-US' };
+    this.action = {
+      badge: { text: '', color: null },
+      opened: 0,
+      setBadgeText: async ({ text }) => { this.action.badge.text = text; },
+      setBadgeBackgroundColor: async ({ color }) => { this.action.badge.color = color; },
+      openPopup: async () => { this.action.opened++; }
+    };
+    this.notifications = {
+      created: [], cleared: [], onButtonClicked: new Event(),
+      create: async (id, options) => { this.notifications.created.push({ id, ...options }); },
+      clear: async id => { this.notifications.cleared.push(id); }
+    };
     this.storage = {
       data: {},
       local: {
@@ -29,13 +42,17 @@ class FakeChrome {
     };
     this.tabs = {
       onRemoved: new Event(), onReplaced: new Event(), onUpdated: new Event(), onAttached: new Event(), onDetached: new Event(),
-      data: new Map([[1, { id: 1, url: 'https://example.test/a', title: 'Example', groupId: -1 }]]), next: 2,
+      data: new Map([[1, { id: 1, windowId: 10, url: 'https://example.test/a', title: 'Example', groupId: -1 }]]), next: 2,
       query: async () => [...this.tabs.data.values()],
       get: async id => { const tab = this.tabs.data.get(id); if (!tab) throw new Error('missing'); return { ...tab }; },
-      create: async () => { const id = this.tabs.next++; const tab = { id, url: 'about:blank', title: '', groupId: -1 }; this.tabs.data.set(id, tab); return { ...tab }; },
+      create: async () => { const id = this.tabs.next++; const tab = { id, windowId: 10, url: 'about:blank', title: '', groupId: -1 }; this.tabs.data.set(id, tab); return { ...tab }; },
       group: async ({ tabIds, groupId }) => { const gid = groupId ?? 9; for (const id of tabIds) this.tabs.data.get(id).groupId = gid; return gid; },
       update: async (id, changes) => { const tab = this.tabs.data.get(id); Object.assign(tab, changes); return { ...tab }; },
       remove: async id => { this.tabs.data.delete(id); }
+    };
+    this.windows = {
+      focused: [],
+      update: async (windowId, info) => { this.windows.focused.push([windowId, info]); return { id: windowId, ...info }; }
     };
     this.tabGroups = { onUpdated: new Event(), update: async id => ({ id }) };
     this.debugger = {
@@ -78,6 +95,35 @@ test('native diagnosis survives disconnect, pushes to popup, and clears on recov
   assert.equal(c.status.code, undefined);
   assert.equal(api.native.messages.length, 0);
 });
+test('setup guide derives done, failed, and pending marks from host setup errors', () => {
+  assert.equal(SetupGuide.marks('broker_unavailable'), null);
+  const config = SetupGuide.marks(NativeStatus.Config);
+  assert.equal(config[GuideStep.Install], GuideMark.Failed);
+  assert.equal(config[GuideStep.Register], GuideMark.Pending);
+  assert.equal(config[GuideStep.Broker], GuideMark.Pending);
+  const host = SetupGuide.marks(NativeStatus.Host);
+  assert.equal(host[GuideStep.Install], GuideMark.Pending);
+  assert.equal(host[GuideStep.Register], GuideMark.Failed);
+  assert.equal(host[GuideStep.Broker], GuideMark.Pending);
+  const origin = SetupGuide.marks(NativeStatus.Origin);
+  assert.equal(origin[GuideStep.Install], GuideMark.Done);
+  assert.equal(origin[GuideStep.Register], GuideMark.Failed);
+  assert.equal(origin[GuideStep.Broker], GuideMark.Pending);
+  assert.deepEqual(new Set(Object.values(GuideMark.Icon)), new Set(['✓', '✗', '…']));
+});
+
+test('popup live regions are stable and stay outside the rebuilt list', () => {
+  const html = readFileSync(new URL('../extension/popup.html', import.meta.url), 'utf8');
+  for (const id of ['live-status', 'live-pending', 'live-sessions']) {
+    const tag = html.match(new RegExp(`<div id="${id}"[^>]*>`));
+    assert.ok(tag);
+    assert.match(tag[0], /aria-live="polite"/);
+    assert.match(tag[0], /aria-atomic="true"/);
+  }
+  const main = html.match(/<main id="items">([\s\S]*?)<\/main>/)[1];
+  assert.equal(main.includes('aria-live'), false);
+});
+
 const clientB = 'client-bravo-0002';
 
 async function approvedExisting() {
@@ -191,6 +237,182 @@ test('native broker status is forwarded to popup without changing native websock
   } finally { c.stop(); }
 });
 
+test('native broker status forwards the policy summary unchanged to popups', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  c.start();
+  const sent = [];
+  try {
+    c.popups.add({ postMessage: m => sent.push(m) });
+    const policy = { [PolicySummary.Default]: PolicySummary.Allow, [PolicySummary.Rules]: 2 };
+    api.native.onMessage.fire({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateRunning, [PolicySummary.Field]: policy });
+    const message = sent.find(m => m.type === PopupMessage.BrokerStatus);
+    assert.deepEqual(message[PolicySummary.Field], policy);
+    api.native.onMessage.fire({ type: Broker.Status, mode: Broker.On, state: Broker.StateRunning, [PolicySummary.Field]: { [PolicySummary.Default]: PolicySummary.Deny, [PolicySummary.Rules]: 0 } });
+    assert.equal(sent.at(-1)[PolicySummary.Field][PolicySummary.Default], PolicySummary.Deny);
+  } finally { c.stop(); }
+});
+
+test('toolbar badge tracks pending count, active sessions, and broker failure', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  c.updateBadge();
+  assert.equal(api.action.badge.text, '');
+  const first = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  assert.equal(api.action.badge.text, '1');
+  assert.equal(api.action.badge.color, BrowserAction.BadgeColor);
+  const second = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
+  assert.equal(api.action.badge.text, '2');
+  c.deny(second.pendingId);
+  assert.equal(api.action.badge.text, '1');
+  await c.approve(first.pendingId, 1);
+  assert.equal(api.action.badge.text, BrowserAction.BadgeSession);
+  assert.equal(api.action.badge.color, BrowserAction.BadgeSessionColor);
+  c.setStatus({ state: NativeStatus.Error, code: 'native_host_failed' });
+  assert.equal(api.action.badge.text, BrowserAction.BadgeError);
+  assert.equal(api.action.badge.color, BrowserAction.BadgeErrorColor);
+  c.setStatus({ state: NativeStatus.Connected });
+  assert.equal(api.action.badge.text, BrowserAction.BadgeSession);
+  c.brokerStatus = { mode: Broker.Auto, state: Broker.StateBlocked };
+  c.publishBrokerStatus();
+  assert.equal(api.action.badge.text, BrowserAction.BadgeError);
+  await c.revoke([...c.sessions.keys()][0]);
+  c.brokerStatus = { mode: Broker.Auto, state: Broker.StateRunning };
+  c.publishBrokerStatus();
+  assert.equal(api.action.badge.text, '');
+});
+
+test('pending requests notify with mode-specific actions and clear when finished', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  c.start();
+  const attach = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', url: 'https://example.test/a' });
+  assert.equal(api.notifications.created.length, 1);
+  const notice = api.notifications.created[0];
+  assert.equal(notice.id, attach.pendingId);
+  assert.equal(notice.title, 'Tether');
+  assert.equal(notice.message, `${clientA} requests browser access`);
+  assert.deepEqual(notice.buttons.map(button => button.title), ['Open Tether', 'Deny']);
+  api.notifications.onButtonClicked.fire(attach.pendingId, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(api.action.opened, 1);
+  c.deny(attach.pendingId);
+  assert.deepEqual(api.notifications.cleared, [attach.pendingId]);
+
+  const group = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'newGroup' });
+  const groupNotice = api.notifications.created.at(-1);
+  assert.equal(groupNotice.id, group.pendingId);
+  assert.deepEqual(groupNotice.buttons.map(button => button.title), ['Approve', 'Deny']);
+  api.notifications.onButtonClicked.fire(group.pendingId, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(c.sessions.size, 1);
+  assert.ok(api.notifications.cleared.includes(group.pendingId));
+
+  const denied = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  api.notifications.onButtonClicked.fire(denied.pendingId, 1);
+  assert.equal((await c.approvalStatus({ clientId: clientA, pendingId: denied.pendingId })).status, Wire.Denied);
+  assert.ok(api.notifications.cleared.includes(denied.pendingId));
+  c.stop();
+});
+
+test('a notification resolving after denial is cleared and leaves no lingering notice', async () => {
+  const api = new FakeChrome();
+  const releases = [];
+  api.notifications.create = async (id, options) => {
+    api.notifications.created.push({ id, ...options });
+    await new Promise(resolve => releases.push(resolve));
+  };
+  const c = manual(new ExtensionController(api));
+  const request = c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  await new Promise(resolve => setImmediate(resolve));
+  const pendingId = [...c.pending.keys()][0];
+  assert.ok(pendingId);
+  assert.equal(api.notifications.created.length, 1);
+  c.deny(pendingId);
+  for (const release of releases) release();
+  assert.equal((await request).status, Wire.Denied);
+  assert.ok(api.notifications.cleared.includes(pendingId));
+  assert.equal(c.notices.size, 0);
+});
+
+test('a notification resolving after disconnect is cleared and leaves no lingering notice', async () => {
+  const api = new FakeChrome();
+  const releases = [];
+  api.notifications.create = async (id, options) => {
+    api.notifications.created.push({ id, ...options });
+    await new Promise(resolve => releases.push(resolve));
+  };
+  const c = manual(new ExtensionController(api));
+  const request = c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  await new Promise(resolve => setImmediate(resolve));
+  const pendingId = [...c.pending.keys()][0];
+  await c.disconnected();
+  for (const release of releases) release();
+  await request;
+  assert.ok(api.notifications.cleared.includes(pendingId));
+  assert.equal(c.notices.size, 0);
+  assert.equal(c.pending.size, 0);
+});
+
+test('an unusable attach url still reaches pending approval', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const first = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', url: 'file:///secret' });
+  assert.equal(first.status, Wire.Pending);
+  assert.equal(c.pending.get(first.pendingId).url, null);
+  const second = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', url: 'https://user:pass@example.test/private' });
+  assert.equal(second.status, Wire.Pending);
+  assert.equal(c.pending.get(second.pendingId).url, null);
+  assert.equal(c.pending.size, 2);
+});
+
+test('expired requests clear notifications and the preference disables them', async () => {
+  const api = new FakeChrome();
+  let now = 1000;
+  const c = manual(new ExtensionController(api, () => now));
+  const expired = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  now += Limits.PendingMs + 1;
+  c.sweep();
+  assert.ok(api.notifications.cleared.includes(expired.pendingId));
+  const sender = { url: api.runtime.getURL('popup.html') };
+  const sent = [];
+  await c.popup({ type: PopupMessage.SetNotify, enabled: false }, sender, { postMessage: m => sent.push(m) });
+  assert.equal(api.storage.data[Storage.Notify], false);
+  assert.deepEqual(sent, [{ type: PopupMessage.Notify, enabled: false }]);
+  await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
+  assert.equal(api.notifications.created.length, 1);
+});
+
+test('tab chooser responses include the active flag and keep the requested URL', async () => {
+  const api = new FakeChrome();
+  api.tabs.data.get(1).active = true;
+  const c = manual(new ExtensionController(api));
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', url: 'https://example.test/a' });
+  assert.equal(messages.find(message => message.type === PopupMessage.Pending).items[0].url, 'https://example.test/a');
+  const sent = [];
+  await c.popup({ type: PopupMessage.Tabs, pendingId: pending.pendingId },
+    { url: api.runtime.getURL('popup.html') }, { postMessage: message => sent.push(message) });
+  assert.deepEqual(sent[0].tabs[0], {
+    tabId: 1, title: 'Example', url: 'https://example.test/a', groupId: -1, active: true
+  });
+});
+
+test('same-title navigation broadcasts the updated page URL', async () => {
+  const { api, c } = await approvedExisting();
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  c.start();
+  try {
+    api.tabs.data.get(1).url = 'https://example.test/b';
+    api.tabs.onUpdated.fire(1, { url: 'https://example.test/b' });
+    const sessions = messages.filter(message => message.type === PopupMessage.Sessions);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].items[0].pages[0].url, 'https://example.test/b');
+  } finally { c.stop(); }
+});
+
 test('a restarted controller honors the stored auto approval preference', async () => {
   const api = new FakeChrome();
   const first = new ExtensionController(api);
@@ -267,9 +489,58 @@ test('the real popup can list and revoke an active session', async () => {
   const sender = { url: api.runtime.getURL('popup.html') };
   await c.popup({ type: 'popup.sessions' }, sender, port);
   assert.equal(messages[0].items[0].sessionId, approved.sessionId);
+  assert.ok(Number.isFinite(messages[0].items[0].started));
+  assert.equal(messages[0].items[0].pages[0].tabId, 1);
+  assert.equal(messages[0].items[0].pages[0].title, 'Example');
   await c.popup({ type: 'popup.revoke', sessionId: approved.sessionId }, sender, port);
   assert.equal(c.sessions.size, 0);
   assert.equal(c.pages.size, 0);
+});
+
+test('popup can focus an approved tab and revoke all active sessions', async () => {
+  const api = new FakeChrome();
+  let now = 5000;
+  const c = new ExtensionController(api, () => now);
+  const first = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  const second = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'newGroup', url: 'https://safe.test/page' });
+  assert.equal(c.sessions.size, 2);
+  const sender = { url: api.runtime.getURL('popup.html') };
+  const messages = [];
+  const port = { postMessage: value => messages.push(value) };
+  c.popups.add(port);
+  await c.popup({ type: PopupMessage.Sessions }, sender, port);
+  const items = messages.at(-1).items;
+  assert.equal(items.length, 2);
+  assert.equal(items[0].started, 5000);
+  assert.equal(items[0].pages[0].tabId, 1);
+  assert.equal(items[0].pages[0].title, 'Example');
+  await c.popup({ type: PopupMessage.Focus, tabId: 1 }, sender, port);
+  assert.equal(api.tabs.data.get(1).active, true);
+  assert.deepEqual(api.windows.focused, [[10, { focused: true }]]);
+  await c.popup({ type: PopupMessage.Focus, tabId: 999 }, sender, port);
+  assert.deepEqual(messages.at(-1), { type: PopupMessage.Error, message: Failure.Invalid });
+  await c.popup({ type: PopupMessage.RevokeAll }, sender, port);
+  assert.equal(c.sessions.size, 0);
+  assert.equal(c.pages.size, 0);
+  assert.deepEqual(messages.filter(m => m.type === PopupMessage.Sessions).at(-1).items, []);
+  void first; void second;
+});
+
+test('unchanged tab title does not republish sessions', async () => {
+  const { api, c } = await approvedExisting();
+  const messages = [];
+  c.popups.add({ postMessage: m => messages.push(m) });
+  c.start();
+  try {
+    api.tabs.onUpdated.fire(1, { title: 'Example' });
+    assert.equal(messages.filter(m => m.type === PopupMessage.Sessions).length, 0);
+    api.tabs.onUpdated.fire(1, { title: 'Renamed' });
+    const sent = messages.filter(m => m.type === PopupMessage.Sessions);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].items[0].pages[0].title, 'Renamed');
+  } finally {
+    c.stop();
+  }
 });
 
 test('grants are client and page scoped; release detaches but keeps a user-owned tab', async () => {
@@ -321,12 +592,15 @@ test('revocation removes page grants before waiting for debugger detach', async 
   const { api, c, approved } = await approvedExisting();
   const ids = { clientId: clientA, sessionId: approved.sessionId, pageId: approved.pages[0].pageId };
   await c.dispatch(Wire.Attach, ids);
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
   let finish;
   api.debugger.detach = async () => new Promise(resolve => { finish = resolve; });
   const revoking = c.dispatch(Wire.Release, { clientId: clientA, sessionId: ids.sessionId });
   await Promise.resolve();
   assert.equal(c.sessions.size, 0);
   assert.equal(c.pages.size, 0);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Sessions).at(-1)?.items, []);
   finish();
   await revoking;
 });
@@ -396,6 +670,66 @@ test('native disconnect reconnects without restoring prior grants', async () => 
   c.stop();
 });
 
+test('pending and session changes are broadcast to every open popup', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  const pushed = messages.filter(message => message.type === PopupMessage.Pending);
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].items[0].pendingId, pending.pendingId);
+  assert.ok(pushed[0].items[0].expires > Date.now());
+  await c.approve(pending.pendingId, 1);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Pending).at(-1).items, []);
+  const sessions = messages.filter(message => message.type === PopupMessage.Sessions);
+  assert.equal(sessions.at(-1).items[0].clientId, clientA);
+  await c.revoke(sessions.at(-1).items[0].sessionId);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Sessions).at(-1).items, []);
+});
+
+test('denied, expired, and auto approval changes push fresh popup lists', async () => {
+  const api = new FakeChrome();
+  let now = 1000;
+  const c = manual(new ExtensionController(api, () => now));
+  const messages = [];
+  c.popups.add({ postMessage: message => messages.push(message) });
+  const denied = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  c.deny(denied.pendingId);
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Pending).at(-1).items, []);
+  await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1 });
+  now += Limits.PendingMs + 1;
+  c.sweep();
+  assert.deepEqual(messages.filter(message => message.type === PopupMessage.Pending).at(-1).items, []);
+  messages.length = 0;
+  await c.popup({ type: PopupMessage.SetAutoApproval, enabled: false },
+    { url: api.runtime.getURL('popup.html') }, { postMessage() {} });
+  assert.equal(messages.filter(message => message.type === PopupMessage.Pending).length, 1);
+  assert.equal(messages.filter(message => message.type === PopupMessage.Sessions).length, 1);
+});
+
+test('auto approval of a closed tab denies the request instead of leaving it pending', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  api.tabs.data.delete(1);
+  const result = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  assert.equal(result.status, Wire.Denied);
+  assert.equal(c.pending.size, 0);
+});
+
+test('approval of a closed tab reports invalid_request instead of denying', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  api.tabs.data.delete(1);
+  await assert.rejects(c.approve(pending.pendingId, 1), /invalid_request/);
+  assert.notEqual(c.results.get(pending.pendingId)?.status, Wire.Denied);
+  const messages = [];
+  await c.popup({ type: PopupMessage.Approve, pendingId: pending.pendingId, tabId: 1 },
+    { url: api.runtime.getURL('popup.html') }, { postMessage: message => messages.push(message) });
+  assert.deepEqual(messages, [{ type: PopupMessage.Error, message: Failure.Invalid }]);
+});
+
 test('heartbeats renew a client lease and expiry removes the grant', async () => {
   const api = new FakeChrome();
   let now = 1000;
@@ -412,4 +746,30 @@ test('heartbeats renew a client lease and expiry removes the grant', async () =>
   c.sweep();
   assert.equal(c.sessions.size, 0);
   await assert.rejects(c.dispatch(Wire.ListTabs, { clientId: clientA, sessionId: approval.sessionId }), /not_authorized/);
+});
+
+test('extension reloads once when the build on disk changes and no session is active', async () => {
+  const api = new FakeChrome();
+  let reloads = 0;
+  api.runtime.getManifest = () => ({ version: '1.1.0' });
+  api.runtime.reload = () => { reloads++; };
+  const c = new ExtensionController(api);
+  c.start();
+  try {
+    const status = build => ({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateRunning, [Broker.Extension]: { [Broker.Build]: build } });
+    api.native.onMessage.fire(status('1.1.0'));
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(reloads, 0);
+    c.sessions.set('busy', { clientId: clientA });
+    api.native.onMessage.fire(status('1.1.0 (next)'));
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(reloads, 0);
+    c.sessions.delete('busy');
+    await c.reloadIfIdle();
+    assert.equal(reloads, 1);
+    assert.equal(api.storage.data[Storage.Reloaded], '1.1.0 (next)');
+    c.reloadTried = null;
+    await c.reloadIfIdle();
+    assert.equal(reloads, 1);
+  } finally { c.stop(); }
 });

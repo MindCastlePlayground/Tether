@@ -33,8 +33,11 @@ export class Broker {
         const token=typeof auth==='string'&&auth.startsWith(Wire.Bearer)?auth.slice(Wire.Bearer.length):'';
         const hash=Config.hash(token);const identity=Object.entries(this.cfg.tokens as Record<string,string>).find(([,v])=>v.length===hash.length&&timingSafeEqual(Buffer.from(v),Buffer.from(hash)))?.[0];
         if(req.url!==Wire.Path||req.headers[Wire.Origin]!==undefined||!allow.check(ip,'ipv4')||!identity||(identity===Wire.Host&&ip!=='127.0.0.1')){socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');return;}
-        if(identity===Wire.Host?!!this.host:this.clients.has(identity)){socket.end('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');return;}
-        wss.handleUpgrade(req,socket,head,ws=>this.connected(ws,identity));
+        if(identity===Wire.Host&&this.host){socket.end('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');return;}
+        if(identity!==Wire.Host&&this.clients.size>=Limit.Clients){socket.end(Wire.Busy);return;}
+        // Each client connection is its own instance, so several agents can share one credential.
+        const id=identity===Wire.Host?identity:this.instance(identity);
+        wss.handleUpgrade(req,socket,head,ws=>this.connected(ws,id));
       });
       await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(bind.port,bind.ip,()=>resolve());});this.servers.push(server);
     } } catch (err) { await this.stop(); throw err; }
@@ -72,6 +75,8 @@ export class Broker {
       else{this.clients.delete(identity);this.engine.drop(identity);void this.forward(Method.Lost,{clientId:identity}).catch(()=>{});for(const key of this.ledger.keys())if(key.startsWith(identity+'/'))this.ledger.delete(key);}
     });
   }
+  private instance(identity:string):string{let id:string;do id=identity+Wire.Instance+randomUUID().slice(0,8);while(this.clients.has(id));return id;}
+  static identity(clientId:string):string{return clientId.split(Wire.Instance)[0];}
   private send(ws:WebSocket,msg:RPC):void{const body=JSON.stringify(msg);if(Buffer.byteLength(body)>Limit.Frame){ws.close(1009);return;}ws.send(body);}
   private forward(method:string,params:Params):Promise<any>{
     if(!this.host||this.host.readyState!==WebSocket.OPEN)return Promise.reject(Error('host_unavailable'));
@@ -85,7 +90,7 @@ export class Broker {
     if(msg.jsonrpc!==Wire.Version||msg.id===undefined||!msg.method||!PUBLIC.has(msg.method)||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)||Object.hasOwn(msg.params,'clientId'))throw Error('invalid_request');
     if(msg.method===Method.Capabilities)return {prototype:'M0',browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC],unsupported:['oopif','autoPopup','files','rawCDP','chunks','fullRefProtocol'],policy:this.policy.summary()};
     const params:Params={...msg.params,clientId};
-    this.policy.check(clientId,null,null);
+    const who=Broker.identity(clientId);this.policy.check(who,null,null);
     const action=msg.method===Method.Request?Action.Session:Object.values(Action).find(a=>a===msg.method)??null;
     let origin:string|null=null;let pages:Params[]|undefined;
     if(action===Action.Navigate||action===Action.Create||(action===Action.Session&&params.mode===PolicyKey.New))origin=params.url??null;
@@ -96,12 +101,14 @@ export class Broker {
         origin=pages?.find(v=>action===Action.Session?v.tabId===params.tabId:v.pageId===params.pageId)?.url??null;
       }catch{}
     }
-    const effect=this.policy.check(clientId,action,origin);
+    const effect=this.policy.check(who,action,origin);
     if(effect===Effect.Deny)throw Error(PolicyKey.Denied);
     delete params[PolicyKey.Ask];if(effect===Effect.Ask)params[PolicyKey.Ask]=true;
     if(!WRITES.has(msg.method))return this.run(msg.method,params,pages);
     // Writes re-read pages inside the queue so earlier writes in the session are reflected.
     if(typeof params.sessionId!=='string'||!Number.isSafeInteger(params.seq)||params.seq<=0)throw Error('invalid_seq');
+    // Refuse before recording the seq, so host_unavailable always means "not executed" and is safe to retry.
+    if(!this.host||this.host.readyState!==WebSocket.OPEN)throw Error('host_unavailable');
     const key=`${clientId}/${params.sessionId}`;let l=this.ledger.get(key);
     if(!l){l={high:0,records:new Map(),tail:Promise.resolve()};this.ledger.set(key,l);}
     const body=JSON.stringify([msg.method,Object.entries(msg.params).sort(([a],[b])=>a.localeCompare(b))]);
@@ -117,7 +124,7 @@ export class Broker {
       let pages:Params[]=known??[];
       if(!known||WRITES.has(method)){const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});pages=Array.isArray(tabs)?tabs:(tabs.pages??tabs.tabs??[]);}
       const page=pages.find((v:Params)=>v.pageId===p.pageId);if(!page)throw Error('page_forbidden');
-      if(this.policy.check(p.clientId,method as Action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
+      if(this.policy.check(Broker.identity(p.clientId),method as Action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
       if(method!==Method.Observe&&(typeof p.selector!=='string'||p.selector.length>2000||typeof(p.value??'')!=='string'||(p.value??'').length>16000))throw Error('invalid_params');
       try{return await this.engine.run(method,p);}catch{if(method===Method.Observe)throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
     }

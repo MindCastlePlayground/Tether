@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Files } from './files.mjs';
+import { Service } from './service.mjs';
 import { Hint, Install, InstallOption } from './constants.mjs';
 
 export class Runtime {
@@ -70,7 +71,10 @@ export class Runtime {
     const pub = path.join(root, Install.KEY);
     if (!fs.existsSync(pub)) return;
     const file = path.join(extension, 'manifest.json');
-    fs.writeFileSync(file, `${JSON.stringify({ ...Files.json(file), key: Files.json(pub).key }, null, 2)}\n`);
+    const manifest = Files.json(file);
+    // A new build name lets the loaded extension notice the upgrade and reload itself.
+    const build = `${manifest.version ?? Install.VERSION} (${new Date().toISOString().replace(/[-:]|\.\d+Z$/g, '')})`;
+    fs.writeFileSync(file, `${JSON.stringify({ ...manifest, key: Files.json(pub).key, version_name: build }, null, 2)}\n`);
   }
   static finish(root, options) {
     Runtime.deps(root);
@@ -87,6 +91,7 @@ export class Runtime {
     const marker = path.join(root, Install.MARKER);
     if (!fs.existsSync(marker)) throw new Error(`Runtime ${root} has no install marker. Run ${Hint.INSTALL} first.`);
     Runtime.location(root, options);
+    const running = Service.halt(root);
     Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: false })}\n`);
     Runtime.swap(root, source, options);
     Runtime.key(root);
@@ -97,6 +102,9 @@ export class Runtime {
     Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
     Runtime.sync(root, { ...options, [InstallOption.UPGRADE]: true });
     Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
+    // The extension respawns its host while we build; stop anything started from the old code.
+    const again = Service.halt(root);
+    return { running: running || again, state: running || again ? Service.resume(root) : undefined };
   }
   static location(root, options) {
     const saved = path.join(root, Install.EXTENSION_LOCATION);

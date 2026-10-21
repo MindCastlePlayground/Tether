@@ -6,12 +6,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { Config } from './config.js';
-import { Autostart as Opt, Brand, BrokerControl as C, NativeStatus } from './protocol.js';
+import { Policy } from './policy.js';
+import { Autostart as Opt, Brand, BrokerControl as C, NativeStatus, PolicyKey } from './protocol.js';
 
 export interface BrokerState { mode: string; state: string; attempt: number; retryAt: number; code?: string }
 export class BrokerLifecycle {
   private file: string;
   private lock: string;
+  private policyPath?: string;
+  private policyReader?: Policy;
   constructor(private cfgPath: string) {
     this.file = join(dirname(cfgPath), C.StateFile);
     this.lock = join(dirname(cfgPath), C.Lock);
@@ -98,6 +101,16 @@ export class BrokerLifecycle {
     if (s.mode === C.Off) return s;
     try { await this.control(C.Health); return { ...s, state: C.Running, code: undefined }; }
     catch (err) { const code=BrokerLifecycle.code(err); return { ...s, state: C.Stopped, code: code===C.Port?NativeStatus.Offline:code }; }
+  }
+  policy(): { [key: string]: string | number } | undefined {
+    try {
+      const broker = Config.load(join(dirname(this.cfgPath), Opt.Broker));
+      const file = broker.policyFile ?? join(dirname(this.cfgPath), PolicyKey.File);
+      if (!this.policyReader || this.policyPath !== file) { this.policyPath = file; this.policyReader = new Policy(file); }
+      const summary = this.policyReader.summary();
+      if (!summary.valid) return undefined;
+      return { [PolicyKey.Default]: summary.default, [PolicyKey.Rules]: summary.rules };
+    } catch { return undefined; }
   }
   private running(s: BrokerState): BrokerState { return this.save({ mode: s.mode, state: C.Running, attempt: 0, retryAt: 0 }); }
   private fail(s: BrokerState, code: string): BrokerState {

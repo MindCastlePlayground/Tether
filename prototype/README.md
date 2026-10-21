@@ -62,7 +62,7 @@ For an MCP client using `mcpServers`, replace the placeholder with the absolute 
 
 ## Authorization and boundaries
 
-An authenticated client receives the configured session permissions for task pages or the one explicitly selected existing tab. Page access is scoped to the client, session, and page. Existing pages are not closed by session cleanup; only pages created by that session may be closed. Turning off automatic approval prevents new automatic grants but does not revoke existing sessions.
+An authenticated client receives the configured session permissions for task pages or the one explicitly selected existing tab. Page access is scoped to the client, session, and page. Several clients, such as concurrent agents, may connect with the same credential; each connection becomes its own instance (`<identity>#<id>`), policy rules still match the credential identity, and sessions are released when their connection closes. Existing pages are not closed by session cleanup; only pages created by that session may be closed. Turning off automatic approval prevents new automatic grants but does not revoke existing sessions.
 
 Keep TLS and certificate pin checks enabled. The Native Host role accepts loopback connections only. The extension blocks its own network connections; page navigation intentionally communicates with requested websites. These controls do not establish that the whole browser profile has zero external traffic or isolate other processes running as the same user. See the dated [verification summary](VERIFICATION.md) for tested flows and limits.
 

@@ -3,9 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { BridgeClient, loadConfig } from "./client.js";
 import { Rpc } from "./client-constants.js";
-import { Brand } from "./protocol.js";
+import { Config } from "./config.js";
+import { Brand, Method, Wake } from "./protocol.js";
 import { Autostart } from "./autostart.js";
-import { I18n, McpText } from "./i18n.js";
+import { I18n, McpHint, McpText } from "./i18n.js";
+import { BrowserWake } from "./wake.js";
 
 class McpTools {
   static readonly EMPTY = z.object({});
@@ -40,6 +42,8 @@ async function main(): Promise<void> {
   const path = process.env.BB_CLIENT_CONFIG;
   if (!path) throw new Error("missingConfigPath");
   const client = new BridgeClient(await loadConfig(path));
+  const wake = new BrowserWake(client);
+  const folder = Config.extension(path);
   const server = new Server({ name: Brand.Name, version: Brand.Version }, { capabilities: { tools: {} } });
   const descriptions = McpText.TOOLS[I18n.language()];
   const tools = [
@@ -63,7 +67,25 @@ async function main(): Promise<void> {
     const item = tools.find(t => t[0] === name);
     if (!item) throw new Error("unsupportedMethod");
     const parsed = item[2].parse(args) as Record<string, unknown>;
-    const result = await client.call(name as typeof Rpc.METHODS[number], parsed);
+    const run = async () => {
+      if (name !== Method.Capabilities) await wake.ready();
+      return client.call(name as typeof Rpc.METHODS[number], parsed);
+    };
+    let result;
+    try {
+      try { result = await run(); }
+      catch (e) {
+        // Recover the Broker/browser link, then retry what is known to be safe.
+        const code = (e as Error).message;
+        if (!Wake.Unsent.has(code) && !Wake.Lost.has(code)) throw e;
+        wake.lost();
+        if (!Wake.Unsent.has(code) && !Wake.Reads.has(name)) throw e;
+        result = await run();
+      }
+    } catch (e) {
+      if ((e as Error).message === Wake.Missing) throw new Error(McpHint.BROWSER[I18n.language()].replace("$1", () => folder));
+      throw e;
+    }
     return { content: [{ type: "text", text: JSON.stringify(result) }] };
   });
   await server.connect(new StdioServerTransport());

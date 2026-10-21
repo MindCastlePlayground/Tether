@@ -15,7 +15,8 @@
     "tabs",
     "tabGroups",
     "storage",
-    "alarms"
+    "alarms",
+    "notifications"
   ],
   "background": {
     "service_worker": "service-worker.js",

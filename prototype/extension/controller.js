@@ -1,4 +1,5 @@
-import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PopupMessage, Storage, Wire } from './protocol.js';
+import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PolicySummary, PopupMessage, SessionMode, Storage, Wire } from './protocol.js';
+import { Locale, Text } from './i18n.js';
 
 export class ExtensionController {
   constructor(api = globalThis.chrome, clock = () => Date.now(), userAgent = () => globalThis.navigator.userAgent) {
@@ -25,6 +26,11 @@ export class ExtensionController {
     this.retryTimer = null;
     this.wasConnected = false;
     this.popups = new Set();
+    this.notifyNew = true;
+    this.notices = new Set();
+    this.update = null;
+    this.reloadTried = null;
+    this.locale = new Locale(api);
   }
 
   start() {
@@ -35,12 +41,19 @@ export class ExtensionController {
       port.onDisconnect.addListener(() => this.popups.delete(port));
       port.onMessage.addListener(msg => this.popup(msg, port.sender, port));
     });
+    // Registering onStartup makes Chrome start this worker with the browser, including a background wake.
+    this.api.runtime.onStartup?.addListener(() => this.probe());
     this.api.alarms?.onAlarm?.addListener(alarm => { if (alarm.name === Broker.Alarm) this.probe(); });
     this.api.alarms?.create?.(Broker.Alarm, { periodInMinutes: 0.5 });
+    this.api.notifications?.onButtonClicked?.addListener((id, index) => this.notificationClicked(id, index));
     this.api.tabs.onRemoved.addListener(tabId => this.dropTab(tabId));
     this.api.tabs.onReplaced.addListener((added, removed) => { this.dropTab(removed); });
     this.api.tabs.onUpdated.addListener((tabId, change) => {
       if (change.url) this.checkUrl(tabId, change.url);
+      if (typeof change.title === 'string') {
+        const page = [...this.pages.values()].find(x => x.tabId === tabId);
+        if (page && page.title !== change.title) { page.title = change.title; this.publishSessions(); }
+      }
       if (Object.hasOwn(change, 'groupId')) this.checkTabGroup(tabId);
     });
     this.api.tabs.onDetached.addListener(tabId => this.dropTab(tabId));
@@ -61,12 +74,16 @@ export class ExtensionController {
   }
 
   async load() {
+    await this.locale.load();
     try {
       const data = await this.api.storage.local.get(Storage.AutoApprove);
       const broker = await this.api.storage.local.get(Storage.BrokerMode);
+      const notice = await this.api.storage.local.get(Storage.Notify);
       if (typeof data?.[Storage.AutoApprove] === 'boolean') this.autoApprove = data[Storage.AutoApprove];
       if ([Broker.Auto, Broker.On, Broker.Off].includes(broker?.[Storage.BrokerMode])) this.brokerMode = broker[Storage.BrokerMode];
+      if (typeof notice?.[Storage.Notify] === 'boolean') this.notifyNew = notice[Storage.Notify];
     } catch { /* Keep the default when preferences are unavailable. */ }
+    this.updateBadge();
   }
 
   async saveBrokerMode() { try { await this.api.storage.local.set({ [Storage.BrokerMode]: this.brokerMode }); } catch { /* Retain the choice in memory. */ } }
@@ -84,13 +101,56 @@ export class ExtensionController {
     if (![Broker.Auto, Broker.On, Broker.Off].includes(mode)) return;
     this.brokerMode = mode;
     await this.saveBrokerMode();
-    this.brokerStatus = { mode, state: mode === Broker.Off ? Broker.StateStopped : Broker.StateStarting };
+    const keep = this.brokerStatus[PolicySummary.Field];
+    this.brokerStatus = { mode, state: mode === Broker.Off ? Broker.StateStopped : Broker.StateStarting, ...(keep ? { [PolicySummary.Field]: keep } : {}) };
     this.sendBroker(Broker.ModeAction);
     this.publishBrokerStatus();
   }
 
   publishBrokerStatus() {
     for (const port of this.popups) { try { port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus }); } catch { this.popups.delete(port); } }
+    this.updateBadge();
+  }
+
+  publishPending() { this.publish(PopupMessage.Pending, this.pendingItems()); this.updateBadge(); }
+
+  publishSessions() { this.publish(PopupMessage.Sessions, this.sessionItems()); this.updateBadge(); }
+
+  updateBadge() {
+    const failed = this.status.state === NativeStatus.Error || this.brokerStatus.state === Broker.StateBlocked;
+    let text = '';
+    let color = BrowserAction.BadgeColor;
+    if (this.pending.size) text = String(Math.min(this.pending.size, 99));
+    else if (failed) { text = BrowserAction.BadgeError; color = BrowserAction.BadgeErrorColor; }
+    else if (this.sessions.size) { text = BrowserAction.BadgeSession; color = BrowserAction.BadgeSessionColor; }
+    try {
+      this.api.action.setBadgeText({ text });
+      this.api.action.setBadgeBackgroundColor({ color });
+    } catch { /* Badge updates are best effort. */ }
+  }
+
+  publish(type, items) {
+    for (const port of this.popups) { try { port.postMessage({ type, items }); } catch { this.popups.delete(port); } }
+  }
+
+  pendingItems() {
+    return [...this.pending].map(([pendingId, x]) => ({
+      pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
+    }));
+  }
+
+  sessionItems() {
+    return [...this.sessions.values()].map(s => ({
+      sessionId: s.sessionId, clientId: s.clientId, mode: s.mode, started: s.started,
+      pages: [...s.pages].map(id => {
+        const p = this.pages.get(id);
+        return p ? {
+          pageId: id, url: p.url,
+          ...(p.tabId !== undefined ? { tabId: p.tabId } : {}),
+          ...(p.title ? { title: p.title } : {})
+        } : null;
+      }).filter(Boolean)
+    }));
   }
 
   async save() {
@@ -114,7 +174,7 @@ export class ExtensionController {
           }
           return;
         }
-        if (message?.type === Broker.Status) { this.brokerStatus = message; this.publishBrokerStatus(); return; }
+        if (message?.type === Broker.Status) { this.brokerStatus = message; this.publishBrokerStatus(); void this.checkBuild(message[Broker.Extension]?.[Broker.Build]); return; }
         this.receive(message);
       });
       this.port.onDisconnect.addListener(() => {
@@ -137,6 +197,7 @@ export class ExtensionController {
     for (const port of this.popups) {
       try { port.postMessage({ type: PopupMessage.Status, ...status }); } catch { this.popups.delete(port); }
     }
+    this.updateBadge();
   }
 
   async receive(msg) {
@@ -202,17 +263,57 @@ export class ExtensionController {
     if ([...this.pending.values()].some(x => x.clientId === p.clientId)) throw new Error(Failure.Busy);
     if (!['newGroup', 'attachExisting'].includes(p.mode)) throw new Error(Failure.Invalid);
     if (p.tabId !== undefined && !Number.isInteger(p.tabId)) throw new Error(Failure.Invalid);
-    const url = p.mode === 'newGroup' ? this.safeUrl(p.url ?? BrowserAction.NewTab, true) : null;
+    let url = null;
+    if (p.mode === SessionMode.NewGroup) url = this.safeUrl(p.url ?? BrowserAction.NewTab, true);
+    else if (typeof p.url === 'string') { try { url = this.safeUrl(p.url, false); } catch { url = null; } }
     const pendingId = this.id();
     this.pending.set(pendingId, { clientId: p.clientId, mode: p.mode, url, expires: this.clock() + Limits.PendingMs });
     this.statusSet(pendingId, p.clientId, { status: Wire.Pending });
-    this.api.action.setBadgeText({ text: BrowserAction.BadgePending });
-    this.api.action.setBadgeBackgroundColor({ color: BrowserAction.BadgeColor });
-    if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined)))
-      await this.approve(pendingId, p.tabId);
+    this.publishPending();
+    await this.notify(pendingId, p);
+    if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined))) {
+      try { await this.approve(pendingId, p.tabId); }
+      catch { if (this.pending.has(pendingId)) this.deny(pendingId); }
+    }
     const result = this.results.get(pendingId);
     if (result?.status === Wire.Approved) return { pendingId, ...result.value, status: result.status };
     return { pendingId, status: result?.status ?? Wire.Pending };
+  }
+
+  async notify(id, p) {
+    if (this.autoApprove || !this.notifyNew || !this.pending.has(id)) return;
+    this.notices.add(id);
+    await this.locale.load();
+    if (!this.pending.has(id)) return;
+    const keys = p.mode === SessionMode.NewGroup ? [Text.NotifyApprove] : [Text.NotifyOpen];
+    const buttons = [...keys, Text.NotifyDeny].map(key => ({ title: this.locale.get(key) }));
+    try {
+      await this.api.notifications?.create?.(id, {
+        type: BrowserAction.NotificationBasic,
+        iconUrl: this.api.runtime.getURL(BrowserAction.NotificationIcon),
+        title: this.locale.get(Text.AppName),
+        message: this.locale.get(Text.NotifyBody).replace('$1', () => p.clientId),
+        buttons
+      });
+      if (!this.pending.has(id)) this.clearNotice(id);
+    } catch { /* Notifications may be unavailable. */ }
+  }
+
+  clearNotice(id) {
+    this.notices.delete(id);
+    try { Promise.resolve(this.api.notifications?.clear?.(id)).catch(() => {}); } catch { /* Ignore. */ }
+  }
+
+  notificationClicked(id, index) {
+    const p = this.pending.get(id);
+    if (!p) { this.clearNotice(id); return; }
+    if (index > 0) { this.deny(id); return; }
+    if (p.mode === SessionMode.NewGroup) { void this.approve(id).catch(() => {}); return; }
+    void this.openPopup();
+  }
+
+  async openPopup() {
+    try { await this.api.action.openPopup?.(); } catch { /* Popups cannot always be opened programmatically. */ }
   }
 
   async approvalStatus(p) {
@@ -236,9 +337,7 @@ export class ExtensionController {
         await this.setBrokerMode(msg.mode);
         port.postMessage({ ...this.brokerStatus, type: PopupMessage.BrokerStatus });
       } else if (msg?.type === PopupMessage.Pending) {
-        port.postMessage({ type: msg.type, items: [...this.pending].map(([pendingId, x]) => ({
-          pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
-        })) });
+        port.postMessage({ type: msg.type, items: this.pendingItems() });
       } else if (msg?.type === PopupMessage.AutoApproval) {
         await this.ready;
         port.postMessage({ type: msg.type, enabled: this.autoApprove });
@@ -246,29 +345,51 @@ export class ExtensionController {
         this.autoApprove = msg.enabled === true;
         await this.save();
         port.postMessage({ type: PopupMessage.AutoApproval, enabled: this.autoApprove });
+        this.publishPending();
+        this.publishSessions();
+      } else if (msg?.type === PopupMessage.Notify) {
+        await this.ready;
+        port.postMessage({ type: msg.type, enabled: this.notifyNew });
+      } else if (msg?.type === PopupMessage.SetNotify) {
+        this.notifyNew = msg.enabled === true;
+        try { await this.api.storage.local.set({ [Storage.Notify]: this.notifyNew }); } catch { /* Retain the choice in memory. */ }
+        port.postMessage({ type: PopupMessage.Notify, enabled: this.notifyNew });
       } else if (msg?.type === PopupMessage.Tabs) {
         const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });
         port.postMessage({ type: msg.type, pendingId: msg.pendingId, tabs: tabs.map(t => ({
-          tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1
+          tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1, active: t.active === true
         })) });
       } else if (msg?.type === PopupMessage.Sessions) {
-        port.postMessage({ type: msg.type, items: [...this.sessions.values()].map(s => ({ sessionId: s.sessionId,
-          clientId: s.clientId, mode: s.mode, pages: [...s.pages].map(id => {
-            const p = this.pages.get(id); return p ? { pageId: id, url: p.url } : null;
-          }).filter(Boolean) })) });
+        port.postMessage({ type: msg.type, items: this.sessionItems() });
       } else if (msg?.type === PopupMessage.Revoke) {
         if (!this.sessions.has(msg.sessionId)) throw new Error(Failure.Missing);
         await this.revoke(msg.sessionId);
-        port.postMessage({ type: PopupMessage.Sessions, items: [...this.sessions.values()].map(s => ({ sessionId: s.sessionId, clientId: s.clientId, mode: s.mode, pages: [...s.pages].map(id => { const p = this.pages.get(id); return p ? { pageId: id, url: p.url } : null; }).filter(Boolean) })) });
-      } else if (msg?.type === PopupMessage.Approve) { await this.approve(msg.pendingId, msg.tabId); await this.popup({type:PopupMessage.Pending},sender,port); await this.popup({type:PopupMessage.Sessions},sender,port); }
-      else if (msg?.type === PopupMessage.Deny) { this.deny(msg.pendingId); await this.popup({type:PopupMessage.Pending},sender,port); }
-    } catch { port.postMessage({ type: PopupMessage.Error, message: Failure.Failed }); }
+      } else if (msg?.type === PopupMessage.RevokeAll) {
+        await Promise.all([...this.sessions.keys()].map(id => this.revoke(id)));
+      } else if (msg?.type === PopupMessage.Focus) {
+        if (!Number.isInteger(msg.tabId) || ![...this.pages.values()].some(p => p.tabId === msg.tabId)) throw new Error(Failure.Invalid);
+        const tab = await this.api.tabs.update(msg.tabId, { active: true });
+        if (tab?.windowId !== undefined && this.api.windows?.update) await this.api.windows.update(tab.windowId, { focused: true });
+      } else if (msg?.type === PopupMessage.Approve) {
+        await this.approve(msg.pendingId, msg.tabId);
+      } else if (msg?.type === PopupMessage.Deny) {
+        this.deny(msg.pendingId);
+      }
+    } catch (err) {
+      port.postMessage({ type: PopupMessage.Error, message: Object.values(Failure).includes(err?.message) ? err.message : Failure.Failed });
+    }
   }
 
   async approve(id, tabId) {
     if (this.approving.has(id)) return;
     const p = this.pending.get(id);
-    if (!p || p.expires <= this.clock()) { this.pending.delete(id); this.statusSet(id, p?.clientId, { status: Wire.Expired }); return; }
+    if (!p || p.expires <= this.clock()) {
+      this.pending.delete(id);
+      this.statusSet(id, p?.clientId, { status: Wire.Expired });
+      this.clearNotice(id);
+      this.publishPending();
+      throw new Error(Failure.Forbidden);
+    }
     this.approving.add(id);
     let tab;
     let groupId = null;
@@ -286,8 +407,9 @@ export class ExtensionController {
         this.validPending(id,p);
         if(tab.url !== BrowserAction.NewTab || tab.groupId !== groupId) throw new Error(Failure.Forbidden);
       } else {
-        if (!Number.isInteger(tabId)) throw new Error(Failure.Invalid);
-        tab = await this.api.tabs.get(tabId);
+        if (!Number.isInteger(tabId)) throw new Error(Failure.Failed);
+        try { tab = await this.api.tabs.get(tabId); }
+        catch { throw new Error(Failure.Invalid); }
         this.safeUrl(tab.url, false);
         groupId = tab.groupId ?? -1;
       }
@@ -296,11 +418,12 @@ export class ExtensionController {
       const sessionId = this.id();
       createdSessionId = sessionId;
       const pageId = this.id();
+      const now = this.clock();
       const session = { clientId: p.clientId, sessionId, mode: p.mode, groupId,
         managedGroupId: p.mode === 'newGroup' ? groupId : null,
-        pages: new Set(), owned: new Set(), seq: 0, expires: this.clock() + Limits.LeaseMs };
+        pages: new Set(), owned: new Set(), seq: 0, started: now, expires: now + Limits.LeaseMs };
       const page = { clientId: p.clientId, sessionId, pageId, tabId: tab.id, groupId,
-        owned, url: tab.url, seq: -1, attached: false };
+        owned, url: tab.url, title: tab.title ?? '', seq: -1, attached: false };
       this.sessions.set(sessionId, session);
       this.pages.set(pageId, page);
       session.pages.add(pageId);
@@ -316,22 +439,32 @@ export class ExtensionController {
       this.validPending(id, p);
       this.checkGroup(page, finalTab);
       this.safeUrl(finalTab.url, page.owned);
+      page.url = finalTab.url;
+      page.title = finalTab.title ?? '';
       this.results.set(id, { clientId: p.clientId, status: Wire.Approved,
         value: { sessionId, pages: [{ pageId, url: finalTab.url }], groupId } });
       this.pending.delete(id);
+      this.clearNotice(id);
+      this.publishPending();
+      this.publishSessions();
     } catch (err) {
       if (owned && tab?.id != null) {
         try { const current=await this.api.tabs.get(tab.id);if(current.url===BrowserAction.NewTab&&current.groupId===groupId)await this.api.tabs.remove(tab.id); } catch { /* best effort rollback */ }
       }
       if (createdSessionId) await this.revoke(createdSessionId);
-      this.deny(id);
+      if (err?.message === Failure.Busy) { this.deny(id); return; }
+      throw err?.message === Failure.Forbidden ? new Error(Failure.Failed) : err;
     } finally { this.approving.delete(id); }
   }
 
   deny(id) {
     const p = this.pending.get(id);
     this.pending.delete(id);
-    if (p) this.statusSet(id, p.clientId, { status: Wire.Denied });
+    if (p) {
+      this.statusSet(id, p.clientId, { status: Wire.Denied });
+      this.clearNotice(id);
+      this.publishPending();
+    }
   }
 
   statusSet(id, clientId, value) {
@@ -388,10 +521,11 @@ export class ExtensionController {
       if(current.url!==BrowserAction.NewTab||current.groupId!==groupId)throw new Error(Failure.Forbidden);
       const pageId = this.id();
       const page = { clientId: session.clientId, sessionId: session.sessionId, pageId,
-        tabId: tab.id, groupId, owned: true, url: BrowserAction.NewTab, seq: -1, attached: false };
+        tabId: tab.id, groupId, owned: true, url: BrowserAction.NewTab, title: current.title ?? '', seq: -1, attached: false };
       this.pages.set(pageId, page); session.pages.add(pageId); session.owned.add(pageId);
       if (url !== BrowserAction.NewTab) await this.navigate({ session, page }, { url, _approval: true });
       this.grant({ clientId: session.clientId, sessionId: session.sessionId, pageId });
+      this.publishSessions();
       return { pageId, url };
     } catch (err) { try { const current=await this.api.tabs.get(tab.id);if(current.url===BrowserAction.NewTab)await this.api.tabs.remove(tab.id); } catch { /* rollback */ } throw err; }
   }
@@ -413,7 +547,8 @@ export class ExtensionController {
     if (!s) return;
     this.sessions.delete(sessionId);
     const pages = [...s.pages].map(id => this.pages.get(id)).filter(Boolean);
-    for (const p of pages) this.dropPage(p.pageId);
+    for (const p of pages) this.dropPage(p.pageId, false);
+    this.publishSessions();
     await Promise.all(pages.filter(p => p.attached).map(p => this.detachPage(p)));
   }
 
@@ -425,7 +560,9 @@ export class ExtensionController {
   }
 
   async revokeClient(clientId) {
-    for (const [id, p] of this.pending) if (p.clientId === clientId) this.pending.delete(id);
+    let dropped = false;
+    for (const [id, p] of this.pending) if (p.clientId === clientId) { this.pending.delete(id); this.clearNotice(id); dropped = true; }
+    if (dropped) this.publishPending();
     for (const [id, s] of [...this.sessions]) if (s.clientId === clientId) await this.revoke(id);
     this.lease.delete(clientId);
   }
@@ -493,6 +630,7 @@ export class ExtensionController {
     this.checkGroup(page, current);
     this.safeUrl(current.url, page.owned);
     page.url = current.url;
+    page.title = current.title ?? '';
     return { sideEffect: 'applied', url: current.url };
   }
 
@@ -519,8 +657,8 @@ export class ExtensionController {
 
   checkUrl(tabId, url) {
     const page = [...this.pages.values()].find(x => x.tabId === tabId);
-    if (!page) return;
-    try { this.safeUrl(url, page.owned); page.url = url; }
+    if (!page || page.url === url) return;
+    try { this.safeUrl(url, page.owned); page.url = url; this.publishSessions(); }
     catch { this.dropTab(tabId); }
   }
 
@@ -544,7 +682,7 @@ export class ExtensionController {
     for (const p of [...this.pages.values()]) if (p.tabId === tabId) void this.revokePage(p.pageId);
   }
 
-  dropPage(id) {
+  dropPage(id, broadcast = true) {
     const p = this.pages.get(id);
     if (!p) return;
     this.pages.delete(id);
@@ -553,16 +691,40 @@ export class ExtensionController {
       s.pages.delete(id); s.owned.delete(id);
       if (![...s.pages].some(pageId => this.pages.get(pageId)?.groupId === s.managedGroupId)) s.managedGroupId = null;
     }
+    if (broadcast) this.publishSessions();
+  }
+
+  // An upgrade rewrites the extension on disk; reload once per build so the new code runs.
+  async checkBuild(build) {
+    if (typeof build !== 'string' || !build) return;
+    const manifest = this.api.runtime.getManifest?.();
+    const own = manifest?.version_name ?? manifest?.version;
+    this.update = own && build !== own ? build : null;
+    await this.reloadIfIdle();
+  }
+
+  async reloadIfIdle() {
+    const build = this.update;
+    if (!build || build === this.reloadTried || this.sessions.size || this.pending.size || !this.api.runtime.reload) return;
+    this.reloadTried = build;
+    try {
+      const seen = await this.api.storage.local.get(Storage.Reloaded);
+      if (seen?.[Storage.Reloaded] === build) return;
+      await this.api.storage.local.set({ [Storage.Reloaded]: build });
+    } catch { return; }
+    this.api.runtime.reload();
   }
 
   sweep() {
+    if (this.update) void this.reloadIfIdle();
     const now = this.clock();
+    let expired = false;
     for (const [id, p] of this.pending) if (p.expires <= now) {
-      this.pending.delete(id); this.statusSet(id, p.clientId, { status: Wire.Expired });
+      this.pending.delete(id); this.statusSet(id, p.clientId, { status: Wire.Expired }); this.clearNotice(id); expired = true;
     }
+    if (expired) this.publishPending();
     for (const [id, s] of [...this.sessions]) if (s.expires <= now) this.revoke(id);
     for (const [id, at] of this.lease) if (at <= now) this.revokeClient(id);
-    if (!this.pending.size) this.api.action.setBadgeText({ text: '' });
   }
 
   async disconnected(keepPort = false) {
@@ -570,6 +732,9 @@ export class ExtensionController {
     this.approving.clear();
     await Promise.all([...this.sessions.keys()].map(id => this.revoke(id)));
     this.pending.clear(); this.lease.clear(); this.results.clear();
+    for (const id of [...this.notices]) this.clearNotice(id);
+    this.publishPending();
+    this.publishSessions();
   }
 
   validPending(id,p){if(this.pending.get(id)!==p||p.expires<=this.clock())throw new Error(Failure.Forbidden);}

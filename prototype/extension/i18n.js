@@ -1,13 +1,16 @@
 import en from './_locales/en/messages.json' with { type: 'json' };
 import zh from './_locales/zh_CN/messages.json' with { type: 'json' };
+import { Failure } from './protocol.js';
 
 export class Text {
+  static Enabled = 'enabled';
+  static Disabled = 'disabled';
   static NativeConnected = 'nativeConnected';
   static NativeWaiting = 'nativeWaiting';
   static NativeHost = 'nativeHost';
+  static NativeOrigin = 'nativeOrigin';
   static Title = 'title';
   static Tagline = 'tagline';
-  static Footer = 'footer';
   static Loading = 'loading';
   static Language = 'language';
   static Auto = 'auto';
@@ -24,13 +27,15 @@ export class Text {
   static AccessHint = 'accessHint';
   static Deny = 'deny';
   static Approve = 'approve';
-  static Choose = 'choose';
+  static ChooseTab = 'chooseTab';
+  static Cancel = 'cancel';
+  static Match = 'match';
+  static CurrentTab = 'currentTab';
   static Sessions = 'sessions';
   static NoSessions = 'noSessions';
   static Revoke = 'revoke';
   static ChooseHint = 'chooseHint';
   static NoTabs = 'noTabs';
-  static Back = 'back';
   static Error = 'error';
   static Broker = 'broker';
   static BrokerOn = 'brokerOn';
@@ -43,6 +48,59 @@ export class Text {
   static BrokerStarting = 'brokerStarting';
   static BrokerBackoff = 'brokerBackoff';
   static BrokerBlocked = 'brokerBlocked';
+  static BrokerAutoShort = 'brokerAutoShort';
+  static AutoApprovalShort = 'autoApprovalShort';
+  static AccessDetails = 'accessDetails';
+  static PolicyDetails = 'policyDetails';
+  static Expired = 'expired';
+  static Refresh = 'refresh';
+  static ErrorExpired = 'errorExpired';
+  static ErrorSession = 'errorSession';
+  static ErrorTab = 'errorTab';
+  static ModeAuto = 'modeAuto';
+  static ModeOn = 'modeOn';
+  static ModeOff = 'modeOff';
+  static PermRead = 'permRead';
+  static PermControl = 'permControl';
+  static PermNavigate = 'permNavigate';
+  static PermTabs = 'permTabs';
+  static RevokeAll = 'revokeAll';
+  static Revoked = 'revoked';
+  static SessionDuration = 'sessionDuration';
+  static AutoApprovalBadge = 'autoApprovalBadge';
+  static AppName = 'appName';
+  static NotifyNew = 'notifyNew';
+  static NotifyBody = 'notificationBody';
+  static NotifyApprove = 'notificationApprove';
+  static NotifyDeny = 'notificationDeny';
+  static NotifyOpen = 'notificationOpen';
+  static CopyCommand = 'copyCommand';
+  static CopyDiagnostics = 'copyDiagnostics';
+  static Copied = 'copied';
+  static GuideTitle = 'guideTitle';
+  static GuideInstall = 'guideInstall';
+  static GuideRegister = 'guideRegister';
+  static GuideBroker = 'guideBroker';
+  static GuideDone = 'guideDone';
+  static GuideFailed = 'guideFailed';
+  static GuidePending = 'guidePending';
+  static PendingCount = 'pendingCount';
+  static SessionCount = 'sessionCount';
+  static PolicyAllow = 'policyAllow';
+  static PolicyDeny = 'policyDeny';
+  static PolicySummary = 'policySummary';
+}
+
+export class ErrorText {
+  static Keys = Object.freeze({
+    [Failure.Invalid]: Text.ErrorTab,
+    [Failure.Forbidden]: Text.ErrorExpired,
+    [Failure.Missing]: Text.ErrorSession,
+    [Failure.Busy]: Text.Error,
+    [Failure.GroupFull]: Text.Error,
+    [Failure.Unsupported]: Text.Error,
+    [Failure.Failed]: Text.Error
+  });
 }
 
 export class Locale {

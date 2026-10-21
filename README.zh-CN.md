@@ -8,7 +8,7 @@
 
 [English](README.md) · [安装指南](docs/INSTALL.zh-CN.md) · [Install guide](docs/INSTALL.md) · [运行指南（英文）](prototype/README.md) · [运行指南（简体中文）](prototype/README.zh-CN.md) · [验收摘要](prototype/VERIFICATION.zh-CN.md) · [品牌资源](assets/README.zh-CN.md)
 
-Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的本地客户端控制已运行 Chrome 中明确授予的页面。它不会启动浏览器，也不要求使用独立浏览器 profile。
+Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的本地客户端控制已运行 Chrome 中明确授予的页面。它不要求使用独立浏览器 profile。没有已连接的浏览器时，MCP 服务会在后台（`--no-startup-window`）启动已安装的 Chrome/Edge 以便扩展连接；设置 `BB_BROWSER_WAKE=0` 可关闭。
 
 扩展弹窗通过 Chrome 语言目录支持英文和简体中文。默认跟随浏览器语言；选择项保存在本机。机制及新增语言步骤见[国际化指南](docs/I18N.zh-CN.md) / [英文版](docs/I18N.md)。
 

@@ -26,7 +26,7 @@ export enum Effect { Allow='allow', Deny='deny', Ask='ask' }
 export class PolicyKey {
   static readonly File='policy.json';static readonly Denied='policy_denied';static readonly Invalid='policy_invalid';
   static readonly Ask='_ask';static readonly Any='*';static readonly Wild='*.';
-  static readonly Version='version';static readonly Default='default';static readonly Rules='rules';
+  static readonly Version='version';static readonly Default='default';static readonly Rules='rules';static readonly Summary='policy';
   static readonly Id='id';static readonly Client='client';static readonly Origin='origin';
   static readonly Actions='actions';static readonly Effect='effect';static readonly Missing='ENOENT';
   static readonly New='newGroup';static readonly Attach='attachExisting';
@@ -42,6 +42,7 @@ export class Limit {
   static readonly Wait = 20_000;
   static readonly Heartbeat = 5_000;
   static readonly Records = 1000;
+  static readonly Clients = 64;
 }
 export class Wire {
   static readonly Version = '2.0';
@@ -50,6 +51,8 @@ export class Wire {
   static readonly Bearer = 'Bearer ';
   static readonly Host = 'host';
   static readonly Path = '/bridge';
+  static readonly Instance = '#';
+  static readonly Busy = 'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n';
 }
 export type Params = Record<string, any>;
 export interface RPC { jsonrpc: string; id?: string | number; method?: string; params?: Params; result?: any; error?: {code:number;message:string}; }
@@ -69,6 +72,33 @@ export class Autostart {
   static readonly Max = 65535;
   static readonly Ignore = 'ignore' as const;
   static readonly Timeout = 'broker_autostart_timeout\n';
+}
+export class RuntimeFile {
+  static readonly Location = 'extension-location.json';
+  static readonly Folder = 'extension';
+}
+export class Wake {
+  static readonly Flag = 'BB_BROWSER_WAKE';
+  static readonly Browser = 'BB_BROWSER';
+  static readonly Off = '0';
+  static readonly Arg = '--no-startup-window';
+  static readonly Budget = 15_000;
+  static readonly Step = 500;
+  static readonly Cooldown = 60_000;
+  static readonly Missing = 'browser_not_connected';
+  static readonly Chrome = 'chrome';
+  static readonly Edge = 'edge';
+  static readonly Paths: Record<string, string[]> = {
+    chrome: ['Google', 'Chrome', 'Application', 'chrome.exe'],
+    edge: ['Microsoft', 'Edge', 'Application', 'msedge.exe'],
+  };
+  static readonly Bases = ['LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)'];
+  /** The request was never sent to the browser, so any call may be retried. */
+  static readonly Unsent = new Set(['host_unavailable', 'connectionFailed', 'connectionTimeout']);
+  /** The link dropped after sending; only side-effect free calls are retried. */
+  static readonly Lost = new Set(['host_disconnected', 'connectionClosed']);
+  /** Side-effect free calls that may be retried once after recovery. */
+  static readonly Reads = new Set<string>([Method.Status, Method.Tabs, Method.Observe, Method.Available]);
 }
 export class BrokerControl {
   static readonly Type = 'broker.control';
@@ -102,4 +132,9 @@ export class BrokerControl {
   static readonly LockMs = 15000;
   static readonly Delays = [1000, 2000, 4000, 8000, 16000];
   static readonly Limit = 5;
+  static readonly RetryMs = 1000;
+  static readonly RetryMax = 30000;
+  static readonly Extension = 'extension';
+  static readonly Build = 'build';
+  static readonly Manifest = 'manifest.json';
 }

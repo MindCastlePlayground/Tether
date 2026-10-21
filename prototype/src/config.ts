@@ -2,8 +2,15 @@ import { readFileSync } from 'node:fs';
 import { createHash, X509Certificate } from 'node:crypto';
 import { checkServerIdentity } from 'node:tls';
 import { isIP } from 'node:net';
+import { dirname, join } from 'node:path';
+import { RuntimeFile as F } from './protocol.js';
 export class Config {
   static load(path: string): any { return JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, '')); }
+  /** The loaded extension folder of the runtime that owns this .local config file. */
+  static extension(file: string): string {
+    const root = dirname(dirname(file));
+    try { return Config.load(join(root, F.Location)).path ?? join(root, F.Folder); } catch { return join(root, F.Folder); }
+  }
   static hash(value: string): string { return createHash('sha256').update(value).digest('hex'); }
   static privateIP(ip:string): boolean {
     if(isIP(ip)!==4) return false;

@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { Config } from './config.js';
 import { BrokerLifecycle } from './lifecycle.js';
 import { Limit, NativeStatus as Status, BrokerControl as C, PolicyKey } from './protocol.js';
@@ -13,13 +13,13 @@ export class NativeHost {
   private life:BrokerLifecycle;
   private retry?:NodeJS.Timeout;
   private delay:number=C.RetryMs;
-  private root:string;
+  private file:string;
   constructor(private cfg:any,origin:string,file:string){
     if(origin!==`chrome-extension://${cfg.extensionId}/`)throw Error(Status.Origin);
     if(new URL(cfg.url).hostname!=='127.0.0.1')throw Error(Status.Config);
     Config.tls(cfg);
     this.life=new BrokerLifecycle(file);
-    this.root=dirname(dirname(file));
+    this.file=file;
     process.stdin.on('data',(data:Buffer)=>this.feed(data));
     process.stdin.on('end',()=>this.stop());
     this.enqueue(()=>this.cycle());
@@ -55,9 +55,7 @@ export class NativeHost {
   // The build on disk lets an already loaded extension notice an upgrade and reload itself.
   private build():string|undefined{
     try{
-      let dir=join(this.root,C.Folder);
-      try{dir=Config.load(join(this.root,C.Location)).path??dir;}catch{/* Default extension folder. */}
-      const m=Config.load(join(dir,C.Manifest));const b=m.version_name??m.version;
+      const m=Config.load(join(Config.extension(this.file),C.Manifest));const b=m.version_name??m.version;
       return typeof b==='string'?b:undefined;
     }catch{return undefined;}
   }

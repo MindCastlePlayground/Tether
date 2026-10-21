@@ -73,6 +73,33 @@ export class Autostart {
   static readonly Ignore = 'ignore' as const;
   static readonly Timeout = 'broker_autostart_timeout\n';
 }
+export class RuntimeFile {
+  static readonly Location = 'extension-location.json';
+  static readonly Folder = 'extension';
+}
+export class Wake {
+  static readonly Flag = 'BB_BROWSER_WAKE';
+  static readonly Browser = 'BB_BROWSER';
+  static readonly Off = '0';
+  static readonly Arg = '--no-startup-window';
+  static readonly Budget = 15_000;
+  static readonly Step = 500;
+  static readonly Cooldown = 60_000;
+  static readonly Missing = 'browser_not_connected';
+  static readonly Chrome = 'chrome';
+  static readonly Edge = 'edge';
+  static readonly Paths: Record<string, string[]> = {
+    chrome: ['Google', 'Chrome', 'Application', 'chrome.exe'],
+    edge: ['Microsoft', 'Edge', 'Application', 'msedge.exe'],
+  };
+  static readonly Bases = ['LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)'];
+  /** The request was never sent to the browser, so any call may be retried. */
+  static readonly Unsent = new Set(['host_unavailable', 'connectionFailed', 'connectionTimeout']);
+  /** The link dropped after sending; only side-effect free calls are retried. */
+  static readonly Lost = new Set(['host_disconnected', 'connectionClosed']);
+  /** Side-effect free calls that may be retried once after recovery. */
+  static readonly Reads = new Set<string>([Method.Status, Method.Tabs, Method.Observe, Method.Available]);
+}
 export class BrokerControl {
   static readonly Type = 'broker.control';
   static readonly Status = 'broker.status';
@@ -109,7 +136,5 @@ export class BrokerControl {
   static readonly RetryMax = 30000;
   static readonly Extension = 'extension';
   static readonly Build = 'build';
-  static readonly Location = 'extension-location.json';
-  static readonly Folder = 'extension';
   static readonly Manifest = 'manifest.json';
 }

@@ -41,6 +41,8 @@ export class ExtensionController {
       port.onDisconnect.addListener(() => this.popups.delete(port));
       port.onMessage.addListener(msg => this.popup(msg, port.sender, port));
     });
+    // Registering onStartup makes Chrome start this worker with the browser, including a background wake.
+    this.api.runtime.onStartup?.addListener(() => this.probe());
     this.api.alarms?.onAlarm?.addListener(alarm => { if (alarm.name === Broker.Alarm) this.probe(); });
     this.api.alarms?.create?.(Broker.Alarm, { periodInMinutes: 0.5 });
     this.api.notifications?.onButtonClicked?.addListener((id, index) => this.notificationClicked(id, index));

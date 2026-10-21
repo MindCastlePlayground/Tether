@@ -42,6 +42,7 @@ export class Limit {
   static readonly Wait = 20_000;
   static readonly Heartbeat = 5_000;
   static readonly Records = 1000;
+  static readonly Clients = 64;
 }
 export class Wire {
   static readonly Version = '2.0';
@@ -50,6 +51,8 @@ export class Wire {
   static readonly Bearer = 'Bearer ';
   static readonly Host = 'host';
   static readonly Path = '/bridge';
+  static readonly Instance = '#';
+  static readonly Busy = 'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n';
 }
 export type Params = Record<string, any>;
 export interface RPC { jsonrpc: string; id?: string | number; method?: string; params?: Params; result?: any; error?: {code:number;message:string}; }

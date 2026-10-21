@@ -17,8 +17,16 @@ test('same write sequence deduplicates; conflicting payload cannot execute twice
   const first=await c.createTab(args);assert.deepEqual(await c.createTab(args),first);
   await assert.rejects(c.createTab({...args,url:'http://127.0.0.1/changed'}));
   assert.equal(calls.filter(x=>x.method==='createTab').length,1);
-  assert.equal(calls.find(x=>x.method==='createTab').params.clientId,'script');
+  assert.match(calls.find(x=>x.method==='createTab').params.clientId,/^script#[0-9a-f]{8}$/);
  }finally{c.close();await new Promise(r=>setTimeout(r,30));}
+});
+test('several agents can share one credential with isolated instances',async()=>{
+ const a=new BridgeClient(base),b=new BridgeClient(base);try{
+  calls=[];
+  await Promise.all([a.createTab({sessionId:'shared',seq:1,url:'http://127.0.0.1/a'}),b.createTab({sessionId:'shared',seq:1,url:'http://127.0.0.1/b'})]);
+  const ids=calls.filter(x=>x.method==='createTab').map(x=>x.params.clientId);
+  assert.equal(ids.length,2);assert.notEqual(ids[0],ids[1]);for(const id of ids)assert.match(id,/^script#/);
+ }finally{a.close();b.close();await new Promise(r=>setTimeout(r,30));}
 });
 test('oversized incoming WSS frame closes connection',async()=>{
  const ws=new WebSocket(base.url,Config.tls(base));ws.on('error',()=>{});await once(ws,'open');

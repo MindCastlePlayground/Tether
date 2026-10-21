@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Agents, Detect } from './agents.mjs';
-import { Cmd, Hint, Install, InstallOption, Interactive, Opt, Policy, Scope } from './constants.mjs';
+import { Cmd, Hint, Install, InstallOption, Interactive, Opt, Policy, Scope, ServiceKey } from './constants.mjs';
 import { Prompt } from './prompt.mjs';
 import { Files } from './files.mjs';
 import { Runtime } from './runtime.mjs';
@@ -56,8 +56,14 @@ export class Cli {
     console.log(zh ? '保留 .local 与 .venv，替换源码后构建。不修改 Agent 配置。' : 'Keeps .local and .venv, replaces source, then builds. Agent config is unchanged.');
     if (options[Install.OPTION.DRY]) return 0;
     if (process.platform !== 'win32') throw new Error('Native host setup currently supports Windows only. --dry-run works on other platforms.');
-    Runtime.upgrade(runtime, path.join(Cli.ROOT, 'prototype'), options);
+    const result = Runtime.upgrade(runtime, path.join(Cli.ROOT, 'prototype'), options);
     console.log(zh ? '升级完成。' : 'Upgrade complete.');
+    if (result?.running) console.log(result.state === ServiceKey.RUNNING
+      ? (zh ? 'Broker 已用新版本重启。' : 'Broker restarted on the new version.')
+      : (zh ? `Broker 已停止，重启未完成（${result.state ?? 'unknown'}）；扩展或 MCP 会按需重新拉起。` : `Broker stopped but did not restart (${result.state ?? 'unknown'}); the extension or MCP will start it on demand.`));
+    console.log(zh
+      ? '浏览器扩展会在没有活动会话时自动重新加载；若弹窗仍是旧版，请在扩展管理页对 Tether 点击一次“重新加载”。已打开的 Agent 会话需重启才会使用新版 MCP。'
+      : 'The browser extension reloads itself once no session is active; if the popup still looks old, click Reload for Tether on the extensions page once. Restart open agent sessions to use the new MCP.');
     return 0;
   }
   static scope(name, options) { return options.scope ?? (Scope.USER_DEFAULT.includes(name) ? Scope.USER : Scope.PROJECT); }

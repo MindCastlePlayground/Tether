@@ -8,6 +8,7 @@ import { Cli } from '../installer/cli.mjs';
 import { Files } from '../installer/files.mjs';
 import { Cmd, Hint, Install, Opt, Probe } from '../installer/constants.mjs';
 import { Runtime } from '../installer/runtime.mjs';
+import { Service } from '../installer/service.mjs';
 import { Browser } from '../installer/browser.mjs';
 import { Agents, Detect } from '../installer/agents.mjs';
 
@@ -318,18 +319,24 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
   fs.writeFileSync(path.join(runtime, Install.MARKER), `${JSON.stringify({ version: '0.0.1', ready: true })}\n`);
   const npm = Runtime.npm;
   const run = Runtime.run;
+  const halt = Service.halt, resume = Service.resume;
   const calls = [];
   try {
     Runtime.npm = (args, cwd) => calls.push(['npm', args, cwd]);
     Runtime.run = (command, args, cwd) => calls.push(['run', command, args, cwd]);
-    Runtime.upgrade(runtime, source, { language: 'en' });
+    Service.halt = root => { calls.push(['halt', root]); return true; };
+    Service.resume = root => { calls.push(['resume', root]); return 'running'; };
+    assert.deepEqual(Runtime.upgrade(runtime, source, { language: 'en' }), { running: true, state: 'running' });
+    assert.deepEqual(calls.filter(item => item[0] === 'halt' || item[0] === 'resume').map(item => item[0]), ['halt', 'halt', 'resume']);
     assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'new');
     assert.equal(Files.read(path.join(runtime, 'README.md')), 'new');
     assert.equal(fs.existsSync(path.join(runtime, 'src', 'stale.js')), false);
     assert.equal(Files.read(path.join(runtime, '.local', 'broker.json')), 'secret');
     assert.equal(Files.read(path.join(runtime, '.venv', 'pyvenv.cfg')), 'keep');
     assert.equal(Files.json(path.join(runtime, Install.MARKER)).version, Install.VERSION);
-    assert.deepEqual(Files.json(path.join(runtime, Install.MANIFEST)), { name: 'n', key: 'K' });
+    const manifest = Files.json(path.join(runtime, Install.MANIFEST));
+    assert.equal(manifest.key, 'K');
+    assert.match(manifest.version_name, /^\S+ \(\d{8}T\d{6}\)$/);
     fs.writeFileSync(path.join(source, 'src', 'mark.txt'), 'newer');
     Runtime.upgrade(runtime, source, { language: 'en' });
     assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'newer');
@@ -349,6 +356,8 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
   } finally {
     Runtime.npm = npm;
     Runtime.run = run;
+    Service.halt = halt;
+    Service.resume = resume;
   }
   assert.throws(() => Runtime.upgrade(path.join(root, 'missing'), source, {}), new RegExp(Hint.INSTALL));
   assert.throws(() => Runtime.upgrade(path.join(root, 'empty'), source, {}), new RegExp(Hint.INSTALL));

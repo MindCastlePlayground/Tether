@@ -53,6 +53,18 @@ export class InstallOption {
   static EXTENSION_DIR = 'extension-dir';
 }
 
+export class ServiceKey {
+  static ENV = 'TETHER_ROOT';
+  static CONFIG = 'TETHER_CONFIG';
+  static AGENT = '.local/agent.json';
+  static LIFECYCLE = 'dist/lifecycle.js';
+  static RUNNING = 'running';
+  static OFF = 'off';
+  // Stops this runtime's Node broker/host processes; prints one line per broker it stopped.
+  static HALT = String.raw`$r=[regex]::Escape($env:TETHER_ROOT); Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match ($r + '\\dist\\(broker|host)\.js') } | ForEach-Object { $b = $_.CommandLine -match 'broker\.js'; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; if ($b) { 'broker' } }`;
+  static RESUME = "const {pathToFileURL}=await import('node:url');const m=await import(pathToFileURL(process.env.TETHER_ROOT+'/dist/lifecycle.js').href);const s=await new m.BrokerLifecycle(process.env.TETHER_CONFIG).ensure();process.stdout.write(JSON.stringify(s));";
+}
+
 export class Hint {
   static UPGRADE = 'tether upgrade';
   static INSTALL = 'tether install';

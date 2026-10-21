@@ -747,3 +747,29 @@ test('heartbeats renew a client lease and expiry removes the grant', async () =>
   assert.equal(c.sessions.size, 0);
   await assert.rejects(c.dispatch(Wire.ListTabs, { clientId: clientA, sessionId: approval.sessionId }), /not_authorized/);
 });
+
+test('extension reloads once when the build on disk changes and no session is active', async () => {
+  const api = new FakeChrome();
+  let reloads = 0;
+  api.runtime.getManifest = () => ({ version: '1.1.0' });
+  api.runtime.reload = () => { reloads++; };
+  const c = new ExtensionController(api);
+  c.start();
+  try {
+    const status = build => ({ type: Broker.Status, mode: Broker.Auto, state: Broker.StateRunning, [Broker.Extension]: { [Broker.Build]: build } });
+    api.native.onMessage.fire(status('1.1.0'));
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(reloads, 0);
+    c.sessions.set('busy', { clientId: clientA });
+    api.native.onMessage.fire(status('1.1.0 (next)'));
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(reloads, 0);
+    c.sessions.delete('busy');
+    await c.reloadIfIdle();
+    assert.equal(reloads, 1);
+    assert.equal(api.storage.data[Storage.Reloaded], '1.1.0 (next)');
+    c.reloadTried = null;
+    await c.reloadIfIdle();
+    assert.equal(reloads, 1);
+  } finally { c.stop(); }
+});

@@ -129,3 +129,17 @@ test('host reconnects by itself after the Broker drops the connection', { timeou
   for (const c of wss.clients) c.terminate();
   wss.close();
 });
+
+test('host reports the extension build found on disk', { timeout: 10000 }, async t => {
+  const { cfg } = await HostProbe.server(t);
+  const probe = new HostProbe(cfg);
+  t.after(() => probe.close());
+  const ext = join(probe.dir, 'ext');
+  mkdirSync(ext);
+  writeFileSync(join(ext, 'manifest.json'), JSON.stringify({ version: '9.0.0', version_name: '9.0.0 (stamp)' }));
+  writeFileSync(join(resolve(probe.dir, '..'), 'extension-location.json'), JSON.stringify({ path: ext }));
+  t.after(() => rmSync(join(resolve(probe.dir, '..'), 'extension-location.json'), { force: true }));
+  const end = Date.now() + 5000;
+  while (!probe.frames.some(f => f.extension?.build === '9.0.0 (stamp)') && Date.now() < end) await new Promise(r => setTimeout(r, 50));
+  assert.ok(probe.frames.some(f => f.extension?.build === '9.0.0 (stamp)'));
+});

@@ -28,6 +28,8 @@ export class ExtensionController {
     this.popups = new Set();
     this.notifyNew = true;
     this.notices = new Set();
+    this.update = null;
+    this.reloadTried = null;
     this.locale = new Locale(api);
   }
 
@@ -170,7 +172,7 @@ export class ExtensionController {
           }
           return;
         }
-        if (message?.type === Broker.Status) { this.brokerStatus = message; this.publishBrokerStatus(); return; }
+        if (message?.type === Broker.Status) { this.brokerStatus = message; this.publishBrokerStatus(); void this.checkBuild(message[Broker.Extension]?.[Broker.Build]); return; }
         this.receive(message);
       });
       this.port.onDisconnect.addListener(() => {
@@ -690,7 +692,29 @@ export class ExtensionController {
     if (broadcast) this.publishSessions();
   }
 
+  // An upgrade rewrites the extension on disk; reload once per build so the new code runs.
+  async checkBuild(build) {
+    if (typeof build !== 'string' || !build) return;
+    const manifest = this.api.runtime.getManifest?.();
+    const own = manifest?.version_name ?? manifest?.version;
+    this.update = own && build !== own ? build : null;
+    await this.reloadIfIdle();
+  }
+
+  async reloadIfIdle() {
+    const build = this.update;
+    if (!build || build === this.reloadTried || this.sessions.size || this.pending.size || !this.api.runtime.reload) return;
+    this.reloadTried = build;
+    try {
+      const seen = await this.api.storage.local.get(Storage.Reloaded);
+      if (seen?.[Storage.Reloaded] === build) return;
+      await this.api.storage.local.set({ [Storage.Reloaded]: build });
+    } catch { return; }
+    this.api.runtime.reload();
+  }
+
   sweep() {
+    if (this.update) void this.reloadIfIdle();
     const now = this.clock();
     let expired = false;
     for (const [id, p] of this.pending) if (p.expires <= now) {

@@ -107,4 +107,9 @@ export class BrokerControl {
   static readonly Limit = 5;
   static readonly RetryMs = 1000;
   static readonly RetryMax = 30000;
+  static readonly Extension = 'extension';
+  static readonly Build = 'build';
+  static readonly Location = 'extension-location.json';
+  static readonly Folder = 'extension';
+  static readonly Manifest = 'manifest.json';
 }

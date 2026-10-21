@@ -54,6 +54,7 @@ export class Storage {
   static AutoApprove = 'autoApprove';
   static BrokerMode = 'brokerMode';
   static Notify = 'notify';
+  static Reloaded = 'reloadedFor';
 }
 
 export class Broker {
@@ -72,6 +73,8 @@ export class Broker {
   static Alarm = 'broker-probe';
   static PortInUse = 'broker_port_in_use';
   static StartFailed = 'broker_start_failed';
+  static Extension = 'extension';
+  static Build = 'build';
 }
 
 export class NativeStatus {

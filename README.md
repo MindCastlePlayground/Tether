@@ -8,7 +8,7 @@
 
 [简体中文](README.zh-CN.md) · [Install guide](docs/INSTALL.md) · [安装指南](docs/INSTALL.zh-CN.md) · [Runtime guide](prototype/README.md) · [运行指南](prototype/README.zh-CN.md) · [Verification summary](prototype/VERIFICATION.md) · [Brand assets](assets/README.md)
 
-Tether lets an authorized local client control explicitly granted pages in an already-running Chrome browser through a browser extension and a local TLS WebSocket broker. It does not launch a browser or require a separate browser profile.
+Tether lets an authorized local client control explicitly granted pages in an already-running Chrome browser through a browser extension and a local TLS WebSocket broker. It does not require a separate browser profile. When no browser is connected, the MCP server starts the installed Chrome/Edge in the background (`--no-startup-window`) so the extension can connect; set `BB_BROWSER_WAKE=0` to turn this off.
 
 The extension popup supports English and Simplified Chinese through Chrome locale catalogs. It follows the browser language by default and remembers the selected language locally; see the [internationalization guide](docs/I18N.md) / [简体中文指南](docs/I18N.zh-CN.md).
 

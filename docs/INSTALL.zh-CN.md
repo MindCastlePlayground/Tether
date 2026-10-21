@@ -38,7 +38,7 @@ node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
 
 `install --upgrade` 升级托管 runtime 并更新所选 Agent 的 Tether Skill。`--force` 可重装同一版本，并备份后覆盖冲突的 Tether MCP 配置、Skill 和扩展文件。无关 MCP 配置和本地凭据保留。普通安装遇到冲突仍会停止；替换用户修改的内容前可先使用 `--dry-run` 查看路径。交互安装也提供扩展目录、升级和强制覆盖选项。
 
-从 0.x 升级前先停止旧 Broker，升级后重新加载已解压的扩展。旧 Broker 缺少带认证的生命周期端点，会被视为端口占用。升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
+升级会停止该 runtime 正在运行的 Broker 与 Native Host（包括缺少生命周期端点的 0.x Broker），原先在运行时用新代码重新拉起 Broker。扩展会在没有活动会话时自动重新加载；本版本之前加载的扩展需要在扩展管理页手动“重新加载”一次。已打开的 Agent 会话需重启才会使用新版 MCP。升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
 
 传入 `--runtime PATH` 可复用已配置的原型目录。此时跳过 runtime 复制、依赖安装、构建、Python 初始化和凭据生成；除非提供 `--no-register`，仍会注册 Native Messaging。`--no-register` 跳过 HKCU 注册。`--python PATH` 指定全新隔离环境使用的 Python，`--language en|zh-CN` 设置 MCP 描述与初始化提示语言。
 

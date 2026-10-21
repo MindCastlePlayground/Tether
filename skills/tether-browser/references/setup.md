@@ -54,6 +54,7 @@ Do not execute setup merely as a health check: it creates private material and c
 | --- | --- |
 | MCP tool list works, browser calls fail | Tool listing is offline metadata. Check Broker listener, then extension/Native Host connection. |
 | `browserConnected:false` or `host_unavailable` | Existing browser, extension loaded/enabled, correct Native Host registration and local host executable. |
+| `browser_not_connected` | The MCP server already tried to start Broker and the browser for 15 seconds. Ask the user to open the browser and enable the Tether extension from the folder in the message; retries within 60 seconds fail fast. |
 | Connection/TLS/pin failure | Correct role config, matching public certificate, address and certificate expiry. Preserve TLS and pin checks. |
 | `pending` with auto-approval off | Ask for toolbar approval; do not call a nonexistent approval RPC. |
 | `not_authorized` | Check identity, session lifetime, page ID, grouping and revocation; reacquire only for the intended task. |

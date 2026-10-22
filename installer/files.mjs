@@ -3,6 +3,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Install } from './constants.mjs';
 
+// Existing Tether-managed content differs from what this install would write; --force resolves it.
+export class Conflict extends Error {}
+
 export class Files {
   static read(file, fallback = '') { return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : fallback; }
   static json(file) { return JSON.parse(Files.read(file)); }
@@ -36,7 +39,7 @@ export class Files {
     plans.push({ file: path.join(target, Install.LOCATION), text: `${JSON.stringify(location, null, 2)}\n` });
     for (const plan of plans) {
       plan.before = fs.existsSync(plan.file) ? Files.read(plan.file) : null;
-      if (!force && fs.existsSync(plan.file) && Files.read(plan.file) !== plan.text) throw new Error(`Skill conflict: ${plan.file}. Keep or move the existing skill before reinstalling.`);
+      if (!force && fs.existsSync(plan.file) && Files.read(plan.file) !== plan.text) throw new Conflict(`Skill conflict: ${plan.file}. Keep or move the existing skill before reinstalling.`);
     }
     return plans;
   }
@@ -48,7 +51,7 @@ export class Files {
         const from = path.join(dir, item.name), to = path.join(target, path.relative(source, from));
         if (item.isDirectory()) {
           if (fs.existsSync(to) && !fs.statSync(to).isDirectory()) {
-            if (!force) throw new Error(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
+            if (!force) throw new Conflict(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
             fs.renameSync(to, `${to}.tether-backup-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
           }
           fs.mkdirSync(to, { recursive: true }); copy(from); continue;
@@ -56,11 +59,11 @@ export class Files {
         const data = fs.readFileSync(from);
         if (fs.existsSync(to)) {
           if (fs.statSync(to).isDirectory()) {
-            if (!force) throw new Error(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
+            if (!force) throw new Conflict(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
             fs.renameSync(to, `${to}.tether-backup-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`);
           } else {
             if (fs.readFileSync(to).equals(data)) continue;
-            if (!force) throw new Error(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
+            if (!force) throw new Conflict(`Extension file conflict: ${to}. Use --force to back up and replace it.`);
             const suffix = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
             fs.copyFileSync(to, `${to}.tether-backup-${suffix}`, fs.constants.COPYFILE_EXCL);
           }

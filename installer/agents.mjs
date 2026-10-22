@@ -4,6 +4,7 @@ import { applyEdits, modify, parse as parseJsonc } from 'jsonc-parser';
 import { parse as parseToml } from 'smol-toml';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenCode, Probe } from './constants.mjs';
+import { Conflict } from './files.mjs';
 
 class Names {
   static all = ['codex', 'claude', 'cursor', 'opencode', 'gemini'];
@@ -45,7 +46,7 @@ class Config {
     if (open && Object.keys(desired).some(k => !OpenCode.MCP_KEYS.includes(k))) throw new Error(`opencode ${OpenCode.VERSION} rejects unknown MCP keys`);
     if (Object.hasOwn(parent, Names.key)) {
       if (Config.equal(parent[Names.key], desired)) return text;
-      if (!force) throw new Error(`Conflicting ${Names.key} entry`);
+      if (!force) throw new Conflict(`Conflicting ${Names.key} entry`);
       const edits = modify(text, [key, Names.key], desired, { formattingOptions: { insertSpaces: true, tabSize: 2 } });
       return applyEdits(text, edits);
     }
@@ -62,7 +63,7 @@ class Config {
     const desired = { [fields.command]: entry.command, [fields.args]: entry.args, [fields.env]: entry.env };
     if (Object.hasOwn(servers, Names.key)) {
       if (Config.equal(servers[Names.key], desired)) return text;
-      if (!force) throw new Error(`Conflicting ${Names.key} entry`);
+      if (!force) throw new Conflict(`Conflicting ${Names.key} entry`);
       let skip = false;
       const rest = text.split(/\r?\n/).filter(line => {
         if (/^\s*\[/.test(line)) {

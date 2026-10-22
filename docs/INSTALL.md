@@ -88,7 +88,7 @@ Broker is managed by default: the policy file is `<runtime>/.local/policy.json`,
 - `id` — unique rule identifier.
 - `client` — `"*"` or a client identity.
 - `origin` — `"*"` or `scheme://host[:port]`; a leading `*.` in the host matches subdomains and the bare domain.
-- `actions` — `session`, `availableTabs`, `observe`, `fill`, `click`, `navigate`, `createTab`, `closeTab`, or `"*"`.
+- `actions` — `session`, `availableTabs`, `observe` (also covers `snapshot` and `locate`), `fill`, `click`, `navigate`, `createTab`, `closeTab`, or `"*"`.
 - `effect` — `allow`, `deny`, or `ask`; `ask` is only valid with `actions: ["session"]`.
 - `default` — `allow` or `deny` when no rule matches.
 

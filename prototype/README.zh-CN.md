@@ -10,7 +10,7 @@
 
 数据链路为现有 Chrome 浏览器 → MV3 扩展 → Native Messaging → 本机 TLS WebSocket Broker → Node/Python SDK 或 stdio MCP。Broker 默认仅监听回环地址。客户端可新建任务标签组，或明确接管一个已有 HTTP(S) 标签。为兼容已有注册，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。
 
-运行时提供 12 个 RPC 方法：`requestSession`、`approvalStatus`、`listTabs`、`createTab`、`closeTab`、`release`、`observe`、`fill`、`click`、`navigate`、`capabilities` 和 `availableTabs`。写请求使用 session 内递增的正整数 `seq`；相同请求重复提交会返回原结果，冲突复用会被拒绝。请求超时的结果不确定，因此 SDK 不会自动重放写操作。
+运行时提供 14 个 RPC 方法：`requestSession`、`approvalStatus`、`listTabs`、`createTab`、`closeTab`、`release`、`observe`、`snapshot`、`locate`、`fill`、`click`、`navigate`、`capabilities` 和 `availableTabs`。`snapshot` 返回带 `[ref=eN]` 元素引用的简易无障碍树；`locate` 列出匹配元素及经校验的唯一选择器；`fill`/`click` 接受 `ref` 或 `selector`，动作前先解析为恰好一个元素，否则以 `sideEffect:"none"` 拒绝并给出候选。策略规则把 `snapshot` 和 `locate` 视为 `observe`。写请求使用 session 内递增的正整数 `seq`；相同请求重复提交会返回原结果，冲突复用会被拒绝。请求超时的结果不确定，因此 SDK 不会自动重放写操作。
 
 扩展和授权状态机由 Tether 自行实现。依赖包括 `playwright-core` 的公开进程内 transport、官方 MCP SDK、`ws` 和 `zod`；Python 使用 `websockets` 和 `cryptography`。协议校验使用 zod 与显式检查。
 

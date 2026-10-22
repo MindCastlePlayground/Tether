@@ -69,4 +69,4 @@ class Task:
             client.close()
 ```
 
-通过 `call(method, params)` 使用相同的 request → approvalStatus → observe/action → release 流程。调用保持顺序，不要在线程间共享同一实例。Python 目前会把服务器 RPC 错误转换为 `ValueError('rpcFailed')`，因此不要声称它会暴露 Node/MCP 的精确错误原因。Python 传输/安全检查已有验收记录；直接使用 Python 执行页面操作尚未独立验收。
+通过 `call(method, params)` 使用相同的 request → approvalStatus → observe/snapshot/action → release 流程；`call('click', {..., 'ref': 'e12'})` 与 Node 用法相同。调用保持顺序，不要在线程间共享同一实例。Python 目前会把服务器 RPC 错误转换为 `ValueError('rpcFailed')`，因此不要声称它会暴露 Node/MCP 的精确错误原因。Python 传输/安全检查已有验收记录；直接使用 Python 执行页面操作尚未独立验收。

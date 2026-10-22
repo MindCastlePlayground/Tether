@@ -17,6 +17,7 @@ The extension popup supports English and Simplified Chinese through Chrome local
 - Node.js and Python clients, plus a stdio MCP server.
 - Create a task tab group (`newGroup`) or attach to one explicitly selected existing HTTP(S) tab (`attachExisting`).
 - Session-scoped page permissions, client authentication, TLS certificate and SPKI pin checks, and request sequence deduplication.
+- Element snapshot with refs (`snapshot`), precise locator lookup (`locate`), and click/fill that resolve nested text such as `button > div > span` to exactly one element or refuse with candidates.
 - Localhost by default; LAN listening requires explicit setup and matching per-client credentials.
 
 ## Architecture

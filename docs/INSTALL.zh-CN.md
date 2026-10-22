@@ -88,7 +88,7 @@ Broker 默认由策略托管：策略文件为 `<runtime>/.local/policy.json`，
 - `id` — 规则唯一标识。
 - `client` — `"*"` 或客户端身份。
 - `origin` — `"*"` 或 `scheme://host[:port]`；host 前导 `*.` 匹配子域和裸域。
-- `actions` — `session`、`availableTabs`、`observe`、`fill`、`click`、`navigate`、`createTab`、`closeTab` 或 `"*"`。
+- `actions` — `session`、`availableTabs`、`observe`（同时覆盖 `snapshot` 与 `locate`）、`fill`、`click`、`navigate`、`createTab`、`closeTab` 或 `"*"`。
 - `effect` — `allow`、`deny` 或 `ask`；`ask` 仅适用于 `actions: ["session"]`。
 - `default` — 无规则匹配时为 `allow` 或 `deny`。
 

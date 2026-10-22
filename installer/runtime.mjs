@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Files } from './files.mjs';
 import { Service } from './service.mjs';
-import { Hint, Install, InstallOption, Phase } from './constants.mjs';
+import { Hint, Install, InstallOption, Mark, Phase } from './constants.mjs';
 import { Copy } from './text.mjs';
 
 export class Runtime {
@@ -33,19 +33,21 @@ export class Runtime {
     if (fs.existsSync(root)) {
       if (!fs.existsSync(marker)) throw new Error(`Runtime directory already exists: ${root}. Use --runtime for a configured checkout, or choose a new --home.`);
       const meta = Files.json(marker);
-      if (meta.version !== Install.VERSION && !options[InstallOption.UPGRADE] && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${meta.version}. Run ${Hint.UPGRADE} or install --upgrade.`);
-      if (meta.version !== Install.VERSION || options[InstallOption.FORCE] || options[InstallOption.UPGRADE]) {
+      const version = meta[Mark.VERSION];
+      if (version !== Install.VERSION && !options[InstallOption.UPGRADE] && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${version}. Run ${Hint.UPGRADE} or install --upgrade.`);
+      // An interrupted upgrade resumes as an upgrade; an interrupted first install finishes setup.
+      if (version !== Install.VERSION || options[InstallOption.FORCE] || options[InstallOption.UPGRADE] || (!meta[Mark.READY] && meta[Mark.UPGRADE])) {
         Runtime.upgrade(root, source, options);
         Runtime.check(root);
         return;
       }
-      if (!meta.ready) Runtime.finish(root, options);
+      if (!meta[Mark.READY]) Runtime.finish(root, options);
       Runtime.check(root);
       return;
     }
     fs.mkdirSync(root, { recursive: true });
     // The marker permits resuming a failed first install without erasing any credentials.
-    Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: false })}\n`);
+    Runtime.mark(root, { [Mark.READY]: false });
     Runtime.step(options, Phase.COPY);
     for (const name of Install.SOURCE) Files.copy(path.join(source, name), path.join(root, name));
     Runtime.finish(root, options);
@@ -59,6 +61,15 @@ export class Runtime {
   }
   static py(root) { return path.join(root, '.venv', 'Scripts', 'python.exe'); }
   static deps(root) {
+    try { Runtime.build(root); }
+    catch {
+      // On Windows a process restarted mid-install can hold node_modules open; stop it and retry once.
+      Service.halt(root);
+      Runtime.nap(Install.RETRY_MS);
+      Runtime.build(root);
+    }
+  }
+  static build(root) {
     Runtime.npm(['ci', '--no-audit', '--no-fund', '--offline=false', `--cache=${path.join(root, '.npm-cache')}`], root);
     Runtime.npm(['run', 'build'], root);
   }
@@ -70,7 +81,7 @@ export class Runtime {
       if (Install.EXCLUDE.includes(path.basename(name))) continue;
       if (name === 'extension' && options[InstallOption.FORCE]) continue;
       const dest = path.join(root, name);
-      fs.rmSync(dest, { recursive: true, force: true });
+      fs.rmSync(dest, { recursive: true, force: true, maxRetries: Install.RETRIES, retryDelay: Install.RETRY_MS / Install.RETRIES });
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       Files.copy(path.join(source, name), dest);
     }
@@ -99,35 +110,55 @@ export class Runtime {
     Runtime.step(options, Phase.LAUNCHERS);
     Runtime.ps(path.join(root, 'scripts', 'launchers.ps1'), root, env);
     Runtime.check(root);
-    Files.write(path.join(root, Install.MARKER), `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
+    Runtime.mark(root, { [Mark.READY]: true });
   }
   static upgrade(root, source, options) {
     if (!fs.existsSync(root)) throw new Error(`Runtime not found: ${root}. Run ${Hint.INSTALL} first.`);
     const marker = path.join(root, Install.MARKER);
     if (!fs.existsSync(marker)) throw new Error(`Runtime ${root} has no install marker. Run ${Hint.INSTALL} first.`);
-    const old = Files.json(marker).version;
-    if (Runtime.compare(old, Install.VERSION) > 0 && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${old}, newer than this installer (${Install.VERSION}). Use --force to downgrade.`);
+    const meta = Files.json(marker);
+    if (Runtime.compare(meta[Mark.VERSION], Install.VERSION) > 0 && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${meta[Mark.VERSION]}, newer than this installer (${Install.VERSION}). Use --force to downgrade.`);
     Runtime.location(root, options);
+    // A rerun after an interrupted upgrade must restore the mode saved before the first pause, not "off".
+    const resumed = meta[Mark.READY] === false && meta[Mark.UPGRADE] === true;
+    const t = Copy.of(options.language);
     Runtime.step(options, Phase.STOP);
-    const running = Service.halt(root);
-    Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: false })}\n`);
-    Runtime.step(options, Phase.COPY);
-    Runtime.swap(root, source, options);
-    Runtime.key(root);
-    Runtime.step(options, Phase.DEPS);
-    Runtime.deps(root);
-    Runtime.step(options, Phase.PIP);
-    Runtime.pip(root);
-    // setup.py returns immediately when .local/broker.json already exists.
-    const env = { ...process.env, BB_LANGUAGE: options.language };
-    Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
-    Runtime.step(options, Phase.SYNC);
-    Runtime.sync(root, { ...options, [InstallOption.UPGRADE]: true });
-    Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
+    const seen = Service.scan(root);
+    if (seen.broker || seen.host) console.log(t.busy.service);
+    if (seen.mcp) console.log(t.busy.mcp(seen.mcp));
+    const paused = resumed ? meta[Mark.PAUSED] ?? null : Service.pause(root);
+    Runtime.mark(root, { [Mark.READY]: false, [Mark.UPGRADE]: true, [Mark.PAUSED]: paused, [Mark.RUNNING]: Boolean(meta[Mark.RUNNING]) });
+    const running = Service.halt(root) || (resumed && Boolean(meta[Mark.RUNNING]));
+    Runtime.mark(root, { [Mark.READY]: false, [Mark.UPGRADE]: true, [Mark.PAUSED]: paused, [Mark.RUNNING]: running });
+    try {
+      Runtime.step(options, Phase.COPY);
+      Runtime.swap(root, source, options);
+      Runtime.key(root);
+      Runtime.step(options, Phase.DEPS);
+      Runtime.deps(root);
+      Runtime.step(options, Phase.PIP);
+      Runtime.pip(root);
+      // setup.py returns immediately when .local/broker.json already exists.
+      const env = { ...process.env, BB_LANGUAGE: options.language };
+      Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+      Runtime.step(options, Phase.SYNC);
+      Runtime.sync(root, { ...options, [InstallOption.UPGRADE]: true });
+    } catch (error) {
+      // Auto-start stays paused so nothing runs the half-replaced code; the marker lets a rerun resume.
+      error.message = `${error.message}\n${t.busy.failed}`;
+      throw error;
+    }
+    Runtime.mark(root, { [Mark.READY]: true });
     // The extension respawns its host while we build; stop anything started from the old code.
     const again = Service.halt(root);
-    return { running: running || again, state: running || again ? Service.resume(root) : undefined };
+    const auto = Service.restore(root, paused);
+    const restart = auto && (running || again);
+    return { running: running || again, state: restart ? Service.resume(root) : undefined, mcp: seen.mcp };
   }
+  static mark(root, fields) {
+    Files.write(path.join(root, Install.MARKER), `${JSON.stringify({ [Mark.VERSION]: Install.VERSION, ...fields })}\n`);
+  }
+  static nap(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
   static location(root, options) {
     const saved = path.join(root, Install.EXTENSION_LOCATION);
     const dest = path.resolve(options[InstallOption.EXTENSION_DIR] || (fs.existsSync(saved) ? Files.json(saved).path : path.join(root, 'extension')));

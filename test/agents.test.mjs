@@ -1,3 +1,4 @@
+import './sandbox.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -84,13 +85,13 @@ test('opencode entry stays within the opencode 1.2.27 strict MCP schema', () => 
   assert.deepEqual(server.command, [entry.command]);
 });
 
-test('opencode defaults to the user config directory unless scope is explicit', () => {
+test('every agent defaults to user scope unless --scope project is given', () => {
   const home = path.join(os.tmpdir(), 'tether-home');
   const context = { project: path.join(home, 'proj'), userHome: home };
   const user = Agents.paths('opencode', Cli.scope('opencode', {}), context);
   assert.equal(user.config, path.join(home, '.config', 'opencode', 'opencode.jsonc'));
   assert.equal(user.skill, path.join(home, '.config', 'opencode', 'skills', 'tether-browser'));
-  assert.equal(Cli.scope('codex', {}), Scope.PROJECT);
+  assert.equal(Cli.scope('codex', {}), Scope.USER);
   assert.equal(Cli.scope('opencode', { scope: Scope.PROJECT }), Scope.PROJECT);
   assert.equal(Cli.parse(['install']).options.scope, undefined);
 });

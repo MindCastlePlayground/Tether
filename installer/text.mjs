@@ -30,9 +30,8 @@ class En {
   static missing = 'not detected';
   static scope = 'Where should agent configuration go?';
   static scopes = {
-    auto: ['Recommended', 'project; OpenCode in user home'],
-    project: ['This project only', 'config files inside the project folder'],
-    user: ['All projects (user home)', 'personal installation']
+    user: ['All projects (recommended)', 'user home configuration'],
+    project: ['One project only', 'config files inside a project folder']
   };
   static project = 'Project folder';
   static noDir = 'Folder does not exist';
@@ -80,6 +79,11 @@ class En {
     register: 'Registering Native Messaging',
     agents: 'Writing agent configuration'
   };
+  static busy = {
+    service: 'Broker / Native Host is running: auto-start is paused, they are stopped now and restarted on the new code afterwards. Browser operations in progress will be interrupted.',
+    mcp: n => `${n} agent session(s) are using the Tether MCP; they keep the old code until restarted.`,
+    failed: 'Upgrade interrupted. Broker auto-start stays paused so the half-replaced runtime is not started; rerun the upgrade to finish and restore it.'
+  };
   static next = 'Next steps';
   static nextSteps = (url, folder) => [
     `Open ${url} and turn on Developer mode.`,
@@ -117,9 +121,8 @@ class Zh {
   static missing = '未检测到';
   static scope = 'Agent 配置写到哪里？';
   static scopes = {
-    auto: ['推荐', '项目级；OpenCode 用户级'],
-    project: ['仅当前项目', '配置写入项目目录'],
-    user: ['所有项目（用户目录）', '个人全局安装']
+    user: ['所有项目（推荐）', '写入用户目录配置'],
+    project: ['仅单个项目', '配置写入项目目录']
   };
   static project = '项目目录';
   static noDir = '目录不存在';
@@ -166,6 +169,11 @@ class Zh {
     sync: '更新扩展目录',
     register: '注册 Native Messaging',
     agents: '写入 Agent 配置'
+  };
+  static busy = {
+    service: 'Broker / Native Host 正在运行：将暂停自动启动并立即停止，升级完成后用新代码重启。进行中的浏览器操作会被中断。',
+    mcp: n => `有 ${n} 个 Agent 会话正在使用 Tether MCP，重启这些会话后才会使用新代码。`,
+    failed: '升级中断。Broker 自动启动保持暂停，避免运行未替换完的 runtime；重新运行升级即可完成并恢复。'
   };
   static next = '下一步';
   static nextSteps = (url, folder) => [

@@ -16,9 +16,9 @@
 
 BAT 入口检查 Node.js 22+，并使用 npm 安装缺失的 CLI 依赖。无参数运行时会在退出前暂停，保留错误信息；也支持转发显式命令，例如 `.\install.bat install --agent codex --dry-run` 或 `.\install.bat upgrade`。相对路径和默认项目目录以调用时的工作目录为准。即使转发的是 dry-run 命令，依赖准备仍可能写入 `node_modules`。
 
-在终端中不带参数运行 `node bin/tether.mjs` 会进入交互式安装向导，用方向键、空格和 Enter 操作。向导先检查默认安装目录（`%LOCALAPPDATA%\Tether\runtime`），只列出适用的操作：全新机器显示**安装**；上次中断显示**继续安装**；旧版本显示**升级**（runtime 与 Agent Skill）、**仅升级 runtime** 或**修复**；当前版本显示**配置 Agent**、**打开扩展加载页**、**检查安装**或**修复**。比安装器更新的 runtime 不会在向导中被降级。安装流程依次询问 Agent（已检测到的默认勾选）、范围（默认 `auto`：多数 Agent 项目级，OpenCode 用户级）、需要时的项目目录，以及浏览器（标注是否已安装）。**快速安装**到此为止；**自定义**还会询问安装目录或已有 runtime、扩展目录、Python、语言、Native Messaging 注册和是否打开浏览器。写入任何内容前，向导执行与 `install` 相同的冲突检查：所选目录中是旧版 runtime 时询问是否原地升级；有冲突的 Tether MCP 配置或 Skill 会列出并询问是否备份后替换（`--force`，默认否）。随后显示摘要，可选**开始安装**、**仅预览**（`--dry-run`）或**取消**。安装时每个阶段先打印标题再输出工具日志，结束时给出编号的下一步。按 Ctrl+C 取消并以退出码 130 结束。没有连接终端时，不带参数仍显示帮助；显式命令和参数可继续用于脚本。BAT 入口会为向导把控制台切换为 UTF-8，退出时恢复原代码页。
+在终端中不带参数运行 `node bin/tether.mjs` 会进入交互式安装向导，用方向键、空格和 Enter 操作。向导先检查默认安装目录（`%LOCALAPPDATA%\Tether\runtime`），只列出适用的操作：全新机器显示**安装**；上次中断显示**继续安装**；旧版本显示**升级**（runtime 与 Agent Skill）、**仅升级 runtime** 或**修复**；当前版本显示**配置 Agent**、**打开扩展加载页**、**检查安装**或**修复**。比安装器更新的 runtime 不会在向导中被降级。安装流程询问 Agent（已检测到的默认勾选）和浏览器（标注是否已安装），并按用户级配置 Agent。**快速安装**到此为止；**自定义**还会询问范围（用户级，或单个项目目录）、安装目录或已有 runtime、扩展目录、Python、语言、Native Messaging 注册和是否打开浏览器。写入任何内容前，向导执行与 `install` 相同的冲突检查：所选目录中是旧版 runtime 时询问是否原地升级；有冲突的 Tether MCP 配置或 Skill 会列出并询问是否备份后替换（`--force`，默认否）。当操作会替换 runtime 时，若该 runtime 的 Broker、Native Host 或 Agent MCP 会话正在运行，向导会给出提示。随后显示摘要，可选**开始安装**、**仅预览**（`--dry-run`）或**取消**。安装时每个阶段先打印标题再输出工具日志，结束时给出编号的下一步。按 Ctrl+C 取消并以退出码 130 结束。没有连接终端时，不带参数仍显示帮助；显式命令和参数可继续用于脚本。BAT 入口会为向导把控制台切换为 UTF-8，退出时恢复原代码页。
 
-`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 默认为 `project`（OpenCode 默认用户级 `~/.config/opencode`），`--project` 默认当前目录；`--scope user` 跨项目安装。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；加载扩展后默认 `auto` 模式会管理它，每 30 秒探测一次。MCP 与 Native Host 仅在 TLS、证书 pin 和认证验证通过后为同一 runtime 拉起 Broker，不会杀掉或复用外部服务，也不自动换端口。Broker 启动失败设置 1、2、4、8、16 秒的最短退避时间；通常在约每 30 秒的下一次探测时重试，Chrome 也可能延后探测。连续失败 5 次后进入 `blocked`。Native Host 独立重连，退避间隔最高为 30 秒。共享 runtime 模式为 `off` 时，MCP 不会重新拉起 Broker。
+`--agent` 可省略，默认为 `auto`：自动检测已安装的 `codex`、`claude`、`cursor`、`opencode`、`gemini` 宿主并全部配置；也可传入逗号分隔的名称限定范围。`--scope` 对所有 Agent 默认为 `user`，一次安装对所有项目生效；`--scope project` 只写入 `--project` 指定的单个项目目录（默认当前目录）。持久化 home 默认为 `%LOCALAPPDATA%\Tether`，runtime 位于 `%LOCALAPPDATA%\Tether\runtime`。全新安装会复制原型、安装锁定版本的 Node 依赖并构建、创建隔离的 Python 环境和安装 Python requirements、生成本地凭据/证书、编译启动器，并在当前 Windows 用户的 HKCU 下同时注册 Chrome 与 Edge Native Messaging。安装成功后默认打开扩展管理页和扩展目录；`--no-open` 可关闭；找不到浏览器时只打印提示。安装器本身不会启动 Broker；加载扩展后默认 `auto` 模式会管理它，每 30 秒探测一次。MCP 与 Native Host 仅在 TLS、证书 pin 和认证验证通过后为同一 runtime 拉起 Broker，不会杀掉或复用外部服务，也不自动换端口。Broker 启动失败设置 1、2、4、8、16 秒的最短退避时间；通常在约每 30 秒的下一次探测时重试，Chrome 也可能延后探测。连续失败 5 次后进入 `blocked`。Native Host 独立重连，退避间隔最高为 30 秒。共享 runtime 模式为 `off` 时，MCP 不会重新拉起 Broker。
 
 安装器只添加 Tether MCP 配置，并复制完整的 `skills/tether-browser/` 文件夹及不含秘密的 `installation.json` 定位文件。现有配置中的注释和其他键会保留；修改配置时会在同目录创建备份。同一版本重复安装是幂等的。单独升级 runtime 可运行：
 
@@ -38,7 +38,7 @@ node bin/tether.mjs upgrade [--home PATH | --runtime PATH]
 
 `install --upgrade` 升级托管 runtime 并更新所选 Agent 的 Tether Skill。`--force` 可重装同一版本，并备份后覆盖冲突的 Tether MCP 配置、Skill 和扩展文件。无关 MCP 配置和本地凭据保留。普通安装遇到冲突仍会停止；替换用户修改的内容前可先使用 `--dry-run` 查看路径。交互向导在预检发现旧版 runtime 或冲突时提供升级与强制覆盖，并在自定义模式中提供扩展目录。runtime 比安装器更新时，`upgrade` 默认拒绝替换，除非指定 `--force`。
 
-升级会停止该 runtime 正在运行的 Broker 与 Native Host（包括缺少生命周期端点的 0.x Broker），原先在运行时用新代码重新拉起 Broker。扩展会在没有活动会话时自动重新加载；本版本之前加载的扩展需要在扩展管理页手动“重新加载”一次。已打开的 Agent 会话需重启才会使用新版 MCP。升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
+升级先把该 runtime 的 Broker 自动启动模式置为 `off`，防止 Agent MCP 或被重新拉起的 Native Host 启动构建到一半的 Broker，然后停止正在运行的 Broker 与 Native Host（包括缺少生命周期端点的 0.x Broker）。进行中的浏览器操作会被中断。文件被占用时会重试；依赖安装失败时会再次停止进程并重试一次。完成后恢复原来的模式并重置重试计数；若 Broker 原先在运行且自动启动不是 `off`，则用新代码重新拉起。升级中断时自动启动保持暂停，安装标记记录原来的模式；重新运行 `upgrade` 或 `install` 会继续升级并恢复该模式。正在运行的 Agent MCP 进程只统计并提示，不会被停止。扩展会在没有活动会话时自动重新加载；本版本之前加载的扩展需要在扩展管理页手动“重新加载”一次。已打开的 Agent 会话需重启才会使用新版 MCP。升级会替换 runtime 源码，保留 `.local`（凭据、证书、策略）和 `.venv`，扩展 ID 保持不变，重新执行 `npm ci`/构建和 Python 安装，且不改动 Agent 配置。
 
 传入 `--runtime PATH` 可复用已配置的原型目录。此时跳过 runtime 复制、依赖安装、构建、Python 初始化和凭据生成；除非提供 `--no-register`，仍会注册 Native Messaging。`--no-register` 跳过 HKCU 注册。`--python PATH` 指定全新隔离环境使用的 Python，`--language en|zh-CN` 设置 MCP 描述与初始化提示语言。
 
@@ -66,7 +66,7 @@ node bin/tether.mjs doctor --home "$env:LOCALAPPDATA\Tether"
 
 支持 OpenCode 1.2.27 及以上版本。用户范围下，安装器把 `opencode.jsonc`（或已有的 `opencode.json`/`opencode.jsonc`）和 `skills/tether-browser/` 写入 `$XDG_CONFIG_HOME/opencode/` 或 `~/.config/opencode/`；Windows 上 OpenCode 同样读取该路径，而非 `%APPDATA%`。OpenCode 1.2.27 对 `mcp.tether` 做严格校验，因此条目只包含 `type`、`command`、`environment` 和 `enabled`。在隔离安装的 OpenCode 1.2.27 中，`opencode debug skill` 列出了 `tether-browser`，`opencode mcp list` 显示 `tether connected`。
 
-已安装技能会优先使用已配置的 Tether MCP 工具。必要时读取 `installation.json` 来定位 runtime；不会根据技能目录推断检出目录。安装后请重启或重新加载 Agent。项目配置包含当前机器的绝对路径；跨仓库的个人安装可选择用户范围。每个浏览器/用户只有一个 Tether Native Messaging 注册：注册另一个 runtime 会将该注册切换到新目录，因此需要加载与之匹配的扩展。
+已安装技能会优先使用已配置的 Tether MCP 工具。必要时读取 `installation.json` 来定位 runtime；不会根据技能目录推断检出目录。安装后请重启或重新加载 Agent。项目配置包含当前机器的绝对路径，因此默认使用用户范围。每个浏览器/用户只有一个 Tether Native Messaging 注册：注册另一个 runtime 会将该注册切换到新目录，因此需要加载与之匹配的扩展。
 
 ## 加载浏览器扩展
 

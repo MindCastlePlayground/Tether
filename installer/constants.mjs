@@ -102,7 +102,7 @@ export class Install {
   static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
-  static VERSION = '1.1.0';
+  static VERSION = '1.2.0';
   static SERVER = 'tether';
   static HOST = 'com.freebird.browser_bridge';
   static SOURCE = ['package.json', 'package-lock.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];

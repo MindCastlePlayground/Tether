@@ -1,3 +1,4 @@
+import './sandbox.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -44,10 +45,10 @@ test('quick install on a fresh machine needs only Enter presses', async () => {
   assert.equal(command, 'install');
   assert.equal(options.agent, 'codex,claude');
   assert.equal(options.scope, undefined);
-  assert.equal(options.project, os.tmpdir());
+  assert.equal(Cli.scope('codex', options), 'user');
   assert.equal(options.browser, 'edge');
   assert.equal(options['dry-run'], undefined);
-  assert.deepEqual(ui.asked, [Step.ACTION, Step.AGENTS, Step.SCOPE, Step.PROJECT, Step.BROWSER, Step.MODE, Step.CONFIRM]);
+  assert.deepEqual(ui.asked, [Step.ACTION, Step.AGENTS, Step.BROWSER, Step.MODE, Step.CONFIRM]);
 });
 
 test('preview choice adds --dry-run and summary lists the plan', async () => {
@@ -57,15 +58,16 @@ test('preview choice adds --dry-run and summary lists the plan', async () => {
   assert.ok(ui.notes.some(text => text.includes('Codex, Claude Code') && text.includes('Edge')));
 });
 
-test('user-scoped agents skip the project question', async () => {
-  const ui = new Script({ [Step.AGENTS]: ['opencode'] });
+test('project scope is only offered in custom mode', async () => {
+  const user = new Script({ [Step.MODE]: Choice.CUSTOM });
+  const kept = Cli.parse(await Wizard.run(user, Env.make())).options;
+  assert.equal(kept.scope, undefined);
+  assert.ok(user.asked.includes(Step.SCOPE) && !user.asked.includes(Step.PROJECT));
+  const ui = new Script({ [Step.MODE]: Choice.CUSTOM, [Step.SCOPE]: 'project', [Step.PROJECT]: 'C:\\proj' });
   const { options } = Cli.parse(await Wizard.run(ui, Env.make()));
-  assert.equal(options.agent, 'opencode');
-  assert.equal(Cli.scope('opencode', options), 'user');
-  assert.ok(!ui.asked.includes(Step.PROJECT));
-  const user = new Script({ [Step.SCOPE]: 'user' });
-  assert.equal(Cli.parse(await Wizard.run(user, Env.make())).options.scope, 'user');
-  assert.ok(!user.asked.includes(Step.PROJECT));
+  assert.equal(options.scope, 'project');
+  assert.equal(options.project, 'C:\\proj');
+  assert.ok(ui.notes.some(text => text.includes('C:\\proj')));
 });
 
 test('custom mode maps answers to install options', async () => {
@@ -122,8 +124,8 @@ test('preflight errors and cancellation stop without arguments', async () => {
   const failed = new Script();
   assert.equal(await Wizard.run(failed, Env.make({ check: () => ({ state: State.NONE, error: 'Malformed JSONC' }) })), null);
   assert.ok(failed.notes.some(text => text.includes('Malformed JSONC')));
-  assert.equal(await Wizard.run(new Script({ [Step.SCOPE]: new Cancelled() }), Env.make()), null);
-  await assert.rejects(Wizard.run(new Script({ [Step.SCOPE]: new Error('boom') }), Env.make()), /boom/);
+  assert.equal(await Wizard.run(new Script({ [Step.BROWSER]: new Cancelled() }), Env.make()), null);
+  await assert.rejects(Wizard.run(new Script({ [Step.BROWSER]: new Error('boom') }), Env.make()), /boom/);
 });
 
 test('Cli.state classifies install homes', () => {
@@ -146,7 +148,7 @@ test('Cli.check reports real config conflicts and clears them with --force', () 
   const project = path.join(root, 'project');
   fs.mkdirSync(project);
   fs.writeFileSync(path.join(project, '.mcp.json'), '{"mcpServers":{"tether":{"command":"other.exe"}}}');
-  const args = ['install', '--agent', 'claude', '--project', project, '--home', path.join(root, 'home'), '--language', 'en'];
+  const args = ['install', '--agent', 'claude', '--scope', 'project', '--project', project, '--home', path.join(root, 'home'), '--language', 'en'];
   const report = Cli.check(args);
   assert.equal(report.state, State.NONE);
   assert.match(report.conflict, /\.mcp\.json: Conflicting tether entry/);
@@ -195,4 +197,13 @@ test('summary aligns CJK labels and names options in words', () => {
   const column = line => { const [, label, gap] = line.match(/^(\S+)(\s+)/); return Wizard.width(label) + gap.length; };
   assert.ok(lines.every(line => column(line) === column(lines[0])));
   assert.match(text, /备份并替换冲突项, 不打开浏览器/);
+});
+
+test('upgrade summary warns about running Broker and agent sessions', async () => {
+  const check = () => ({ state: State.STALE, old: '1.0.0', busy: { broker: 1, host: 1, mcp: 3 } });
+  const ui = new Script();
+  const args = await Wizard.run(ui, Env.make({ state: State.STALE, old: '1.0.0', check }));
+  assert.ok(args.includes('--upgrade'));
+  assert.ok(ui.notes.some(text => text.includes('auto-start is paused')));
+  assert.ok(ui.notes.some(text => text.includes('3 agent session')));
 });

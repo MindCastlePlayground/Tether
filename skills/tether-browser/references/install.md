@@ -8,11 +8,11 @@ For a checkout, run from its root:
 
 ```powershell
 npm ci
-node bin/tether.mjs install --agent codex --scope project --project PATH --dry-run
-node bin/tether.mjs install --agent codex --scope project --project PATH
+node bin/tether.mjs install --agent codex --dry-run
+node bin/tether.mjs install --agent codex
 ```
 
-`--agent` may be omitted or set to `auto` to detect and configure installed hosts (`codex`, `claude`, `cursor`, `opencode`, `gemini`); an explicit comma-separated selection restricts it. Project scope changes only that project; `--scope user` installs across projects. Never select every host merely because it is supported. `--runtime PATH` reuses a configured prototype. Otherwise the Windows installer prepares a persistent runtime under `%LOCALAPPDATA%\Tether\runtime`, builds MCP/Native Host launchers, creates an isolated Python environment, and registers Chrome/Edge Native Messaging. After success it opens the extension manager page and extension folder; `--no-open` disables that. The installer itself never starts Broker; the MCP server auto-starts it on demand, and `BB_BROKER_AUTOSTART=0` disables that. An older runtime prompts `tether upgrade`, which replaces sources while preserving `.local` and the extension ID. Existing conflicting entries or skill files stop installation; preserve user edits and resolve the specific conflict.
+`--agent` may be omitted or set to `auto` to detect and configure installed hosts (`codex`, `claude`, `cursor`, `opencode`, `gemini`); an explicit comma-separated selection restricts it. The default user scope serves every project; use `--scope project --project PATH` only when the user wants one project configured. Never select every host merely because it is supported. `--runtime PATH` reuses a configured prototype. Otherwise the Windows installer prepares a persistent runtime under `%LOCALAPPDATA%\Tether\runtime`, builds MCP/Native Host launchers, creates an isolated Python environment, and registers Chrome/Edge Native Messaging. After success it opens the extension manager page and extension folder; `--no-open` disables that. The installer itself never starts Broker; the MCP server auto-starts it on demand, and `BB_BROKER_AUTOSTART=0` disables that. An older runtime prompts `tether upgrade`, which replaces sources while preserving `.local` and the extension ID. Existing conflicting entries or skill files stop installation; preserve user edits and resolve the specific conflict.
 
 The root package is not published to npm. From a checkout with installed CLI dependencies, `npm pack --pack-destination work` produces `work/mindcastleplayground-tether-0.1.0.tgz`. The npx route is:
 

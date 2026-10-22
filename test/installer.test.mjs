@@ -1,3 +1,4 @@
+import './sandbox.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -87,7 +88,7 @@ test('config mutations back up exact original, repeat writes create no backup', 
 test('dry run performs no writes or setup, doctor does not claim live connectivity', async () => {
   const root=Fixture.root(), options=Fixture.options(root);
   const before=fs.readdirSync(root);
-  await Cli.main(['install','--agent','codex','--project',options.project,'--home',path.join(root,'home'),'--dry-run']);
+  await Cli.main(['install','--agent','codex','--scope','project','--project',options.project,'--home',path.join(root,'home'),'--dry-run']);
   assert.deepEqual(fs.readdirSync(root),before);
   Fixture.runtime(options.runtime);
   assert.equal(Cli.doctor(options.runtime,options),0);
@@ -177,7 +178,7 @@ test('setup-time skill edits abort before registration and config mutation', asy
       fs.writeFileSync(file,'edited during setup');
     };
     Runtime.register=() => {registrations++;};
-    await assert.rejects(Cli.main(['install','--agent','codex','--project',options.project,'--runtime',options.runtime]),/Skill changed during setup/);
+    await assert.rejects(Cli.main(['install','--agent','codex','--scope','project','--project',options.project,'--runtime',options.runtime]),/Skill changed during setup/);
     assert.equal(registrations,0);
     assert.ok(!fs.existsSync(path.join(options.project,'.codex','config.toml')));
   } finally {Runtime.prepare=prepare;Runtime.register=register;}
@@ -254,7 +255,7 @@ test('install opens the browser unless no-open or dry-run, and a missing browser
     Runtime.prepare = () => {};
     Runtime.register = () => {};
     Browser.open = async plan => { calls.push(plan.url); };
-    const args = ['install', '--agent', 'codex', '--project', project, '--runtime', runtime, '--language', 'en'];
+    const args = ['install', '--agent', 'codex', '--scope', 'project', '--project', project, '--runtime', runtime, '--language', 'en'];
     assert.equal(await Cli.main(args), 0);
     assert.equal(calls.length, 1);
     assert.equal(await Cli.main([...args, '--open-browser']), 0);
@@ -319,14 +320,15 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
   fs.writeFileSync(path.join(runtime, Install.MARKER), `${JSON.stringify({ version: '0.0.1', ready: true })}\n`);
   const npm = Runtime.npm;
   const run = Runtime.run;
-  const halt = Service.halt, resume = Service.resume;
+  const halt = Service.halt, resume = Service.resume, scan = Service.scan;
   const calls = [];
   try {
     Runtime.npm = (args, cwd) => calls.push(['npm', args, cwd]);
     Runtime.run = (command, args, cwd) => calls.push(['run', command, args, cwd]);
     Service.halt = root => { calls.push(['halt', root]); return true; };
     Service.resume = root => { calls.push(['resume', root]); return 'running'; };
-    assert.deepEqual(Runtime.upgrade(runtime, source, { language: 'en' }), { running: true, state: 'running' });
+    Service.scan = () => ({ broker: 1, host: 0, mcp: 2 });
+    assert.deepEqual(Runtime.upgrade(runtime, source, { language: 'en' }), { running: true, state: 'running', mcp: 2 });
     assert.deepEqual(calls.filter(item => item[0] === 'halt' || item[0] === 'resume').map(item => item[0]), ['halt', 'halt', 'resume']);
     assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'new');
     assert.equal(Files.read(path.join(runtime, 'README.md')), 'new');
@@ -358,6 +360,7 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
     Runtime.run = run;
     Service.halt = halt;
     Service.resume = resume;
+    Service.scan = scan;
   }
   assert.throws(() => Runtime.upgrade(path.join(root, 'missing'), source, {}), new RegExp(Hint.INSTALL));
   assert.throws(() => Runtime.upgrade(path.join(root, 'empty'), source, {}), new RegExp(Hint.INSTALL));
@@ -402,7 +405,7 @@ test('force install overwrites planned skills but still detects concurrent edits
   try {
     Runtime.prepare = () => {};
     Runtime.register = () => {};
-    await Cli.main(['install', '--agent', 'codex', '--project', options.project, '--runtime', options.runtime, '--force', '--no-open']);
+    await Cli.main(['install', '--agent', 'codex', '--scope', 'project', '--project', options.project, '--runtime', options.runtime, '--force', '--no-open']);
     assert.notEqual(Files.read(skill), 'customized');
     assert.ok(fs.readdirSync(path.dirname(skill)).some(name => name.startsWith('SKILL.md.tether-backup-')));
   } finally { Runtime.prepare = prepare; Runtime.register = register; }

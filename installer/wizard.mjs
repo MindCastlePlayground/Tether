@@ -60,11 +60,7 @@ export class Wizard {
   static label(name) { return name[0].toUpperCase() + name.slice(1); }
   static async install(ui, env, t) {
     const agents = await ui.many(Step.AGENTS, t.agents, Agents.names.map(name => [name, Wizard.names[name], env.agents.includes(name) ? t.detected : t.missing]), env.agents);
-    const scope = await ui.pick(Step.SCOPE, t.scope, [Choice.AUTO, Scope.PROJECT, Scope.USER].map(value => Wizard.item(value, t.scopes[value])), Choice.AUTO);
     const args = [Cmd.INSTALL, Wizard.flag(Arg.AGENT), agents.join(',')];
-    if (scope !== Choice.AUTO) args.push(Wizard.flag(Arg.SCOPE), scope);
-    const local = scope === Scope.PROJECT || (scope === Choice.AUTO && agents.some(name => !Scope.USER_DEFAULT.includes(name)));
-    if (local) args.push(Wizard.flag(Arg.PROJECT), await ui.ask(Step.PROJECT, t.project, env.cwd, env.cwd, v => (fs.existsSync(v) ? undefined : t.noDir)));
     args.push(Wizard.flag(Arg.BROWSER), await Wizard.browser(ui, env, t));
     const mode = await ui.pick(Step.MODE, t.mode, [Choice.QUICK, Choice.CUSTOM].map(value => Wizard.item(value, t.modes[value])), Choice.QUICK);
     if (mode === Choice.CUSTOM) await Wizard.custom(ui, env, t, args);
@@ -72,6 +68,12 @@ export class Wizard {
   }
   static names = { codex: 'Codex', claude: 'Claude Code', cursor: 'Cursor', opencode: 'OpenCode', gemini: 'Gemini CLI' };
   static async custom(ui, env, t, args) {
+    // Project scope is the rare case, so it only appears here.
+    const scope = await ui.pick(Step.SCOPE, t.scope, [Scope.USER, Scope.PROJECT].map(value => Wizard.item(value, t.scopes[value])), Scope.DEFAULT);
+    if (scope === Scope.PROJECT) {
+      args.push(Wizard.flag(Arg.SCOPE), scope);
+      args.push(Wizard.flag(Arg.PROJECT), await ui.ask(Step.PROJECT, t.project, env.cwd, env.cwd, v => (fs.existsSync(v) ? undefined : t.noDir)));
+    }
     const text = async (id, message, key, placeholder = '') => {
       const value = await ui.ask(id, message, '', placeholder);
       if (value) args.push(Wizard.flag(key), value);
@@ -102,6 +104,8 @@ export class Wizard {
       report = env.check(args);
     }
     if (report.error) { ui.stop(`${t.failed} ${report.error}`); return null; }
+    if (report.busy?.broker || report.busy?.host) ui.warn(t.busy.service);
+    if (report.busy?.mcp) ui.warn(t.busy.mcp(report.busy.mcp));
     ui.note(Wizard.summary(t, args, report), t.summary);
     const final = await ui.pick(Step.CONFIRM, t.confirm, [Choice.GO, Choice.PREVIEW, Choice.EXIT].map(value => Wizard.item(value, t.confirms[value])), Choice.GO);
     if (final === Choice.EXIT) { ui.end(t.bye); return null; }
@@ -118,7 +122,7 @@ export class Wizard {
     const flags = [InstallOption.UPGRADE, InstallOption.FORCE, Install.OPTION.NO_REGISTER, Opt.NO_OPEN].filter(name => args.includes(Wizard.flag(name)));
     const rows = [
       [r.agents, Wizard.value(args, Arg.AGENT).split(',').map(name => Wizard.names[name]).join(', ')],
-      [r.scope, t.scopes[Wizard.value(args, Arg.SCOPE) ?? Choice.AUTO][0]],
+      [r.scope, t.scopes[Wizard.value(args, Arg.SCOPE) ?? Scope.DEFAULT][0]],
       [r.project, Wizard.value(args, Arg.PROJECT)],
       [r.runtime, report.root],
       [r.browser, Wizard.label(Wizard.value(args, Arg.BROWSER))],

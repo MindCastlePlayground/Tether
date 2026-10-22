@@ -42,8 +42,6 @@ export class Choice {
   static EXTENSION = 'extension';
   static DOCTOR = 'doctor';
   static EXIT = 'exit';
-  // Scope
-  static AUTO = 'auto';
   // Mode
   static QUICK = 'quick';
   static CUSTOM = 'custom';
@@ -113,9 +111,27 @@ export class ServiceKey {
   static LIFECYCLE = 'dist/lifecycle.js';
   static RUNNING = 'running';
   static OFF = 'off';
+  static STARTING = 'starting';
+  static STOPPED = 'stopped';
+  // BrokerLifecycle re-reads this before every start; mode "off" stops MCP/host from spawning a Broker.
+  static STATE = '.local/broker-state.json';
+  static BROKER = 'broker';
+  static ROLES = [ServiceKey.BROKER, 'host', 'mcp'];
+  static MODES = ['auto', 'on', ServiceKey.OFF];
+  // Lists this runtime's running Node processes, one role name per line.
+  static SCAN = String.raw`$r=[regex]::Escape($env:TETHER_ROOT); Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ForEach-Object { if ($_.CommandLine -match ($r + '\\dist\\(broker|host|mcp)\.js')) { $Matches[1] } }`;
   // Stops this runtime's Node broker/host processes; prints one line per broker it stopped.
   static HALT = String.raw`$r=[regex]::Escape($env:TETHER_ROOT); Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match ($r + '\\dist\\(broker|host)\.js') } | ForEach-Object { $b = $_.CommandLine -match 'broker\.js'; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; if ($b) { 'broker' } }`;
   static RESUME = "const {pathToFileURL}=await import('node:url');const m=await import(pathToFileURL(process.env.TETHER_ROOT+'/dist/lifecycle.js').href);const s=await new m.BrokerLifecycle(process.env.TETHER_CONFIG).ensure();process.stdout.write(JSON.stringify(s));";
+}
+
+// Fields of the runtime install marker.
+export class Mark {
+  static VERSION = 'version';
+  static READY = 'ready';
+  static UPGRADE = 'upgrade';
+  static PAUSED = 'paused';
+  static RUNNING = 'running';
 }
 
 export class Hint {
@@ -126,8 +142,8 @@ export class Hint {
 export class Scope {
   static PROJECT = 'project';
   static USER = 'user';
-  // Agents whose configuration defaults to the user home instead of the project.
-  static USER_DEFAULT = ['opencode'];
+  // Agent configuration goes to the user home unless --scope project is given.
+  static DEFAULT = Scope.USER;
 }
 
 // opencode 1.2.27 validates `mcp.<name>` with a strict schema: any other key invalidates the whole file.
@@ -156,6 +172,8 @@ export class Install {
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
   static VERSION = '1.2.0';
+  static RETRIES = 5;
+  static RETRY_MS = 2000;
   static SERVER = 'tether';
   static HOST = 'com.freebird.browser_bridge';
   static SOURCE = ['package.json', 'package-lock.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];

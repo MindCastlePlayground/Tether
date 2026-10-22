@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '1.1.0';
+  static readonly Version = '1.2.0';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';
@@ -35,7 +35,8 @@ export enum Method {
   Request = 'requestSession', Status = 'approvalStatus', Tabs = 'listTabs', Create = 'createTab',
   Close = 'closeTab', Release = 'release', Observe = 'observe', Fill = 'fill', Click = 'click',
   Navigate = 'navigate', Capabilities = 'capabilities', Attach = 'cdpAttach', CDP = 'cdp',
-  Detach = 'cdpDetach', Event = 'cdpEvent', Heartbeat = 'heartbeat', Lost = 'clientLost', Available = 'availableTabs'
+  Detach = 'cdpDetach', Event = 'cdpEvent', Heartbeat = 'heartbeat', Lost = 'clientLost', Available = 'availableTabs',
+  Snapshot = 'snapshot', Locate = 'locate'
 }
 export class Limit {
   static readonly Frame = 512 * 1024;
@@ -57,7 +58,7 @@ export class Wire {
 export type Params = Record<string, any>;
 export interface RPC { jsonrpc: string; id?: string | number; method?: string; params?: Params; result?: any; error?: {code:number;message:string}; }
 export type Forward = (method: string, params: Params) => Promise<any>;
-export const PUBLIC = new Set<string>([Method.Request,Method.Status,Method.Tabs,Method.Create,Method.Close,Method.Release,Method.Observe,Method.Fill,Method.Click,Method.Navigate,Method.Capabilities,Method.Available]);
+export const PUBLIC = new Set<string>([Method.Request,Method.Status,Method.Tabs,Method.Create,Method.Close,Method.Release,Method.Observe,Method.Fill,Method.Click,Method.Navigate,Method.Capabilities,Method.Available,Method.Snapshot,Method.Locate]);
 export const WRITES = new Set<string>([Method.Create,Method.Close,Method.Release,Method.Fill,Method.Click,Method.Navigate]);
 export class Autostart {
   static readonly Client = 'BB_CLIENT_CONFIG';
@@ -98,7 +99,7 @@ export class Wake {
   /** The link dropped after sending; only side-effect free calls are retried. */
   static readonly Lost = new Set(['host_disconnected', 'connectionClosed']);
   /** Side-effect free calls that may be retried once after recovery. */
-  static readonly Reads = new Set<string>([Method.Status, Method.Tabs, Method.Observe, Method.Available]);
+  static readonly Reads = new Set<string>([Method.Status, Method.Tabs, Method.Observe, Method.Available, Method.Snapshot, Method.Locate]);
 }
 export class BrokerControl {
   static readonly Type = 'broker.control';
@@ -137,4 +138,65 @@ export class BrokerControl {
   static readonly Extension = 'extension';
   static readonly Build = 'build';
   static readonly Manifest = 'manifest.json';
+}
+/** Element lookup used by snapshot, locate, fill and click. */
+export class Find {
+  /** Engine methods that run in Playwright, and the reads that share the observe policy action. */
+  static readonly Engine = new Set<string>([Method.Observe, Method.Fill, Method.Click, Method.Snapshot, Method.Locate]);
+  static readonly Reads = new Set<string>([Method.Snapshot, Method.Locate]);
+  static readonly Wait = 3000;
+  static readonly Step = 250;
+  static readonly Chars = 30_000;
+  static readonly Candidates = 10;
+  static readonly Visible = 20;
+  static readonly Name = 80;
+  static readonly Ref = /^[a-z0-9]{1,24}$/;
+  static readonly Line = /^\s*- ([\w-]+)(?: "((?:[^"\\]|\\.)*)")?.*?\[ref=([a-z0-9]+)\]/;
+  static readonly Head = /^- ([\w-]+)(?: "((?:[^"\\]|\\.)*)")?/;
+  static readonly AI = 'ai' as const;
+  static readonly Container =/^(\s*)- generic \[ref=[a-z0-9]+\]:$/;
+  static readonly Leaf = /^\s*- generic \[ref=[a-z0-9]+\]$/;
+  static readonly Quoted = /(?:text\(\)\s*,|text\(\)\s*=|has-text\(|contains\(|text=|normalize-space\(\.?\)\s*[=,])\s*(["'])((?:(?!\1).)+)\1/g;
+  static readonly Bare = /[#.\[\]>=:()@\/*~+'"]/;
+  static readonly Tag = /^(?:\(?\/\/|xpath=\/\/|css=)?([a-zA-Z][\w-]*)/;
+  static readonly XPath = /^(?:\(*\/\/|xpath=)/;
+  static readonly Body = 'body';
+  static readonly Fillable = 'input:not([type=hidden]),textarea,select,[contenteditable=""],[contenteditable="true"]';
+  static readonly Actionable = 'xpath=ancestor-or-self::*[self::button or self::a or self::summary or self::label or self::select or self::input or self::textarea or self::option or @onclick or @role="button" or @role="link" or @role="menuitem" or @role="menuitemcheckbox" or @role="menuitemradio" or @role="tab" or @role="checkbox" or @role="radio" or @role="switch" or @role="option" or @role="treeitem" or @role="combobox"][1]';
+  static readonly Roles: Record<string, string> = { button: 'button', a: 'link', summary: 'button', select: 'combobox', textarea: 'textbox', input: 'textbox', option: 'option', h1: 'heading', h2: 'heading', h3: 'heading', li: 'listitem' };
+  static readonly Tags = new Set(['input', 'textarea', 'select']);
+}
+export class FindCode {
+  static readonly Missing = 'selector_not_found';
+  static readonly Ambiguous = 'selector_ambiguous';
+  static readonly Invalid = 'selector_invalid';
+  static readonly Stale = 'ref_stale';
+  static readonly Fill = 'not_fillable';
+  static readonly Scope = 'scope_not_found';
+  static readonly Query = 'locate_query_empty';
+}
+export class Strategy {
+  static readonly Selector = 'selector';
+  static readonly Ref = 'ref';
+  static readonly RefRole = 'ref-role-name';
+  static readonly XPathText = 'xpath-normalize-space';
+  static readonly Contains = 'jquery-contains';
+  static readonly Role = 'role-name';
+  static readonly Text = 'text';
+  static readonly Label = 'label';
+  static readonly Placeholder = 'placeholder';
+  static readonly Visible = '+visible';
+  static readonly Retarget = '+actionable-ancestor';
+  static readonly Inner = '+inner-field';
+}
+export class FindHint {
+  static readonly XPathText = 'XPath text() only matches text nodes that are direct children; the text is nested in descendants (span/div). Tether retried with normalize-space(.). Prefer a ref from snapshot or role=<role>[name="..."].';
+  static readonly Fallback = 'The selector matched nothing, so Tether matched the quoted text by accessible role/name or visible text instead. Use the returned target.selector next time.';
+  static readonly Retarget = 'The match was a text node wrapper inside a control; Tether acted on its nearest actionable ancestor.';
+  static readonly Missing = 'Nothing matched, even after text/role fallbacks. Call snapshot to see the page roles, names and refs, then act with ref or a candidate selector.';
+  static readonly Ambiguous = 'Several visible elements match. Pick one candidate selector or a ref from snapshot; nothing was clicked or filled.';
+  static readonly Stale = 'The ref is not in the latest snapshot of this page and its role/name no longer match one element. Call snapshot again.';
+  static readonly Fill = 'The match is not an input, textarea, select or contenteditable element and contains no single field. Nothing was filled.';
+  static readonly Invalid = 'The selector cannot be parsed by Playwright. Use CSS, XPath, role=<role>[name="..."], text="...", or a ref from snapshot.';
+  static readonly Snapshot = 'Each [ref=eN] can be passed as ref to click/fill/locate. Refs belong to this snapshot; take a new snapshot after the page changes.';
 }

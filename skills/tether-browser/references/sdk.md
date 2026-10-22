@@ -69,4 +69,4 @@ class Task:
             client.close()
 ```
 
-Use the same request → approvalStatus → observe/action → release workflow via `call(method, params)`. Keep calls sequential and do not share an instance across threads. Python currently converts server RPC errors to `ValueError('rpcFailed')`, so do not claim that it exposes the precise Node/MCP error reason. Python transport/security checks have recorded acceptance; direct Python page actions have not been independently accepted.
+Use the same request → approvalStatus → observe/snapshot/action → release workflow via `call(method, params)`; `call('click', {..., 'ref': 'e12'})` works the same as in Node. Keep calls sequential and do not share an instance across threads. Python currently converts server RPC errors to `ValueError('rpcFailed')`, so do not claim that it exposes the precise Node/MCP error reason. Python transport/security checks have recorded acceptance; direct Python page actions have not been independently accepted.

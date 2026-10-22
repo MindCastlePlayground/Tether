@@ -17,6 +17,7 @@ Tether 通过浏览器扩展和本机 TLS WebSocket Broker，让经过授权的�
 - 提供 Node.js、Python 客户端及 stdio MCP 服务。
 - 可新建任务标签组（`newGroup`），也可接管客户端明确指定的一个已有 HTTP(S) 标签（`attachExisting`）。
 - 按会话授予页面权限，并提供客户端认证、TLS 证书与 SPKI pin 校验、请求序号去重。
+- 带 ref 的元素快照（`snapshot`）、精确定位器查询（`locate`），click/fill 会把 `button > div > span` 等嵌套文字解析为唯一元素，否则拒绝并给出候选。
 - 默认仅监听本机；局域网监听需要显式配置，并为每个客户端配置匹配的凭据。
 
 ## 架构

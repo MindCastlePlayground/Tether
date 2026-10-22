@@ -9,7 +9,7 @@ import { Policy } from './policy.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Config } from './config.js';
 import { Engine } from './engine.js';
-import { Method, Limit, Wire, Action, Effect, PolicyKey, Brand, BrokerControl as Control, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
+import { Method, Limit, Wire, Action, Effect, PolicyKey, Brand, BrokerControl as Control, Find, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
 
 interface Pending {resolve:(v:any)=>void;reject:(e:Error)=>void;timer:NodeJS.Timeout;}
 interface Ledger {high:number; records:Map<number,{body:string,result:Promise<any>,at:number}>; tail:Promise<any>;}
@@ -88,10 +88,10 @@ export class Broker {
   }
   async handle(clientId:string,msg:RPC):Promise<any>{
     if(msg.jsonrpc!==Wire.Version||msg.id===undefined||!msg.method||!PUBLIC.has(msg.method)||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)||Object.hasOwn(msg.params,'clientId'))throw Error('invalid_request');
-    if(msg.method===Method.Capabilities)return {prototype:'M0',browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC],unsupported:['oopif','autoPopup','files','rawCDP','chunks','fullRefProtocol'],policy:this.policy.summary()};
+    if(msg.method===Method.Capabilities)return {prototype:'M0',browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC],locators:['ref','selector','role','text','xpath-text-rewrite','actionable-ancestor'],unsupported:['oopif','autoPopup','files','rawCDP','chunks'],policy:this.policy.summary()};
     const params:Params={...msg.params,clientId};
     const who=Broker.identity(clientId);this.policy.check(who,null,null);
-    const action=msg.method===Method.Request?Action.Session:Object.values(Action).find(a=>a===msg.method)??null;
+    const action=msg.method===Method.Request?Action.Session:Find.Reads.has(msg.method)?Action.Observe:Object.values(Action).find(a=>a===msg.method)??null;
     let origin:string|null=null;let pages:Params[]|undefined;
     if(action===Action.Navigate||action===Action.Create||(action===Action.Session&&params.mode===PolicyKey.New))origin=params.url??null;
     else if([Action.Observe,Action.Fill,Action.Click,Action.Close].includes(action as Action)||(action===Action.Session&&params.mode===PolicyKey.Attach)){
@@ -119,18 +119,27 @@ export class Broker {
     l.tail=result;l.records.set(params.seq,{body,result,at:Date.now()});return result;
   }
   private async run(method:string,p:Params,known?:Params[]):Promise<any>{
-    if([Method.Observe,Method.Fill,Method.Click].includes(method as Method)){
+    if(Find.Engine.has(method)){
       // Ask authority on every request, even when reusing an engine. Queued writes re-check policy on fresh state.
       let pages:Params[]=known??[];
       if(!known||WRITES.has(method)){const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});pages=Array.isArray(tabs)?tabs:(tabs.pages??tabs.tabs??[]);}
       const page=pages.find((v:Params)=>v.pageId===p.pageId);if(!page)throw Error('page_forbidden');
-      if(this.policy.check(Broker.identity(p.clientId),method as Action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
-      if(method!==Method.Observe&&(typeof p.selector!=='string'||p.selector.length>2000||typeof(p.value??'')!=='string'||(p.value??'').length>16000))throw Error('invalid_params');
-      try{return await this.engine.run(method,p);}catch{if(method===Method.Observe)throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
+      if(this.policy.check(Broker.identity(p.clientId),Find.Reads.has(method)?Action.Observe:method as Action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
+      Broker.validate(method,p);
+      try{return await this.engine.run(method,p);}catch{if(!WRITES.has(method))throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
     }
     const result=await this.forward(method,p);
     if(method===Method.Release)this.engine.drop(p.clientId,p.sessionId);
     return result;
+  }
+  static validate(method:string,p:Params):void{
+    const text=(v:unknown,max=2000)=>v===undefined||(typeof v==='string'&&v.length>0&&v.length<=max);
+    const ref=p.ref===undefined||(typeof p.ref==='string'&&Find.Ref.test(p.ref));
+    let ok=text(p.selector)&&ref;
+    if(method===Method.Fill||method===Method.Click)ok&&=(p.selector===undefined)!==(p.ref===undefined)&&(method!==Method.Fill||(typeof p.value==='string'&&p.value.length<=16000));
+    if(method===Method.Locate)ok&&=text(p.text)&&text(p.role,64)&&text(p.name)&&(p.exact===undefined||typeof p.exact==='boolean')&&[p.selector,p.ref,p.role,p.text].some(v=>v!==undefined);
+    if(method===Method.Snapshot)ok&&=text(p.scope)&&[p.depth,p.maxChars].every(v=>v===undefined||Number.isSafeInteger(v)&&v>0);
+    if(!ok)throw Error('invalid_params');
   }
   async stop():Promise<void>{if(this.timer)clearInterval(this.timer);this.engine.drop();for(const ws of this.sockets)ws.terminate();await Promise.all(this.servers.map(s=>new Promise<void>(r=>s.close(()=>r()))));}
 }

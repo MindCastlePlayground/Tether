@@ -13,7 +13,7 @@ from websockets.sync.client import connect
 
 
 class Rpc:
-    METHODS = frozenset(("requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", "observe", "fill", "click", "navigate", "capabilities", "availableTabs"))
+    METHODS = frozenset(("requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", "observe", "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate"))
 
 
 class PinnedContext(ssl.SSLContext):

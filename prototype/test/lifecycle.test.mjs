@@ -64,7 +64,7 @@ test('real stdio MCP starts the Broker and serves tools without an extension',as
   const transport=new StdioClientTransport({command:process.execPath,args:[resolve('dist/mcp.js')],env:{...process.env,BB_CLIENT_CONFIG:join(f.root,'agent.json')},stderr:'pipe'});
   try{
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length,12);
+    assert.equal((await client.listTools()).tools.length,14);
     const result=await client.callTool({name:'capabilities',arguments:{}});
     assert.equal(result.isError,undefined);
     assert.equal(JSON.parse(result.content[0].text).browserConnected,false);

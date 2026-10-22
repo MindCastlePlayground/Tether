@@ -1,5 +1,6 @@
 import { chromium, type Browser, type Page, type ConnectOverCDPTransport } from 'playwright-core';
 import { Method, type Params, type Forward } from './protocol.js';
+import { Finder } from './locator.js';
 
 class CDP {
   static readonly Version='Browser.getVersion'; static readonly Auto='Target.setAutoAttach';
@@ -75,11 +76,16 @@ export class Engine {
   async run(method:string,p:Params):Promise<Params>{
     const page=await this.page(p);
     if(method===Method.Observe)return {url:page.url(),title:await page.title(),text:(await page.locator('body').innerText()).slice(0,16000),sideEffect:'none',engine:'playwright-core'};
-    const loc=page.locator(p.selector);
-    if(method===Method.Fill)await loc.fill(p.value);
-    else if(method===Method.Click)await loc.click({noWaitAfter:true});
-    else throw Error('unsupported_method');
-    return {sideEffect:'applied',engine:'playwright-core'};
+    if(method===Method.Snapshot)return {...await Finder.snapshot(page,p),engine:'playwright-core'};
+    if(method===Method.Locate)return {...await Finder.locate(page,p),engine:'playwright-core'};
+    if(method!==Method.Fill&&method!==Method.Click)throw Error('unsupported_method');
+    // Resolve to exactly one element first: a refusal here guarantees nothing was executed.
+    const r=await Finder.resolve(page,p,method);
+    if('fail' in r)return {...r.fail,engine:'playwright-core'};
+    const target=await Finder.target(page,r.loc);
+    try{if(method===Method.Fill)await r.loc.fill(p.value);else await r.loc.click({noWaitAfter:true});}
+    catch{return {sideEffect:'possible',error:'outcome_unknown',target,strategy:r.how,engine:'playwright-core'};}
+    return {sideEffect:'applied',target,strategy:r.how,...(r.hint?{hint:r.hint}:{}),engine:'playwright-core'};
   }
   event(p:Params):void{this.transports.get(this.key(p))?.event(p);}
   drop(clientId?:string,sessionId?:string):void{

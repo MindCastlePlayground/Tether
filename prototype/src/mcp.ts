@@ -18,8 +18,11 @@ class McpTools {
   static readonly CREATE = z.object({ sessionId: z.string(), seq: z.number().int().positive(), url: z.string().optional() });
   static readonly PAGE = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive() });
   static readonly OBSERVE = z.object({ sessionId: z.string(), pageId: z.string() });
-  static readonly FILL = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), selector: z.string(), value: z.string() });
-  static readonly CLICK = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), selector: z.string() });
+  static readonly TARGET = (o: { selector?: string; ref?: string }) => (o.selector === undefined) !== (o.ref === undefined);
+  static readonly FILL = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), selector: z.string().optional(), ref: z.string().optional(), value: z.string() }).refine(McpTools.TARGET, { message: "selectorOrRef" });
+  static readonly CLICK = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), selector: z.string().optional(), ref: z.string().optional() }).refine(McpTools.TARGET, { message: "selectorOrRef" });
+  static readonly SNAPSHOT = z.object({ sessionId: z.string(), pageId: z.string(), scope: z.string().optional(), depth: z.number().int().positive().optional(), maxChars: z.number().int().positive().optional() });
+  static readonly LOCATE = z.object({ sessionId: z.string(), pageId: z.string(), text: z.string().optional(), role: z.string().optional(), name: z.string().optional(), exact: z.boolean().optional(), selector: z.string().optional(), ref: z.string().optional() });
   static readonly NAVIGATE = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), url: z.string() });
   static readonly SCHEMAS = [
     { type: "object", properties: { mode: { type: "string", enum: ["newGroup", "attachExisting"] }, url: { type: "string" }, tabId: { type: "integer", minimum: 0 } }, required: ["mode"], additionalProperties: false },
@@ -29,11 +32,13 @@ class McpTools {
     { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 } }, required: ["sessionId", "pageId", "seq"], additionalProperties: false },
     { type: "object", properties: { sessionId: { type: "string" }, seq: { type: "integer", minimum: 1 } }, required: ["sessionId", "seq"], additionalProperties: false },
     { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" } }, required: ["sessionId", "pageId"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, selector: { type: "string" }, value: { type: "string" } }, required: ["sessionId", "pageId", "seq", "selector", "value"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, selector: { type: "string" } }, required: ["sessionId", "pageId", "seq", "selector"], additionalProperties: false },
+    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, selector: { type: "string", description: "Playwright selector; pass exactly one of selector or ref" }, ref: { type: "string", description: "Element ref from snapshot, e.g. e12" }, value: { type: "string" } }, required: ["sessionId", "pageId", "seq", "value"], additionalProperties: false },
+    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, selector: { type: "string", description: "Playwright selector; pass exactly one of selector or ref" }, ref: { type: "string", description: "Element ref from snapshot, e.g. e12" } }, required: ["sessionId", "pageId", "seq"], additionalProperties: false },
     { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, url: { type: "string" } }, required: ["sessionId", "pageId", "seq", "url"], additionalProperties: false },
     { type: "object", properties: {}, additionalProperties: false },
     { type: "object", properties: {}, additionalProperties: false },
+    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, scope: { type: "string", description: "Optional selector of the subtree to snapshot" }, depth: { type: "integer", minimum: 1 }, maxChars: { type: "integer", minimum: 1 } }, required: ["sessionId", "pageId"], additionalProperties: false },
+    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, text: { type: "string", description: "Visible text, also matched as accessible name with role" }, role: { type: "string", description: "ARIA role such as button, link, textbox" }, name: { type: "string" }, exact: { type: "boolean" }, selector: { type: "string" }, ref: { type: "string" } }, required: ["sessionId", "pageId"], additionalProperties: false },
   ];
 }
 
@@ -59,6 +64,8 @@ async function main(): Promise<void> {
     ["navigate", descriptions.navigate, McpTools.NAVIGATE],
     ["capabilities", descriptions.capabilities, McpTools.EMPTY],
     ["availableTabs", descriptions.availableTabs, McpTools.EMPTY],
+    ["snapshot", descriptions.snapshot, McpTools.SNAPSHOT],
+    ["locate", descriptions.locate, McpTools.LOCATE],
   ] as const;
   server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).ListToolsRequestSchema, async () => ({ tools: tools.map(([name, description], i) => ({ name, description, inputSchema: McpTools.SCHEMAS[i] })) }));
   server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).CallToolRequestSchema, async request => {

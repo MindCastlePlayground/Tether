@@ -1,50 +1,103 @@
 export class Cmd {
+  static INSTALL = 'install';
+  static DOCTOR = 'doctor';
+  static EXTENSION = 'extension';
+  static HELP = 'help';
   static UPGRADE = 'upgrade';
   static POLICY = 'policy';
 }
 
 export class Interactive {
   static CANCELLED = 130;
-  static AGENT = 'Agent(s) [auto]: ';
-  static SCOPE = 'Scope (auto/project/user) [auto: project; OpenCode user]: ';
-  static PROJECT = 'Project path [current directory]: ';
-  static HOME = 'Install home [default]: ';
-  static RUNTIME = 'Existing runtime path [none]: ';
-  static PYTHON = 'Python executable [default]: ';
-  static BROWSER = 'Browser (chrome/edge) [chrome]: ';
-  static LANGUAGE = 'Language (en/zh-CN) [auto]: ';
-  static REGISTER = 'Register Native Messaging (yes/no) [yes]: ';
-  static OPEN = 'Open browser after install (yes/no) [yes]: ';
-  static DRY = 'Preview only (yes/no) [no]: ';
-  static EXTENSION_DIR = 'Extension directory [runtime/extension]: ';
-  static FORCE = 'Force replacement (yes/no) [no]: ';
-  static UPGRADE = 'Upgrade existing runtime (yes/no) [no]: ';
-  static PROMPTS_ZH = {
-    agent: 'Agent 名称（逗号分隔）[auto]: ', scope: '范围（auto/project/user）[auto：项目级，OpenCode 用户级]: ',
-    project: '项目目录 [当前目录]: ', home: '安装目录 [默认]: ', runtime: '已有 runtime 路径 [无]: ',
-    python: 'Python 可执行文件 [默认]: ', browser: '浏览器（chrome/edge）[chrome]: ',
-    language: '语言（en/zh-CN）[自动]: ', register: '注册 Native Messaging（yes/no）[yes]: ',
-    open: '安装后打开浏览器（yes/no）[yes]: ', dry: '仅预览（yes/no）[no]: ',
-    extensionDir: '扩展目录 [runtime/extension]: ', force: '强制替换冲突文件（yes/no）[no]: ', upgrade: '升级现有 runtime（yes/no）[no]: '
-  };
-  static AGENTS = ['auto', 'codex', 'claude', 'cursor', 'opencode', 'gemini'];
-  static SCOPES = ['auto', 'project', 'user'];
-  static BROWSERS = ['chrome', 'edge'];
-  static LANGUAGES = ['en', 'zh-CN'];
-  static YES = ['yes', 'no'];
+}
+
+// Stable ids for every wizard question; tests answer by id instead of by prompt order.
+export class Step {
+  static ACTION = 'action';
+  static AGENTS = 'agents';
+  static SCOPE = 'scope';
+  static PROJECT = 'project';
+  static BROWSER = 'browser';
+  static MODE = 'mode';
+  static HOME = 'home';
+  static RUNTIME = 'runtime';
+  static EXTENSION_DIR = 'extensionDir';
+  static PYTHON = 'python';
+  static LANGUAGE = 'language';
+  static REGISTER = 'register';
+  static OPEN = 'open';
+  static FORCE = 'force';
+  static UPGRADE = 'upgrade';
+  static CONFIRM = 'confirm';
+}
+
+export class Choice {
+  // Entry menu
+  static INSTALL = 'install';
+  static UPGRADE = 'upgrade';
+  static RUNTIME_ONLY = 'runtimeOnly';
+  static RESUME = 'resume';
+  static CONFIGURE = 'configure';
+  static REPAIR = 'repair';
+  static EXTENSION = 'extension';
+  static DOCTOR = 'doctor';
+  static EXIT = 'exit';
+  // Scope
   static AUTO = 'auto';
-  static EMPTY = '';
-  static DEFAULT = 'default';
-  static PROJECT_SCOPE = 'project';
-  static CHROME = 'chrome';
-  static YES_VALUE = 'yes';
-  static NO_VALUE = 'no';
+  // Mode
+  static QUICK = 'quick';
+  static CUSTOM = 'custom';
+  // Final confirmation
+  static GO = 'go';
+  static PREVIEW = 'preview';
+}
+
+// Runtime state found at the install home before the wizard asks anything.
+export class State {
+  static NONE = 'none';
+  static PARTIAL = 'partial';
+  static CURRENT = 'current';
+  static STALE = 'stale';
+  static NEWER = 'newer';
+  static FOREIGN = 'foreign';
+}
+
+// Install progress phases; each prints one heading before its (possibly noisy) tool output.
+export class Phase {
+  static COPY = 'copy';
+  static DEPS = 'deps';
+  static VENV = 'venv';
+  static PIP = 'pip';
+  static SETUP = 'setup';
+  static LAUNCHERS = 'launchers';
+  static STOP = 'stop';
+  static SYNC = 'sync';
+  static REGISTER = 'register';
+  static AGENTS = 'agents';
+}
+
+export class Lang {
+  static EN = 'en';
+  static ZH = 'zh-CN';
+  static detect() { return Intl.DateTimeFormat().resolvedOptions().locale.startsWith('zh') ? Lang.ZH : Lang.EN; }
 }
 
 export class Opt {
   static NO_OPEN = 'no-open';
   static AUTO = 'auto';
   static AGENT = '--agent';
+}
+
+// Value-taking install options.
+export class Arg {
+  static AGENT = 'agent';
+  static SCOPE = 'scope';
+  static PROJECT = 'project';
+  static HOME = 'home';
+  static RUNTIME = 'runtime';
+  static BROWSER = 'browser';
+  static LANGUAGE = 'language';
+  static PYTHON = 'python';
 }
 
 export class InstallOption {
@@ -107,13 +160,13 @@ export class Install {
   static HOST = 'com.freebird.browser_bridge';
   static SOURCE = ['package.json', 'package-lock.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
   static REQUIRED = ['dist/mcp.js', 'dist/broker.js', 'dist/host.js', 'dist/lifecycle.js', '.local/mcp.exe', '.local/host.exe', '.local/broker.exe', '.local/agent.json', '.local/broker.json', '.local/native-host.json', 'extension/manifest.json'];
-  static VALUES = ['agent', 'scope', 'project', 'home', 'runtime', 'browser', 'language', 'python'];
+  static VALUES = [Arg.AGENT, Arg.SCOPE, Arg.PROJECT, Arg.HOME, Arg.RUNTIME, Arg.BROWSER, Arg.LANGUAGE, Arg.PYTHON];
   static FLAGS = ['dry-run', 'open-browser', 'no-register', 'help', Opt.NO_OPEN];
   static EXTRA_FLAGS = [InstallOption.FORCE, InstallOption.UPGRADE];
-  static COMMANDS = ['install', 'doctor', 'extension', 'help', Cmd.UPGRADE, Cmd.POLICY];
+  static COMMANDS = [Cmd.INSTALL, Cmd.DOCTOR, Cmd.EXTENSION, Cmd.HELP, Cmd.UPGRADE, Cmd.POLICY];
   static OPTION = { DRY: 'dry-run', OPEN: 'open-browser', NO_REGISTER: 'no-register', NO_OPEN: Opt.NO_OPEN };
   static BROWSERS = ['chrome', 'edge'];
-  static LANGUAGES = ['en', 'zh-CN'];
+  static LANGUAGES = [Lang.EN, Lang.ZH];
   static EXCLUDE = ['.local', '.venv', '__pycache__', 'node_modules', 'dist'];
 }
 

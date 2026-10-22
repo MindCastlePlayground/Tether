@@ -3,7 +3,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Files } from './files.mjs';
 import { Service } from './service.mjs';
-import { Hint, Install, InstallOption } from './constants.mjs';
+import { Hint, Install, InstallOption, Phase } from './constants.mjs';
+import { Copy } from './text.mjs';
 
 export class Runtime {
   static shell() { return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'); }
@@ -12,6 +13,7 @@ export class Runtime {
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`Command failed (${result.status}): ${path.basename(command)}`);
   }
+  static step(options, phase) { console.log(`\n» ${Copy.of(options.language).steps[phase]}`); }
   static ps(script, cwd, env = process.env) { Runtime.run(Runtime.shell(), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], cwd, env); }
   static npm(args, cwd) {
     // npm.cmd cannot be spawned directly without a shell on Windows. Invoke the sibling JS CLI.
@@ -44,8 +46,16 @@ export class Runtime {
     fs.mkdirSync(root, { recursive: true });
     // The marker permits resuming a failed first install without erasing any credentials.
     Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: false })}\n`);
+    Runtime.step(options, Phase.COPY);
     for (const name of Install.SOURCE) Files.copy(path.join(source, name), path.join(root, name));
     Runtime.finish(root, options);
+  }
+  // Numeric x.y.z comparison: -1, 0 or 1.
+  static compare(a, b) {
+    const parts = v => String(v ?? '').split('.').map(n => Number.parseInt(n, 10) || 0);
+    const [x, y] = [parts(a), parts(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return Math.sign((x[i] ?? 0) - (y[i] ?? 0));
+    return 0;
   }
   static py(root) { return path.join(root, '.venv', 'Scripts', 'python.exe'); }
   static deps(root) {
@@ -77,11 +87,16 @@ export class Runtime {
     fs.writeFileSync(file, `${JSON.stringify({ ...manifest, key: Files.json(pub).key, version_name: build }, null, 2)}\n`);
   }
   static finish(root, options) {
+    Runtime.step(options, Phase.DEPS);
     Runtime.deps(root);
+    Runtime.step(options, Phase.VENV);
     Runtime.run(options.python || 'python', ['-m', 'venv', path.join(root, '.venv')], root);
+    Runtime.step(options, Phase.PIP);
     Runtime.pip(root);
     const env = { ...process.env, BB_LANGUAGE: options.language };
+    Runtime.step(options, Phase.SETUP);
     Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+    Runtime.step(options, Phase.LAUNCHERS);
     Runtime.ps(path.join(root, 'scripts', 'launchers.ps1'), root, env);
     Runtime.check(root);
     Files.write(path.join(root, Install.MARKER), `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
@@ -90,16 +105,23 @@ export class Runtime {
     if (!fs.existsSync(root)) throw new Error(`Runtime not found: ${root}. Run ${Hint.INSTALL} first.`);
     const marker = path.join(root, Install.MARKER);
     if (!fs.existsSync(marker)) throw new Error(`Runtime ${root} has no install marker. Run ${Hint.INSTALL} first.`);
+    const old = Files.json(marker).version;
+    if (Runtime.compare(old, Install.VERSION) > 0 && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${old}, newer than this installer (${Install.VERSION}). Use --force to downgrade.`);
     Runtime.location(root, options);
+    Runtime.step(options, Phase.STOP);
     const running = Service.halt(root);
     Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: false })}\n`);
+    Runtime.step(options, Phase.COPY);
     Runtime.swap(root, source, options);
     Runtime.key(root);
+    Runtime.step(options, Phase.DEPS);
     Runtime.deps(root);
+    Runtime.step(options, Phase.PIP);
     Runtime.pip(root);
     // setup.py returns immediately when .local/broker.json already exists.
     const env = { ...process.env, BB_LANGUAGE: options.language };
     Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+    Runtime.step(options, Phase.SYNC);
     Runtime.sync(root, { ...options, [InstallOption.UPGRADE]: true });
     Files.write(marker, `${JSON.stringify({ version: Install.VERSION, ready: true })}\n`);
     // The extension respawns its host while we build; stop anything started from the old code.
@@ -121,6 +143,8 @@ export class Runtime {
   }
   static extension(source, target, force = false) { Files.tree(source, target, force); }
   static register(root, options) {
-    if (!options[Install.OPTION.NO_REGISTER]) Runtime.ps(path.join(root, 'scripts', 'register.ps1'), root, { ...process.env, BB_LANGUAGE: options.language });
+    if (options[Install.OPTION.NO_REGISTER]) return;
+    Runtime.step(options, Phase.REGISTER);
+    Runtime.ps(path.join(root, 'scripts', 'register.ps1'), root, { ...process.env, BB_LANGUAGE: options.language });
   }
 }

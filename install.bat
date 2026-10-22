@@ -2,7 +2,15 @@
 setlocal DisableDelayedExpansion
 set "TETHER_EXIT=1"
 set "TETHER_PAUSE="
-if "%~1"=="" set "TETHER_PAUSE=1"
+set "TETHER_CP="
+rem chcp output is localized; its last word is the code page number, sometimes followed by a dot.
+for /f "tokens=*" %%c in ('chcp') do for %%n in (%%c) do for /f "delims=." %%d in ("%%n") do set "TETHER_CP=%%d"
+rem The wizard draws Unicode box characters and Chinese text; restore the caller's code page on exit.
+chcp 65001 >nul 2>&1
+if "%~1"=="" (
+  set "TETHER_PAUSE=1"
+  title Tether Installer
+)
 where node.exe >nul 2>&1
 if errorlevel 1 (
   echo Tether: Install Node.js 22 or newer from https://nodejs.org/ and reopen this installer.
@@ -18,7 +26,7 @@ if errorlevel 1 (
   echo Tether: Cannot open the installer directory.
   goto finish
 )
-node -e "require.resolve('jsonc-parser'); require.resolve('smol-toml')" >nul 2>&1
+node -e "require.resolve('jsonc-parser'); require.resolve('smol-toml'); require.resolve('@clack/prompts')" >nul 2>&1
 if not errorlevel 1 goto ready
 where npm.cmd >nul 2>&1
 if errorlevel 1 (
@@ -43,4 +51,5 @@ node "%~dp0bin\tether.mjs" %*
 set "TETHER_EXIT=%ERRORLEVEL%"
 :finish
 if defined TETHER_PAUSE pause
+if defined TETHER_CP chcp %TETHER_CP% >nul 2>&1
 exit /b %TETHER_EXIT%

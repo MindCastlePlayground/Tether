@@ -4,9 +4,40 @@
   "private": true,
   "description": "Install Tether browser MCP and skills for local agents",
   "type": "module",
-  "bin": { "tether": "bin/tether.mjs" },
-  "engines": { "node": ">=22" },
-  "scripts": { "test": "node --test --test-isolation=none test/*.test.mjs", "docs:check": "node scripts/check-docs.mjs" },
-  "files": ["install.bat", "bin/", "installer/", "scripts/check-docs.mjs", "skills/", "docs/", "assets/README*.md", "assets/*.png", "prototype/package.json", "prototype/package-lock.json", "prototype/tsconfig.json", "prototype/src/", "prototype/scripts/setup.py", "prototype/scripts/launchers.ps1", "prototype/scripts/register.ps1", "prototype/python/", "prototype/extension/", "prototype/README*.md", "prototype/VERIFICATION*.md"],
-  "dependencies": { "jsonc-parser": "3.3.1", "smol-toml": "1.9.1" }
+  "bin": {
+    "tether": "bin/tether.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-isolation=none test/*.test.mjs",
+    "docs:check": "node scripts/check-docs.mjs"
+  },
+  "files": [
+    "install.bat",
+    "bin/",
+    "installer/",
+    "scripts/check-docs.mjs",
+    "skills/",
+    "docs/",
+    "assets/README*.md",
+    "assets/*.png",
+    "prototype/package.json",
+    "prototype/package-lock.json",
+    "prototype/tsconfig.json",
+    "prototype/src/",
+    "prototype/scripts/setup.py",
+    "prototype/scripts/launchers.ps1",
+    "prototype/scripts/register.ps1",
+    "prototype/python/",
+    "prototype/extension/",
+    "prototype/README*.md",
+    "prototype/VERIFICATION*.md"
+  ],
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "jsonc-parser": "3.3.1",
+    "smol-toml": "1.9.1"
+  }
 }

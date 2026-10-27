@@ -16,3 +16,8 @@ test("client refuses RPC methods outside the public allowlist", async () => {
   const c = new BridgeClient(cfg());
   await assert.rejects(c.call("Browser.close", {}), /unsupportedMethod/);
 });
+
+test("client exposes scoped snapshot, locate and optional action observation params", () => {
+  const c = new BridgeClient(cfg());
+  for (const method of ["snapshot", "locate", "click", "fill"]) assert.equal(typeof c[method], "function");
+});

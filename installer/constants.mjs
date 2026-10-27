@@ -171,7 +171,7 @@ export class Install {
   static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
-  static VERSION = '1.2.0';
+  static VERSION = '1.3.0';
   static RETRIES = 5;
   static RETRY_MS = 2000;
   static SERVER = 'tether';

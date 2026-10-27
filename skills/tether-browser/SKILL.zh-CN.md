@@ -23,11 +23,11 @@
 
 ## 阅读、操作并验证
 
-- `observe({sessionId,pageId})` 返回 `url`、`title` 和最多 16,000 个字符的可见正文 `text`，适合读内容。要操作元素时，先调用 `snapshot({sessionId,pageId})`：它返回简化的无障碍树 `tree`，每行形如 `- button "保存" [ref=e12]`，匿名 div/span 包装层已折叠。`scope`（选择器）只取子树，`maxChars` 控制长度；`truncated:true` 表示未覆盖整页。
-- 优先用 ref 操作：`click({…,ref:"e12"})`、`fill({…,ref:"e7",value})`。ref 只属于最近一次快照；页面变化后重新 `snapshot`。ref 失效时，Tether 会按快照中的角色+名称重新匹配，仍不唯一则返回 `ref_stale`。
-- 需要可复用的精确定位器时调用 `locate`：按 `text`、`role`+`name`（`exact` 可选）、`selector` 或 `ref` 查询，返回 `count` 与 `candidates`，每个候选含 `role`、`name`、`tag`、经校验唯一的 `selector`，文字落在内层元素时还有可点击的 `actionable` 祖先。
+- `observe({sessionId,pageId})` 返回 `url`、`title` 和最多 16,000 个字符的可见正文 `text`，适合读内容。要操作元素时，先调用 `snapshot({sessionId,pageId})`：它返回简化的无障碍树 `tree`，每行形如 `- button "保存" [ref=tabc123e12]`，匿名 div/span 包装层已折叠。`scope`（选择器）和 `scopeRef` 可限定子树，两者互斥。`outline:true` 返回页面目录，再用输出的区域 `scopeRef` 展开。`maxChars` 控制长度；refs 计数只包括本次实际输出的 ref。
+- 优先用 ref 操作：`click({…,ref:"tabc123e12"})`、`fill({…,ref:"tabc123e7",value})`。ref 是当前文档代次的不透明标识。升级后先重新拍快照；旧 ref 不会映射。ref 失效时不会按角色/名称回退。
+- 需要可复用的精确定位器时调用 `locate`：按 `text`、`role`+`name`（`exact` 可选）、`selector` 或 `ref` 查询，返回 `count`、`shown`、`truncated` 和含 `ref`、`context`、`selectorUnique` 的候选；候选 ref 可直接用于 click/fill。
 - 文本嵌套问题：`<button><div><span>保存</span></div></button>` 这类结构里，XPath `text()` 只匹配直接子文本节点，`//button[text()="保存"]` 会匹配不到。不要用 `text()`；改用 ref、`role=button[name="保存"]` 或 `locate` 返回的选择器。
-- `click`/`fill` 在动作前会先把目标解析为恰好一个元素：原选择器无匹配时，依次尝试 `normalize-space(.)` 改写、角色+名称、可见文本（`fill` 用 label/placeholder），点击会落到内层文字最近的可操作祖先，`fill` 会落到包装层中唯一的输入框。结果中的 `strategy`、`target.selector` 和 `hint` 说明实际命中了什么；以后直接用 `target.selector`。
+- `click`/`fill` 在动作前会先把目标解析为恰好一个元素：解析保持在指定范围内，不会把选择器扩大为整页角色/名称回退。结果中的 `strategy`、`target.selector` 和 `hint` 说明实际命中了什么；以后直接用 `target.selector`。
 - 解析失败时返回 `sideEffect:"none"` 及 `selector_not_found`、`selector_ambiguous`、`selector_invalid`、`ref_stale` 或 `not_fillable`，并附 `candidates`。这些错误保证没有执行任何动作，可以选定候选后用下一个 `seq` 重试；不要从候选里随意猜一个。没有公开的任意 `evaluate`、原始 CDP 或截图工具。
 - 同一会话中的写操作必须串行执行。分配正整数且严格递增的 `seq` 值；新会话从 1 开始。读取和审批检查不需要 `seq`。整个会话保持同一连接：多个 Agent 可同时共用同一凭据，但 Broker 会为每个连接分配独立实例（如 `agent#1a2b3c4d`），会话、审批和 `seq` 记录不会跨连接沿用。
 - 写操作后发生超时、断连或 `outcome_unknown`，并不能证明操作失败。决定是否再次写入前，先检查结果状态。不要盲目重放提交、点击、创建标签页或其他有副作用的操作。Broker 对相同序号/请求的去重，并不保证跨重连后一般意义上的重试安全。
@@ -41,16 +41,16 @@
 | `approvalStatus` | `{pendingId}` | 获取审批状态和已授权标识符 |
 | `listTabs` | `{sessionId}` | 获取当前已授权的 `pages` |
 | `observe` | `{sessionId,pageId}` | 读取当前 URL、标题和可见文本 |
-| `snapshot` | `{sessionId,pageId,scope?,depth?,maxChars?}` | 获取带 ref 的简易无障碍树 |
-| `locate` | `{sessionId,pageId,text?,role?,name?,exact?,selector?,ref?}` | 列出匹配元素及唯一选择器 |
-| `fill` | `{sessionId,pageId,seq,ref?,selector?,value}` | 填写字段（ref 与 selector 二选一） |
-| `click` | `{sessionId,pageId,seq,ref?,selector?}` | 点击匹配的元素（ref 与 selector 二选一） |
+| `snapshot` | `{sessionId,pageId,scope?,scopeRef?,outline?,depth?,maxChars?}` | 获取带 ref 的简易无障碍树 |
+| `locate` | `{sessionId,pageId,text?,role?,name?,exact?,selector?,ref?,scope?,scopeRef?}` | 列出匹配元素及唯一选择器 |
+| `fill` | `{sessionId,pageId,seq,ref?,selector?,value,observe?}` | 填写字段（ref 与 selector 二选一） |
+| `click` | `{sessionId,pageId,seq,ref?,selector?,observe?}` | 点击匹配的元素（ref 与 selector 二选一） |
 | `navigate` | `{sessionId,pageId,seq,url}` | 将已授权页面导航到 HTTP(S) 地址 |
 | `createTab` | `{sessionId,seq,url?}` | 添加任务页面；返回 `pageId` |
 | `closeTab` | `{sessionId,pageId,seq}` | 关闭由本会话创建的页面 |
 | `release` | `{sessionId,seq}` | 结束授权，但不关闭保留的页面 |
 
-MCP 工具结果会在文本内容中包含 JSON。使用标识符/状态前先解析该 JSON；检查工具错误，不要把每个传输响应都视为成功。尤其是 `fill`/`click` 可能在成功的 JSON-RPC 结果中返回 `{sideEffect:"possible",error:"outcome_unknown"}`。这表示操作结果不确定，并不表示已确认成功。`sideEffect:"none"` 加错误码表示定位阶段就已拒绝，页面未被改动。
+`observe` 仅接受 `scope`、`scopeRef`、正整数 `maxChars`，且范围字段互斥。观察报告 URL、标题、导航状态、树/截断状态或 `observationError` 等可见事实，不推断业务成功，不回显填写值，也不改变动作的 `sideEffect`。MCP 工具结果会在文本内容中包含 JSON。使用标识符/状态前先解析该 JSON；检查工具错误，不要把每个传输响应都视为成功。尤其是 `fill`/`click` 可能在成功的 JSON-RPC 结果中返回 `{sideEffect:"possible",error:"outcome_unknown"}`。这表示操作结果不确定，并不表示已确认成功。`sideEffect:"none"` 加错误码表示定位阶段就已拒绝，页面未被改动。
 
 ## 完成或恢复
 

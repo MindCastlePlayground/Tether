@@ -2,17 +2,20 @@ import { chromium } from 'playwright-core';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Config } from '../dist/config.js';
+import { pathToFileURL } from 'node:url';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-const root = resolve(import.meta.dirname, '..');
-const repo = resolve(root, '..');
-const id = JSON.parse(readFileSync(join(root, '.local', 'host.json'), 'utf8')).extensionId;
+const root = resolve(process.env.TETHER_QA_RUNTIME ?? resolve(import.meta.dirname, '..'));
+const seed = join(root, '.local');
+const id = JSON.parse(readFileSync(join(seed, 'host.json'), 'utf8')).extensionId;
 const hostName = 'com.tether.locator_qa';
-const chromePath = process.env.TETHER_QA_CHROME ?? join(process.env.LOCALAPPDATA, 'ms-playwright', 'chromium-1243', 'chrome-win64', 'chrome.exe');
+const chromePath = findBrowser();
 const qa = join(root, 'work', `qa-${Date.now()}-${randomBytes(3).toString('hex')}`);
 const profile = join(qa, 'profile');
 const ext = join(qa, 'extension');
@@ -22,6 +25,20 @@ const regExe = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 let context; let server; let brokerOwned = false; let registryMade = false;
 let cdpSeq = 0;
 const say = (s) => process.stdout.write(`${s}\n`);
+function findBrowser() {
+  const candidates = [process.env.TETHER_QA_CHROME, chromium.executablePath()];
+  for (const base of [join(process.env.LOCALAPPDATA ?? '', 'ms-playwright'), join(process.env.USERPROFILE ?? '', '.cache', 'ms-playwright')]) {
+    try {
+      for (const d of readdirSync(base)) {
+        if (!/^(chromium|chrome)-/.test(d)) continue;
+        for (const exe of ['chrome-win64/chrome.exe', 'chrome-win/chrome.exe']) {
+          const p = join(base, d, exe); if (existsSync(p)) candidates.push(p);
+        }
+      }
+    } catch {}
+  }
+  return candidates.find(p => p && existsSync(p));
+}
 function ps(script) {
   const r = spawnSync(regExe, ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true });
   if (r.status !== 0) throw Error(`powershell_failed:${r.status}`);
@@ -80,7 +97,7 @@ class QaHost {
   static int Main(string[] a) {
     if(a.Length<1 || !a[0].StartsWith("chrome-extension://${id}/")) return 2;
     var p=new ProcessStartInfo(@"${node}"); p.UseShellExecute=false;p.CreateNoWindow=true;p.RedirectStandardInput=true;p.RedirectStandardOutput=true;p.RedirectStandardError=true;
-    p.Arguments="\""+@"${join(repo, 'prototype', 'dist', 'host.js')}"+"\" \""+@"${join(local, 'host.json')}"+"\" \""+a[0]+"\"";
+    p.Arguments="\""+@"${join(root, 'dist', 'host.js')}"+"\" \""+@"${join(local, 'host.json')}"+"\" \""+a[0]+"\"";
     p.EnvironmentVariables["BB_CLIENT_CONFIG"]=@"${join(local, 'agent.json')}";
     using(var c=Process.Start(p)){var i=new Thread(()=>{Pump(Console.OpenStandardInput(),c.StandardInput.BaseStream);try{c.StandardInput.Close();}catch{}});var o=new Thread(()=>Pump(c.StandardOutput.BaseStream,Console.OpenStandardOutput()));var e=new Thread(()=>Pump(c.StandardError.BaseStream,Console.OpenStandardError()));i.IsBackground=o.IsBackground=e.IsBackground=true;i.Start();o.Start();e.Start();c.WaitForExit();o.Join();e.Join();return c.ExitCode;}
   }
@@ -91,8 +108,8 @@ class QaHost {
   if (r.status !== 0 || !existsSync(exe)) throw Error('qa_host_compile_failed');
 }
 async function run() {
-  if (!existsSync(chromePath)) throw Error('configured_chromium_not_found');
   mkdirSync(local, { recursive: true }); mkdirSync(profile, { recursive: true });
+  if (!chromePath) throw Error('extension_capable_chromium_not_found_set_TETHER_QA_CHROME');
   const busy = ps(`if (Test-Path -LiteralPath '${registryPath}') { 'present' } else { 'absent' }`);
   if (busy !== 'absent') throw Error('qa_registry_key_already_exists');
   cpSync(join(root, 'extension'), ext, { recursive: true });
@@ -120,7 +137,7 @@ async function run() {
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const fixtureUrl = `http://127.0.0.1:${server.address().port}/`;
-  context = await chromium.launchPersistentContext(profile, { executablePath: chromePath, headless: false, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`], ignoreDefaultArgs: ['--disable-extensions'] });
+  context = await chromium.launchPersistentContext(profile, { executablePath: chromePath, headless: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`], ignoreDefaultArgs: ['--disable-extensions'] });
   const popupErrors = [];
   context.on('page', page => {
     page.on('pageerror', e => popupErrors.push(e.message));
@@ -131,7 +148,7 @@ async function run() {
   brokerOwned = true;
 
   // Locator closure through the real extension: snapshot refs, nested-text rewrite, refusal and precise locate.
-  const { BridgeClient, loadConfig } = await import('../dist/client.js');
+  const { BridgeClient, loadConfig } = await import(pathToFileURL(join(root, 'dist/client.js')).href);
   const client = new BridgeClient(await loadConfig(join(local, 'agent.json')));
   const grant = await client.requestSession({ mode: 'newGroup', url: fixtureUrl });
   const sessionId = grant.sessionId;
@@ -142,8 +159,8 @@ async function run() {
   const out = async () => page.locator('#out').textContent();
   const steps = {};
   const snap = await client.snapshot({ sessionId, pageId });
-  const ref = snap.tree.match(/button "\*?Deep Save" \[ref=(e\d+)\]/)?.[1];
-  if (!ref || /- generic \[ref=e\d+\]:$/m.test(snap.tree)) throw Error('snapshot_tree_failed');
+  const ref = snap.tree.match(/button "\*?Deep Save" \[ref=([A-Za-z0-9]{1,64})\]/)?.[1];
+  if (!ref || /- generic \[ref=[A-Za-z0-9]{1,64}\]:$/m.test(snap.tree)) throw Error('snapshot_tree_failed');
   steps.snapshot = { refs: snap.refs, chars: snap.tree.length, truncated: snap.truncated };
   const byRef = await client.click({ sessionId, pageId, seq: 1, ref });
   if (byRef.sideEffect !== 'applied' || await out() !== 'nested-ok') throw Error('ref_click_failed ' + JSON.stringify(byRef) + ' out=' + await out() + ' tree=' + snap.tree.slice(0,400));
@@ -154,24 +171,57 @@ async function run() {
   if (!String(byText.strategy).startsWith('xpath-normalize-space') || await out() !== 'xpath-ok') throw Error('xpath_rewrite_failed');
   steps.xpathRewrite = { strategy: byText.strategy, hint: !!byText.hint };
   const byName = await client.click({ sessionId, pageId, seq: 3, selector: naive });
-  if (byName.sideEffect !== 'applied' || await out() !== 'nested-ok') throw Error('nested_text_fallback_failed');
-  steps.nestedFallback = { strategy: byName.strategy, target: byName.target?.selector };
+  if (byName.sideEffect !== 'none' || byName.error !== 'selector_not_found' || await out() !== 'xpath-ok') throw Error('unsafe_complex_selector_fallback');
+  steps.complexFallbackRefused = { error: byName.error };
   const dup = await client.click({ sessionId, pageId, seq: 4, selector: '//button[text()="Dup"]' });
-  if (dup.sideEffect !== 'none' || dup.error !== 'selector_ambiguous' || dup.candidates?.length !== 2 || await out() !== 'nested-ok') throw Error('ambiguity_not_refused');
+  if (dup.sideEffect !== 'none' || dup.error !== 'selector_ambiguous' || dup.candidates?.length !== 2 || await out() !== 'xpath-ok') throw Error('ambiguity_not_refused');
   steps.ambiguous = { error: dup.error, candidates: dup.candidates.map(c => c.actionable?.selector ?? c.selector) };
   const miss = await client.click({ sessionId, pageId, seq: 5, selector: '#absent' });
   if (miss.sideEffect !== 'none' || miss.error !== 'selector_not_found') throw Error('missing_not_refused');
   const found = await client.locate({ sessionId, pageId, role: 'button', name: 'Dup', exact: true });
-  if (found.count !== 2 || new Set(found.candidates.map(c => c.selector)).size !== 2) throw Error('locate_failed');
-  const pick = await client.click({ sessionId, pageId, seq: 6, selector: found.candidates[1].selector });
+  if (found.count !== 2 || !found.shown || !found.candidates.every(c => c.ref && Object.hasOwn(c, 'context') && Object.hasOwn(c, 'selectorUnique'))) throw Error('locate_contract_failed');
+  const pick = await client.click({ sessionId, pageId, seq: 6, ref: found.candidates[1].ref, observe: { maxChars: 300 } });
   if (pick.sideEffect !== 'applied' || await out() !== 'dup-2') throw Error('candidate_click_failed');
-  steps.locate = { count: found.count, picked: found.candidates[1].selector };
-  const filled = await client.fill({ sessionId, pageId, seq: 7, selector: 'Name', value: 'label-ok' });
-  if (filled.sideEffect !== 'applied' || await page.inputValue('#name') !== 'label-ok') throw Error('label_fill_failed');
-  steps.labelFill = { strategy: filled.strategy };
-  await client.release({ sessionId, seq: 8 }); client.close();
+  if (pick.observed !== true || pick.after?.url !== fixtureUrl || !Object.hasOwn(pick.after, 'navigated') || pick.after.tree?.length > 300) throw Error('click_observation_contract_failed');
+  steps.locate = { count: found.count, shown: found.shown, truncated: found.truncated, picked: found.candidates[1].ref, observed: pick.observed };
+  const filled = await client.fill({ sessionId, pageId, seq: 7, selector: '#name', value: 'secret-label-value', observe: { maxChars: 1000 } });
+  if (filled.sideEffect !== 'applied' || !filled.observed || await page.inputValue('#name') !== 'secret-label-value' || JSON.stringify(filled).includes('secret-label-value')) throw Error('label_fill_echo_or_action_failed');
+  steps.labelFill = { strategy: filled.strategy, valueNotEchoed: true };
+  const scoped = await client.snapshot({ sessionId, pageId, scope: '#name', scopeRef: ref }).catch(e => ({error:e.message}));
+  if (scoped.error !== 'invalid_params' && scoped.error !== 'scope_conflict') throw Error('scope_exclusivity_not_enforced');
+  const fresh = await client.snapshot({ sessionId, pageId });
+  const freshRef = fresh.tree.match(/button "\*?Deep Save" \[ref=([A-Za-z0-9]{1,64})\]/)?.[1];
+  if (freshRef !== ref) throw Error('same_document_ref_unstable');
+  await page.goto(`${fixtureUrl}next`);
+  const stale = await client.click({ sessionId, pageId, seq: 8, ref });
+  if (stale.error !== 'ref_stale' || stale.sideEffect !== 'none' || await out() !== '') throw Error('cross_document_ref_not_stale');
+  steps.staleRef = { error: stale.error, sideEffect: stale.sideEffect };
+  steps.scopeConflict = { error: scoped.error };
+  await client.release({ sessionId, seq: 9 }); client.close();
+  const mcp = new Client({ name: 'tether-usability-qa', version: '1.0.0' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [join(root, 'dist/mcp.js')], env: { ...process.env, BB_CLIENT_CONFIG: join(local, 'agent.json'), BB_BROWSER_WAKE: '0' }, stderr: 'pipe' });
+  try {
+    await mcp.connect(transport);
+    const tools = (await mcp.listTools()).tools;
+    if (!tools.find(t => t.name === 'snapshot')?.inputSchema.properties?.outline || !tools.find(t => t.name === 'click')?.inputSchema.properties?.observe) throw Error('mcp_schema_missing');
+    const call = async (name, args) => { const r = await mcp.callTool({ name, arguments: args }); if (r.isError) throw Error(`mcp_${name}_failed`); return JSON.parse(r.content[0].text); };
+    const grant = await call('requestSession', { mode: 'newGroup', url: fixtureUrl });
+    const target = { sessionId: grant.sessionId, pageId: grant.pages[0].pageId };
+    const tree = await call('snapshot', { ...target, outline: true });
+    const scopeRef = tree.tree.match(/\[ref=([a-z0-9]+)\]/)?.[1];
+    if (!scopeRef) throw Error('mcp_outline_no_ref');
+    const expanded = await call('snapshot', { ...target, scopeRef });
+    if (!expanded.tree) throw Error('mcp_scope_expansion_failed');
+    const located = await call('locate', { ...target, selector: '#deep' });
+    const clicked = await call('click', { ...target, seq: 1, ref: located.candidates[0].ref, observe: { maxChars: 500 } });
+    if (clicked.sideEffect !== 'applied' || !clicked.observed) throw Error('mcp_click_observe_failed');
+    const filled = await call('fill', { ...target, seq: 2, selector: '#name', value: 'mcp-secret', observe: { maxChars: 1000 } });
+    if (!filled.observed || JSON.stringify(filled).includes('mcp-secret')) throw Error('mcp_fill_redaction_failed');
+    await call('release', { sessionId: grant.sessionId, seq: 3 });
+    steps.mcp = { tools: tools.length, outline: true, scopeRef: true, clickObserved: true, fillRedacted: true };
+  } finally { await mcp.close(); }
   await ctl(hostCfg, '/control/stop'); await waitListening(p, false); brokerOwned = false;
-  const report = { result: 'passed', extensionServiceWorker: sw.url(), nativeHost: hostName, steps };
+  const report = { result: 'passed', runtime: root, extensionServiceWorker: sw.url(), nativeHost: hostName, steps };
   writeFileSync(join(qa, 'result.json'), JSON.stringify(report, null, 2));
   say(JSON.stringify({ ...report, resultFile: join(qa, 'result.json') }, null, 1));
 }

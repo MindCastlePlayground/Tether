@@ -1,6 +1,6 @@
 import { chromium, type Browser, type Page, type ConnectOverCDPTransport } from 'playwright-core';
-import { Method, type Params, type Forward } from './protocol.js';
-import { Finder } from './locator.js';
+import { Find, Method, type Params, type Forward } from './protocol.js';
+import { Finder, Snapshot } from './locator.js';
 
 class CDP {
   static readonly Version='Browser.getVersion'; static readonly Auto='Target.setAutoAttach';
@@ -51,7 +51,13 @@ export class Engine {
   private engines=new Map<string,{transport:TabTransport,browser:Browser,page:Page}>();
   private transports=new Map<string,TabTransport>();
   private connects=new Map<string,Promise<Page>>();
-  constructor(private forward:Forward){}
+  constructor(private forward:Forward,private observeAllowed:(p:Params,url:string)=>boolean=()=>true){}
+  private redact(target:Params,value:string):void{
+    // Text-derived metadata can contain a truncated or escaped previous value.
+    // Fill returns identity and structural metadata; refs remain actionable.
+    for(const key of ['text','name','selector','context','actionable'])delete target[key];
+    target.selectorUnique=false;
+  }
   private key(p:Params):string{return `${p.clientId}/${p.sessionId}/${p.pageId}`;}
   async page(p:Params):Promise<Page>{
     const key=this.key(p);const existing=this.engines.get(key);if(existing)return existing.page;
@@ -82,10 +88,43 @@ export class Engine {
     // Resolve to exactly one element first: a refusal here guarantees nothing was executed.
     const r=await Finder.resolve(page,p,method);
     if('fail' in r)return {...r.fail,engine:'playwright-core'};
+    const url=page.url();
+    const doc=p.observe ? await page.evaluateHandle(()=>document) : undefined;
     const target=await Finder.target(page,r.loc);
-    try{if(method===Method.Fill)await r.loc.fill(p.value);else await r.loc.click({noWaitAfter:true});}
-    catch{return {sideEffect:'possible',error:'outcome_unknown',target,strategy:r.how,engine:'playwright-core'};}
-    return {sideEffect:'applied',target,strategy:r.how,...(r.hint?{hint:r.hint}:{}),engine:'playwright-core'};
+    if(method===Method.Fill)this.redact(target,p.value);
+    const result:Params={sideEffect:'applied',target,strategy:r.how,...(r.hint?{hint:r.hint}:{}),engine:'playwright-core'};
+    const handle=await r.loc.elementHandle();
+    try{if(!handle)throw Error('target_detached');if(method===Method.Fill)await handle.fill(p.value);else await handle.click({noWaitAfter:true});}
+    catch{result.sideEffect='possible';result.error='outcome_unknown';}
+    finally{await handle?.dispose();}
+    if(p.observe){
+      let timer:ReturnType<typeof setTimeout>|undefined;
+      try{
+        const observe=async()=>{
+          if(!this.observeAllowed(p,page.url()))throw Error('observation_denied');
+          const snapshot=await Finder.snapshot(page,{...p.observe,maxChars:p.observe.maxChars??Find.ObserveChars});
+          if(snapshot.error)throw Error(snapshot.error);
+          const navigated=page.url()!==url||!(await doc!.evaluate(d=>d===document).catch(()=>false));
+          const values=await page.locator(Find.Fillable).evaluateAll(elements=>elements.map(el=>(el as HTMLInputElement).value??el.textContent??''));
+          if(method===Method.Fill)values.push(p.value);
+          let after:Params={url:snapshot.url,title:snapshot.title,navigated,tree:snapshot.tree,truncated:snapshot.truncated};
+          for(const value of [...new Set(values)].filter(Boolean).sort((a,b)=>b.length-a.length)){
+            for(const key of ['url','title','tree']){
+              const escaped=JSON.stringify(value).slice(1,-1);
+              after[key]=after[key].split(/(\[ref=[a-z0-9]+\])/g).map((part:string)=>/^\[ref=/.test(part)?part:part.replaceAll(value,'[redacted]').replaceAll(escaped,'[redacted]')).join('');
+            }
+          }
+          const cut=Snapshot.cut(after.tree,Math.min(p.observe.maxChars??Find.ObserveChars,Find.Chars));
+          after.tree=cut.tree;after.truncated||=cut.truncated;
+          if(!this.observeAllowed(p,page.url()))throw Error('observation_denied');
+          return after;
+        };
+        result.after=await Promise.race([observe(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('observation_timeout')),Find.ObserveMs);})]);
+        result.observed=true;
+      }catch(error){result.observed=false;result.observationError=error instanceof Error&&['scope_not_found','scope_ambiguous','scope_conflict','ref_stale','observation_timeout','observation_denied'].includes(error.message)?error.message:'observation_failed';}
+      finally{if(timer)clearTimeout(timer);await doc?.dispose();}
+    }
+    return result;
   }
   event(p:Params):void{this.transports.get(this.key(p))?.event(p);}
   drop(clientId?:string,sessionId?:string):void{

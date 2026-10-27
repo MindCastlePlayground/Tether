@@ -16,7 +16,7 @@ interface Ledger {high:number; records:Map<number,{body:string,result:Promise<an
 export class Broker {
   private host?:WebSocket; private clients=new Map<string,WebSocket>();
   private pending=new Map<string,Pending>();private ledger=new Map<string,Ledger>();
-  private engine=new Engine((m,p)=>this.forward(m,p));
+  private engine=new Engine((m,p)=>this.forward(m,p),(p,url)=>this.policy.check(Broker.identity(p.clientId),Action.Observe,url)!==Effect.Deny);
   private servers:Server[]=[];private sockets=new Set<WebSocket>();
   private timer?:NodeJS.Timeout;
   private policy:Policy;
@@ -135,10 +135,12 @@ export class Broker {
   static validate(method:string,p:Params):void{
     const text=(v:unknown,max=2000)=>v===undefined||(typeof v==='string'&&v.length>0&&v.length<=max);
     const ref=p.ref===undefined||(typeof p.ref==='string'&&Find.Ref.test(p.ref));
+    const scoped=(scope:unknown,scopeRef:unknown)=>text(scope)&& (scopeRef===undefined||typeof scopeRef==='string'&&Find.Ref.test(scopeRef))&&!(scope!==undefined&&scopeRef!==undefined);
+    const observe=(v:unknown)=>v===undefined||!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).every(k=>['scope','scopeRef','maxChars'].includes(k))&&scoped((v as Params).scope,(v as Params).scopeRef)&&((v as Params).maxChars===undefined||Number.isSafeInteger((v as Params).maxChars)&&(v as Params).maxChars as number>0);
     let ok=text(p.selector)&&ref;
-    if(method===Method.Fill||method===Method.Click)ok&&=(p.selector===undefined)!==(p.ref===undefined)&&(method!==Method.Fill||(typeof p.value==='string'&&p.value.length<=16000));
-    if(method===Method.Locate)ok&&=text(p.text)&&text(p.role,64)&&text(p.name)&&(p.exact===undefined||typeof p.exact==='boolean')&&[p.selector,p.ref,p.role,p.text].some(v=>v!==undefined);
-    if(method===Method.Snapshot)ok&&=text(p.scope)&&[p.depth,p.maxChars].every(v=>v===undefined||Number.isSafeInteger(v)&&v>0);
+    if(method===Method.Fill||method===Method.Click)ok&&=(p.selector===undefined)!==(p.ref===undefined)&&observe(p.observe)&&(method!==Method.Fill||(typeof p.value==='string'&&p.value.length<=16000));
+    if(method===Method.Locate)ok&&=text(p.text)&&text(p.role,64)&&text(p.name)&&(p.exact===undefined||typeof p.exact==='boolean')&&scoped(p.scope,p.scopeRef)&&[p.selector,p.ref,p.role,p.text].some(v=>v!==undefined);
+    if(method===Method.Snapshot)ok&&=scoped(p.scope,p.scopeRef)&&(p.outline===undefined||typeof p.outline==='boolean')&&[p.depth,p.maxChars].every(v=>v===undefined||Number.isSafeInteger(v)&&v>0);
     if(!ok)throw Error('invalid_params');
   }
   async stop():Promise<void>{if(this.timer)clearInterval(this.timer);this.engine.drop();for(const ws of this.sockets)ws.terminate();await Promise.all(this.servers.map(s=>new Promise<void>(r=>s.close(()=>r()))));}

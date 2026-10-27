@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '1.2.0';
+  static readonly Version = '1.3.0';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';
@@ -148,9 +148,15 @@ export class Find {
   static readonly Step = 250;
   static readonly Chars = 30_000;
   static readonly Candidates = 10;
-  static readonly Visible = 20;
+  static readonly RefEngine = 'tether';
+  static readonly RefKey = 'tether.refs';
+  static readonly RefLimit = 4096;
+  static readonly ObserveMs = 3000;
+  static readonly ObserveChars = 6000;
+  static readonly Context = 'xpath=ancestor::*[self::tr or self::li or self::dialog or self::section or self::article or @role="row" or @role="listitem" or @role="dialog" or @role="region"][1]';
+  static readonly Outline = new Set(['main','banner','navigation','complementary','contentinfo','region','dialog','alertdialog','form','table','list','heading','article']);
   static readonly Name = 80;
-  static readonly Ref = /^[a-z0-9]{1,24}$/;
+  static readonly Ref = /^[a-z0-9]{1,64}$/;
   static readonly Line = /^\s*- ([\w-]+)(?: "((?:[^"\\]|\\.)*)")?.*?\[ref=([a-z0-9]+)\]/;
   static readonly Head = /^- ([\w-]+)(?: "((?:[^"\\]|\\.)*)")?/;
   static readonly AI = 'ai' as const;
@@ -173,6 +179,9 @@ export class FindCode {
   static readonly Stale = 'ref_stale';
   static readonly Fill = 'not_fillable';
   static readonly Scope = 'scope_not_found';
+  static readonly ScopeMany = 'scope_ambiguous';
+  static readonly ScopeConflict = 'scope_conflict';
+  static readonly Unchecked = 'uniqueness_unverified';
   static readonly Query = 'locate_query_empty';
 }
 export class Strategy {
@@ -191,12 +200,14 @@ export class Strategy {
 }
 export class FindHint {
   static readonly XPathText = 'XPath text() only matches text nodes that are direct children; the text is nested in descendants (span/div). Tether retried with normalize-space(.). Prefer a ref from snapshot or role=<role>[name="..."].';
-  static readonly Fallback = 'The selector matched nothing, so Tether matched the quoted text by accessible role/name or visible text instead. Use the returned target.selector next time.';
+  static readonly Fallback = 'A supported shorthand was resolved without dropping its scope or constraints. Prefer the returned ref for the next action.';
   static readonly Retarget = 'The match was a text node wrapper inside a control; Tether acted on its nearest actionable ancestor.';
-  static readonly Missing = 'Nothing matched, even after text/role fallbacks. Call snapshot to see the page roles, names and refs, then act with ref or a candidate selector.';
+  static readonly Missing = 'Nothing matched within the requested constraints. Call snapshot or locate with scope and text/role, then use a returned ref.';
   static readonly Ambiguous = 'Several visible elements match. Pick one candidate selector or a ref from snapshot; nothing was clicked or filled.';
-  static readonly Stale = 'The ref is not in the latest snapshot of this page and its role/name no longer match one element. Call snapshot again.';
+  static readonly Stale = 'This ref is no longer available in this document. Call snapshot or locate again; same-name elements are never substituted.';
   static readonly Fill = 'The match is not an input, textarea, select or contenteditable element and contains no single field. Nothing was filled.';
   static readonly Invalid = 'The selector cannot be parsed by Playwright. Use CSS, XPath, role=<role>[name="..."], text="...", or a ref from snapshot.';
-  static readonly Snapshot = 'Each [ref=eN] can be passed as ref to click/fill/locate. Refs belong to this snapshot; take a new snapshot after the page changes.';
+  static readonly Snapshot = 'Use the opaque ref with click/fill/locate, or scopeRef to expand a region. Refs retain element identity within a document; navigation or replacement invalidates them. At most 4096 recent refs are retained.';
+  static readonly Truncated = 'Output was shortened. Expand a region with scopeRef, narrow scope, or increase maxChars (up to 30000).';
+  static readonly Scope = 'Choose exactly one scope or scopeRef. Narrow a non-unique scope before retrying.';
 }

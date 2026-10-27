@@ -40,10 +40,10 @@ export class BridgeClient {
   closeTab(p:{sessionId:string;pageId:string;seq:number}){return this.call('closeTab',p);}
   release(p:{sessionId:string;seq:number}){return this.call('release',p);}
   observe(p:{sessionId:string;pageId:string}){return this.call('observe',p);}
-  fill(p:{sessionId:string;pageId:string;seq:number;selector?:string;ref?:string;value:string}){return this.call('fill',p);}
-  click(p:{sessionId:string;pageId:string;seq:number;selector?:string;ref?:string}){return this.call('click',p);}
-  snapshot(p:{sessionId:string;pageId:string;scope?:string;depth?:number;maxChars?:number}){return this.call('snapshot',p);}
-  locate(p:{sessionId:string;pageId:string;text?:string;role?:string;name?:string;exact?:boolean;selector?:string;ref?:string}){return this.call('locate',p);}
+  fill(p:{sessionId:string;pageId:string;seq:number;selector?:string;ref?:string;value:string;observe?:{scope?:string;scopeRef?:string;maxChars?:number}}){return this.call('fill',p);}
+  click(p:{sessionId:string;pageId:string;seq:number;selector?:string;ref?:string;observe?:{scope?:string;scopeRef?:string;maxChars?:number}}){return this.call('click',p);}
+  snapshot(p:{sessionId:string;pageId:string;scope?:string;scopeRef?:string;outline?:boolean;depth?:number;maxChars?:number}){return this.call('snapshot',p);}
+  locate(p:{sessionId:string;pageId:string;text?:string;role?:string;name?:string;exact?:boolean;selector?:string;ref?:string;scope?:string;scopeRef?:string}){return this.call('locate',p);}
   navigate(p:{sessionId:string;pageId:string;seq:number;url:string}){return this.call('navigate',p);}
   capabilities(){return this.call('capabilities',{});}
 }

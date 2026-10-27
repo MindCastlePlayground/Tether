@@ -28,11 +28,11 @@ Automatic approval is enabled by default: authenticated clients can create task 
 
 ## Read, act, verify
 
-- `observe({sessionId,pageId})` returns `url`, `title` and up to 16,000 characters of visible body `text`; use it to read content. Before acting on elements call `snapshot({sessionId,pageId})`: it returns a simplified accessibility `tree` with lines such as `- button "Save" [ref=e12]`, with anonymous div/span wrappers folded away. `scope` (a selector) limits it to a subtree and `maxChars` bounds its size; `truncated:true` means it does not cover the whole page.
-- Prefer refs: `click({…,ref:"e12"})`, `fill({…,ref:"e7",value})`. A ref belongs to the latest snapshot; snapshot again after the page changes. When a ref is stale Tether re-matches the snapshot's role and name, and returns `ref_stale` if that is not unique.
-- Call `locate` when you need a reusable precise locator. Query by `text`, `role`+`name` (optional `exact`), `selector` or `ref`. It returns `count` and `candidates`, each with `role`, `name`, `tag`, a `selector` verified to match only that element and, when the text sits in an inner element, its clickable `actionable` ancestor.
+- `observe({sessionId,pageId})` returns `url`, `title` and up to 16,000 characters of visible body `text`; use it to read content. Before acting on elements call `snapshot({sessionId,pageId})`: it returns a simplified accessibility `tree` with lines such as `- button "Save" [ref=tabc123e12]`, with anonymous div/span wrappers folded away. `scope` (selector) or `scopeRef` limits it to a subtree; these are mutually exclusive. `outline:true` returns a page outline, then expand an emitted region with `scopeRef`. `maxChars` bounds output. Ref counts include only refs actually emitted.
+- Prefer refs: `click({…,ref:"tabc123e12"})`, `fill({…,ref:"tabc123e7",value})`. Refs are opaque and scoped to the current document generation. After upgrade, take a new snapshot; old refs are not mapped. Never rely on role/name fallback for a stale ref.
+- Call `locate` when you need a reusable precise locator. Query by `text`, `role`+`name` (optional `exact`), `selector` or `ref`. It returns `count`, `shown`, `truncated` and candidates with `ref`, `context`, and `selectorUnique`; a ref can be passed directly to click/fill.
 - Nested text: in `<button><div><span>Save</span></div></button>`, XPath `text()` matches only direct text children, so `//button[text()="Save"]` finds nothing. Do not use `text()`; use a ref, `role=button[name="Save"]`, or a selector returned by `locate`.
-- Before acting, `click`/`fill` resolve the target to exactly one element. When the selector matches nothing they try a `normalize-space(.)` rewrite, role+name and visible text (label/placeholder for `fill`); a click lands on the nearest actionable ancestor of inner text and a fill on the only field inside a wrapper. The result's `strategy`, `target.selector` and `hint` say what was hit; reuse `target.selector` afterwards.
+- Before acting, `click`/`fill` resolve the target to exactly one element. Resolution stays within the supplied scope and does not broaden a selector into a page-wide role/name fallback. The result's `strategy`, `target.selector` and `hint` say what was hit; reuse `target.selector` afterwards.
 - Resolution failures return `sideEffect:"none"` with `selector_not_found`, `selector_ambiguous`, `selector_invalid`, `ref_stale` or `not_fillable`, plus `candidates`. They guarantee nothing was executed: choose a candidate and retry with the next `seq`; do not guess among candidates. There is no public arbitrary `evaluate`, raw CDP or screenshot tool.
 - Serialize writes within each session. Allocate positive, strictly increasing `seq` values, starting at 1 for a fresh session; reads and approval checks do not need `seq`. Keep one connection for the session: several agents may share one credential at the same time, but the Broker gives each connection its own instance (for example `agent#1a2b3c4d`), and sessions, approvals and `seq` ledgers do not carry over to another connection.
 - A timeout, disconnect or `outcome_unknown` after a write does not prove failure. Inspect the resulting state before deciding on another write. Do not blindly replay submissions, clicks, tab creation or other side effects. Broker deduplication of an identical sequence/request is not a general retry guarantee across reconnections.
@@ -46,16 +46,16 @@ Automatic approval is enabled by default: authenticated clients can create task 
 | `approvalStatus` | `{pendingId}` | Obtain approval status and authorized IDs |
 | `listTabs` | `{sessionId}` | Obtain current authorized `pages` |
 | `observe` | `{sessionId,pageId}` | Read current URL, title and visible text |
-| `snapshot` | `{sessionId,pageId,scope?,depth?,maxChars?}` | Simplified accessibility tree with refs |
-| `locate` | `{sessionId,pageId,text?,role?,name?,exact?,selector?,ref?}` | List matches with unique selectors |
-| `fill` | `{sessionId,pageId,seq,ref?,selector?,value}` | Fill a field (exactly one of ref or selector) |
-| `click` | `{sessionId,pageId,seq,ref?,selector?}` | Click a matching element (exactly one of ref or selector) |
+| `snapshot` | `{sessionId,pageId,scope?,scopeRef?,outline?,depth?,maxChars?}` | Accessibility tree or outline; scope fields are mutually exclusive |
+| `locate` | `{sessionId,pageId,text?,role?,name?,exact?,selector?,ref?,scope?,scopeRef?}` | Candidates with count/shown/truncated and context; scope fields are mutually exclusive |
+| `fill` | `{sessionId,pageId,seq,ref?,selector?,value,observe?}` | Fill a field; optional bounded observation |
+| `click` | `{sessionId,pageId,seq,ref?,selector?,observe?}` | Click an element; optional bounded observation |
 | `navigate` | `{sessionId,pageId,seq,url}` | Navigate the authorized page to HTTP(S) |
 | `createTab` | `{sessionId,seq,url?}` | Add a task page; returns `pageId` |
 | `closeTab` | `{sessionId,pageId,seq}` | Close a page created by this session |
 | `release` | `{sessionId,seq}` | End authorization without closing retained pages |
 
-MCP tool results contain JSON in text content. Parse that JSON before using IDs/statuses; check tool errors instead of treating every transport response as success. In particular, `fill`/`click` can return `{sideEffect:"possible",error:"outcome_unknown"}` inside a successful JSON-RPC result. This is an uncertain action, not confirmed success. `sideEffect:"none"` with an error code means the request was refused while locating the target and the page was not changed.
+`observe` accepts only `scope`, `scopeRef` or positive `maxChars`, and its scope fields are mutually exclusive. Observation reports visible facts such as URL/title/navigation/tree/truncation or `observationError`; it does not infer business success or echo fill values. It never changes the action `sideEffect`. MCP tool results contain JSON in text content. Parse that JSON before using IDs/statuses; check tool errors instead of treating every transport response as success. In particular, `fill`/`click` can return `{sideEffect:"possible",error:"outcome_unknown"}` inside a successful JSON-RPC result. This is an uncertain action, not confirmed success. `sideEffect:"none"` with an error code means the request was refused while locating the target and the page was not changed.
 
 ## Finish or recover
 

@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '1.3.0';
+  static readonly Version = '1.4.0';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';

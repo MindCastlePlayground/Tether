@@ -98,6 +98,7 @@ test('menu follows the installed state', async () => {
   const current = Env.make({ state: State.CURRENT });
   assert.deepEqual(await Wizard.run(new Script({ [Step.ACTION]: Choice.EXTENSION }), current), ['extension', '--open-browser', '--browser', 'edge']);
   assert.deepEqual(await Wizard.run(new Script({ [Step.ACTION]: Choice.DOCTOR }), current), ['doctor']);
+  assert.deepEqual(await Wizard.run(new Script({ [Step.ACTION]: Choice.UPDATE }), current), ['update']);
   assert.equal(Cli.parse(await Wizard.run(new Script({ [Step.ACTION]: Choice.REPAIR }), current)).options.force, true);
   assert.equal(await Wizard.run(new Script({ [Step.ACTION]: Choice.EXIT }), current), null);
 });

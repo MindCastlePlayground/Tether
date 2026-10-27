@@ -24,6 +24,7 @@ export class Wizard {
     if (action === Choice.EXIT) { ui.end(t.bye); return null; }
     if (action === Choice.DOCTOR) return [Cmd.DOCTOR];
     if (action === Choice.RUNTIME_ONLY) return [Cmd.UPGRADE];
+    if (action === Choice.UPDATE) return [Cmd.UPDATE];
     if (action === Choice.EXTENSION) return [Cmd.EXTENSION, Wizard.flag(Install.OPTION.OPEN), Wizard.flag(Arg.BROWSER), await Wizard.browser(ui, env, t)];
     const args = await Wizard.install(ui, env, t);
     if (action === Choice.UPGRADE) args.push(Wizard.flag(InstallOption.UPGRADE));
@@ -37,9 +38,9 @@ export class Wizard {
     const menus = {
       [State.NONE]: [Choice.INSTALL, Choice.EXIT],
       [State.PARTIAL]: [Choice.RESUME, Choice.EXIT],
-      [State.CURRENT]: [Choice.CONFIGURE, Choice.EXTENSION, Choice.DOCTOR, Choice.REPAIR, Choice.EXIT],
-      [State.STALE]: [Choice.UPGRADE, Choice.RUNTIME_ONLY, Choice.REPAIR, Choice.EXIT],
-      [State.NEWER]: [Choice.EXTENSION, Choice.DOCTOR, Choice.EXIT],
+      [State.CURRENT]: [Choice.CONFIGURE, Choice.UPDATE, Choice.EXTENSION, Choice.DOCTOR, Choice.REPAIR, Choice.EXIT],
+      [State.STALE]: [Choice.UPGRADE, Choice.UPDATE, Choice.RUNTIME_ONLY, Choice.REPAIR, Choice.EXIT],
+      [State.NEWER]: [Choice.EXTENSION, Choice.UPDATE, Choice.DOCTOR, Choice.EXIT],
       [State.FOREIGN]: [Choice.INSTALL, Choice.EXIT]
     };
     const f = t.found;

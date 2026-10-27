@@ -12,6 +12,7 @@ import { Runtime } from './runtime.mjs';
 import { Service } from './service.mjs';
 import { Browser } from './browser.mjs';
 import { PolicyFile } from './policy.mjs';
+import { Update } from '../prototype/scripts/update.mjs';
 
 export class Cli {
   static ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,6 +39,7 @@ export class Cli {
     return { command: options.help ? Cmd.HELP : command, options };
   }
   static help(language) {
+    console.log(language === 'zh-CN' ? 'tether update [--runtime PATH | --home PATH]：从官方 main 拉取并更新安装（需要 Git）。' : 'tether update [--runtime PATH | --home PATH]: fetch official main and update installation (requires Git).');
     if (language === 'zh-CN') {
       console.log(`Tether 安装器（Windows、Node 22+、Python 3.10+）\n\n  tether                 在终端中不带参数运行：打开交互式安装向导\n  tether install [--agent codex,claude,cursor,opencode,gemini|auto] [选项]\n  tether upgrade [--runtime PATH | --home PATH]\n  tether doctor [--runtime PATH | --home PATH]\n  tether extension [--browser chrome|edge] [--open-browser]\n  tether policy list|add|remove|default|reset|path [选项]\n\n选项：\n  --agent LIST|auto      省略或 auto：检测本机已安装的 Agent 并全部配置\n  --scope user|project   默认用户级（所有项目生效）；project 只写入单个项目\n  --project PATH         --scope project 时的项目目录（默认当前目录）\n  --home PATH            持久安装目录（默认 LOCALAPPDATA/Tether）\n  --runtime PATH         复用已配置的 prototype 目录\n  --python PATH          创建独立环境的 Python 解释器\n  --language en|zh-CN    MCP 描述及初始化提示语言\n  --no-register          跳过 HKCU 原生主机注册\n  --open-browser         打开扩展管理页。install 默认会打开，除非 --no-open\n  --no-open              install 成功后不打开浏览器\n  --dry-run              只预览路径，不写入或启动进程\n  --extension-dir PATH   扩展目录（默认 runtime/extension）\n  --force                备份后覆盖冲突项，保留无关内容\n  --upgrade              install 时升级托管 runtime\n\n策略（<runtime>/.local/policy.json，Broker 热加载，无需重启）：\n  tether policy list [--runtime PATH | --home PATH]                查看当前策略，未配置时输出默认并注明全放行\n  tether policy add --effect allow|deny|ask --actions a,b|* [--origin URL] [--client ID] [--id ID] [--first]\n  tether policy remove --id ID                                     删除规则\n  tether policy default allow|deny                                 设置默认效果\n  tether policy reset                                              删除策略文件，恢复全放行\n  tether policy path                                               打印策略文件路径\n\n已有冲突的 MCP/Skill 会保留并报告。\n扩展需要手动启用开发者模式并加载已解压的扩展程序。\n安装器不会启动 Broker。根包尚未发布到 npm 公共仓库。\nupgrade 替换运行目录源码并保留 .local 与 .venv，不修改 Agent 配置，也不重新生成凭据。\n升级旧版本可运行 install --upgrade 或 tether upgrade；--force 可强制重装。`);
       return;
@@ -193,6 +195,7 @@ export class Cli {
     const { command, options } = Cli.parse([...args]);
     if (command === Cmd.HELP) { Cli.help(options.language); return 0; }
     const runtime = Cli.root(options);
+    if (command === Cmd.UPDATE) return Update.apply(runtime, options.language, Boolean(options[Install.OPTION.DRY]));
     if (command === Cmd.POLICY) return Cli.policy(runtime, options);
     if (command === Cmd.DOCTOR) return Cli.doctor(runtime, options);
     if (command === Cmd.EXTENSION) {

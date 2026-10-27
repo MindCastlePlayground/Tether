@@ -16,6 +16,7 @@ class En {
     install: ['Install', 'runtime, agents and browser extension'],
     upgrade: ['Upgrade (recommended)', 'runtime plus agent skills'],
     runtimeOnly: ['Upgrade runtime only', 'leave agent configuration untouched'],
+    update: ['Download latest update', 'fetch official main and update this installation'],
     resume: ['Resume installation', 'keeps generated credentials'],
     repair: ['Repair / reinstall', 'back up and replace conflicting Tether files'],
     extension: ['Open extension loading page', 'browser manager + extension folder'],
@@ -106,6 +107,7 @@ class Zh {
   static actions = {
     install: ['安装', 'runtime、Agent 配置与浏览器扩展'],
     upgrade: ['升级（推荐）', 'runtime 与 Agent Skill'],
+    update: ['下载并更新到最新版', '拉取官方 main 并更新本机安装'],
     runtimeOnly: ['仅升级 runtime', '不改动 Agent 配置'],
     resume: ['继续安装', '保留已生成的凭据'],
     repair: ['修复 / 重装', '备份后替换冲突的 Tether 文件'],

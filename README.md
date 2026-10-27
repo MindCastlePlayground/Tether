@@ -65,6 +65,14 @@ Ask an agent to read [skills/tether-browser/SKILL.md](skills/tether-browser/SKIL
 
 The installer copies the full skill folder and configures MCP for supported agent hosts. See the [installation guide](docs/INSTALL.md). For manual skill installation, copy the entire `skills/tether-browser/` folder to the host's configured skill directory, then invoke `$tether-browser`.
 
+## Updating an installed runtime
+
+The installed runtime can update itself from the official GitHub repository's `main` branch. Updating requires Git and a standard Node.js installation with npm; the updater shallow-clones the source to a temporary directory, runs `npm ci`, then invokes the new installer's runtime upgrade. It preserves the existing runtime configuration. Updates are manual and are never scheduled automatically.
+
+Run `node bin/tether.mjs update --runtime "<runtime path>"` from a source checkout, or double-click `update.cmd` in the installed runtime directory. You can also run `node scripts/update.mjs zh-CN` there. `--dry-run` checks the target without network access or writing files. The updater follows `main`, not GitHub Releases, so it installs the latest committed main-branch state.
+
+After an update, reconnect existing MCP clients so they reload Tether's tool definitions. An update lock at `.local/update.lock` prevents concurrent runs. If an update was interrupted, first verify its process has stopped; only then remove the stale lock and retry. The updater cleans its temporary checkout and lock when a run finishes or fails.
+
 ## Status
 
 This repository contains the current runtime source and dated build, installation, protocol, and real Chrome acceptance records. Read the [verification summary](prototype/VERIFICATION.md) for recorded results and their limits. The evidence does not establish compatibility with every browser or a zero-external-traffic guarantee for the browser profile.

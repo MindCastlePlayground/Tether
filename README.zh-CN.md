@@ -65,6 +65,14 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 
 安装器会复制完整 Skill 文件夹并为支持的 Agent 配置 MCP，详见[安装指南](docs/INSTALL.zh-CN.md)。手动安装时，将整个 `skills/tether-browser/` 复制到宿主配置的 Skill 目录，再使用 `$tether-browser`。
 
+## 更新已安装的运行时
+
+已安装的运行时可从 GitHub 官方仓库的 `main` 分支自行更新。更新需要 Git，以及带 npm 的标准 Node.js 安装；更新器会将源码浅克隆到临时目录，运行 `npm ci`，再调用新安装器升级运行时，并保留现有运行时配置。更新由用户手动触发，不会定时运行。
+
+在源码检出目录执行 `node bin/tether.mjs update --runtime "<运行时路径>"`，或在已安装的运行时目录双击 `update.cmd`。也可在那里运行 `node scripts/update.mjs zh-CN`。`--dry-run` 仅检查目标，不联网也不写文件。更新器跟随 `main`，而非 GitHub Releases，因此安装的是 `main` 上最新的已提交内容。
+
+更新后请重新连接已有 MCP 客户端，使其重新读取 Tether 工具定义。`.local/update.lock` 锁文件用于阻止并发更新。如果更新中断，先确认对应进程已停止，再删除遗留锁文件并重试。更新器会在成功或失败后清理临时检出目录和锁文件。
+
 ## 状态
 
 仓库包含当前运行时源码，以及有日期的构建、安装、协议和真实 Chrome 验收记录。已记录结果与边界见[验收摘要](prototype/VERIFICATION.zh-CN.md)。现有证据不能证明所有浏览器均兼容，也不能保证整个浏览器 profile 没有外部流量。

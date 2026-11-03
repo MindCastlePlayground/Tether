@@ -45,7 +45,7 @@ Fresh Windows installation requires Node.js 22+ and Python 3.10+. After the inst
 npm install --package-lock=false
 node bin/tether.mjs install
 ```
-Versions follow `a.b.c`: major features or incompatible changes increment `a`, compatible features increment `b`, and fixes increment `c`. Major releases update all companion components and documentation. See the [3.0.0 release notes](docs/RELEASE-v3.0.0.md).
+Versions follow `a.b.c`: major features or incompatible changes increment `a`, compatible features increment `b`, and fixes increment `c`. Major releases update all companion components and documentation. See the [3.0.1 release notes](docs/RELEASE-v3.0.1.md).
 The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker for the same runtime. Shared runtime mode `off` prevents MCP from starting it again. The default policy allows all requests, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
 
 ## First browser task
@@ -99,7 +99,7 @@ The folded tether mark connects a navy stem with a teal loop. [Brand assets](ass
 - [Verification summary](prototype/VERIFICATION.md) / [验收摘要](prototype/VERIFICATION.zh-CN.md).
 
 - [Development and releases](docs/DEVELOPMENT.md) — `dev` integration and `main` release workflow.
-- [Tether 3.0.0 release notes](docs/RELEASE-v3.0.0.md) / [简体中文](docs/RELEASE-v3.0.0.zh-CN.md).
+- [Tether 3.0.1 release notes](docs/RELEASE-v3.0.1.md) / [简体中文](docs/RELEASE-v3.0.1.zh-CN.md).
 
 ## Agent skill
 

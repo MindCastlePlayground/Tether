@@ -29,7 +29,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/launchers.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register.ps1
 ```
 
-The repository intentionally has no lockfile; use `npm install` (or `npm install --package-lock=false`) so npm resolves dependencies using the configured registry/mirror. Release versions use `a.b.c`: increment `a` for major features or incompatible changes, `b` for compatible features, and `c` for fixes. Major releases update all companion components and documentation. The root package is version `3.0.0`.
+The repository intentionally has no lockfile; use `npm install` (or `npm install --package-lock=false`) so npm resolves dependencies using the configured registry/mirror. Release versions use `a.b.c`: increment `a` for major features or incompatible changes, `b` for compatible features, and `c` for fixes. Major releases update all companion components and documentation. The root package is version `3.0.1`.
 
 Load `extension/` as an unpacked extension in the existing browser. Select the directory containing `manifest.json`; each setup generates its own extension identity. To run a locally built Broker, use the generated executable in the local runtime directory. The fixture page can be started with `node scripts/fixture.mjs`.
 
@@ -82,4 +82,4 @@ File operations are page-scoped and use increasing `seq` values. Upload through 
 
 ## Troubleshooting
 
-The popup displays Broker connection state and a recovery hint. Check that the extension and runtime use matching configuration, certificates, and pin; keep the browser extension and runtime upgraded together. See [installation verification](../docs/INSTALL-VERIFICATION.md) and [v3.0.0 release notes](../docs/RELEASE-v3.0.0.md) for version-specific results.
+The popup displays Broker connection state and a recovery hint. Check that the extension and runtime use matching configuration, certificates, and pin; keep the browser extension and runtime upgraded together. See [installation verification](../docs/INSTALL-VERIFICATION.md) and [v3.0.1 release notes](../docs/RELEASE-v3.0.1.md) for version-specific results.

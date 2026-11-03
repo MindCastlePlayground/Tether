@@ -121,7 +121,7 @@ node bin/tether.mjs policy reset
 ```powershell
 npm install --package-lock=false
 npm pack --pack-destination work
-npx --yes --package ./work/mindcastleplayground-tether-3.0.0.tgz tether install --agent codex --project PATH --home PATH
+npx --yes --package ./work/mindcastleplayground-tether-3.0.1.tgz tether install --agent codex --project PATH --home PATH
 ```
 
 tarball 包含准备全新 runtime 所需的 CLI 和原型源码。通过 `npx` 使用 GitHub 源可能需要已授权的 Git 访问；有条件时优先使用本地 tarball。

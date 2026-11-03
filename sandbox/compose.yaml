@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: sandbox/Dockerfile
-    image: tether-sandbox:3.0.0
+    image: tether-sandbox:3.0.1
     container_name: tether-sandbox
     restart: unless-stopped
     init: true

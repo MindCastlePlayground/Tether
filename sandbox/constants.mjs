@@ -8,7 +8,7 @@ export class Paths {
 export class Wire {
   static Port = 18780;
   static Url = 'http://127.0.0.1:18780/mcp';
-  static Version = '3.0.0';
+  static Version = '3.0.1';
   static Status = 'sandbox_status';
   static Browser = 'sandbox_browser';
   static Exec = 'sandbox_exec';

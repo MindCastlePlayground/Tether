@@ -121,7 +121,7 @@ The package is private and not published to npm. A local tarball is the reproduc
 ```powershell
 npm install --package-lock=false
 npm pack --pack-destination work
-npx --yes --package ./work/mindcastleplayground-tether-3.0.0.tgz tether install --agent codex --project PATH --home PATH
+npx --yes --package ./work/mindcastleplayground-tether-3.0.1.tgz tether install --agent codex --project PATH --home PATH
 ```
 
 The tarball contains the CLI and prototype sources needed to prepare a fresh runtime. Using a GitHub source with `npx` may require authorized Git access; prefer the local tarball when available.

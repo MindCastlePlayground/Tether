@@ -154,12 +154,12 @@ async function run() {
   if (!target?.pageId) throw Error('new_group_page_missing');
   const page = await waitFor(() => context.pages().find(v => v.url() === fixtureUrl), 'fixture_navigation');
   await page.waitForFunction(() => document.readyState === 'complete' && document.title === 'Release fixture');
-  const observed = await client.observe({ sessionId, pageId: target.pageId });
-  if (observed.title !== 'Release fixture' || !String(observed.text).includes('Apply')) throw Error('observe_fixture_failed');
+  const observed = await client.snapshot({ sessionId, pageId: target.pageId });
+  if (observed.title !== 'Release fixture' || !String(observed.tree).includes('Apply')) throw Error('observe_fixture_failed');
   await client.fill({ sessionId, pageId: target.pageId, seq: 1, selector: '#name', value: 'release-ok' });
   await client.click({ sessionId, pageId: target.pageId, seq: 2, selector: '#go' });
-  const verified = await client.observe({ sessionId, pageId: target.pageId });
-  if (!String(verified.text).includes('release-ok')) throw Error('browser_operation_failed');
+  const verified = await client.snapshot({ sessionId, pageId: target.pageId });
+  if (!String(verified.tree).includes('release-ok')) throw Error('browser_operation_failed');
   await client.release({ sessionId, seq: 3 }); client.close();
   const popupShot = await new Promise((resolveShot, reject) => {
     const id = ++cdpSeq; const timer = setTimeout(() => reject(Error('popup_screenshot_timeout')), 5000);
@@ -201,7 +201,7 @@ async function run() {
   });
   writeFileSync(join(qa, 'popup-zh.png'), Buffer.from(zhShot, 'base64'));
   await ctl(hostCfg, '/control/stop'); await waitListening(p, false); brokerOwned = false;
-  const report = { result: 'passed', extensionServiceWorker: sw.url(), nativeHost: hostName, brokerPort: p, defaultAuto: true, manualOffSurvived31s: true, startThenAuto: true, recoveryAfter30sAlarm: true, browserOps: ['requestSession', 'observe', 'fill', 'click', 'release'], popupScreenshots: ['popup-en.png', 'popup-zh.png'] };
+  const report = { result: 'passed', extensionServiceWorker: sw.url(), nativeHost: hostName, brokerPort: p, defaultAuto: true, manualOffSurvived31s: true, startThenAuto: true, recoveryAfter30sAlarm: true, browserOps: ['requestSession', 'snapshot', 'fill', 'click', 'release'], popupScreenshots: ['popup-en.png', 'popup-zh.png'] };
   writeFileSync(join(qa, 'result.json'), JSON.stringify(report, null, 2));
   say(JSON.stringify({ ...report, resultFile: join(qa, 'result.json') }));
 }

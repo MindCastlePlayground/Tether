@@ -7,7 +7,7 @@
 在检出仓库的根目录运行：
 
 ```powershell
-npm ci
+npm install --package-lock=false
 node bin/tether.mjs install --agent codex --dry-run
 node bin/tether.mjs install --agent codex
 ```

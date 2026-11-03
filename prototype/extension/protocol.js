@@ -8,7 +8,6 @@ export class Wire {
   static CreateTab = 'createTab';
   static CloseTab = 'closeTab';
   static Release = 'release';
-  static Observe = 'observe';
   static Fill = 'fill';
   static Click = 'click';
   static Navigate = 'navigate';
@@ -20,6 +19,14 @@ export class Wire {
   static ClientLost = 'clientLost';
   static Heartbeat = 'heartbeat';
   static Event = 'cdpEvent';
+  static Network = 'network';
+  static Upload = 'upload';
+  static DownloadStart = 'downloadStart';
+  static DownloadRead = 'downloadRead';
+  static DownloadDrop = 'downloadDrop';
+  static Dialog = 'dialog';
+  static PopupCandidates = 'popupCandidates';
+  static AdoptPopup = 'adoptPopup';
   static Pending = 'pending';
   static Approved = 'approved';
   static Denied = 'denied';
@@ -140,6 +147,29 @@ export class Failure {
   static GroupFull = 'group_full';
   static Unsupported = 'unsupported_operation';
   static Failed = 'operation_failed';
+  static NetworkUnavailable = 'network_unavailable';
+  static NetworkPending = 'network_pending';
+}
+
+export class NetworkOp {
+  static Start = 'start'; static List = 'list'; static Detail = 'detail';
+  static Body = 'body'; static Stop = 'stop'; static Clear = 'clear';
+}
+
+export class NetworkLimits {
+  static Requests = 500; static Text = 8192; static Events = 20;
+  static Metadata = 12000; static Message = 1000; static Url = 512;
+  static BodyChunk = 30000; static BodyDefault = 16000;
+}
+
+export class NetworkCdp {
+  static Enable = 'Network.enable'; static Body = 'Network.getResponseBody';
+  static Request = 'Network.requestWillBeSent'; static Response = 'Network.responseReceived';
+  static RequestExtra = 'Network.requestWillBeSentExtraInfo'; static ResponseExtra = 'Network.responseReceivedExtraInfo';
+  static Finished = 'Network.loadingFinished'; static Failed = 'Network.loadingFailed';
+  static Cache = 'Network.requestServedFromCache';
+  static Socket = 'Network.webSocketCreated'; static SocketPrefix = 'Network.webSocket';
+  static SSE = 'Network.eventSourceMessageReceived'; static SocketType = 'WebSocket';
 }
 
 export class CdpMethod {
@@ -151,11 +181,11 @@ export class CdpMethod {
     'Input.dispatchKeyEvent', 'Input.dispatchMouseEvent', 'Input.insertText',
     'Log.disable', 'Log.enable', 'Page.addScriptToEvaluateOnNewDocument', 'Page.captureScreenshot',
     'Page.createIsolatedWorld', 'Page.disable', 'Page.enable', 'Page.getFrameTree',
-    'Page.navigate', 'Page.reload', 'Page.setLifecycleEventsEnabled', 'Page.stopLoading',
+    'Page.navigate', 'Page.reload', 'Page.setLifecycleEventsEnabled', 'Page.stopLoading', 'Page.handleJavaScriptDialog',
     'Network.enable', 'Network.setCacheDisabled',
     'Performance.disable', 'Performance.enable', 'Runtime.callFunctionOn', 'Runtime.disable',
     'Runtime.enable', 'Runtime.evaluate', 'Runtime.getProperties', 'Runtime.releaseObject',
-    'Runtime.runIfWaitingForDebugger', 'Target.setAutoAttach'
+    'Runtime.runIfWaitingForDebugger', 'Target.detachFromTarget', 'Target.setAutoAttach'
   ]);
   static Internal = new Set(['Browser.getVersion', 'Target.getTargetInfo']);
   static NoChildTargets = 'Target.setAutoAttach';
@@ -163,6 +193,8 @@ export class CdpMethod {
 
 export class BrowserAction {
   static NewTab = 'about:blank';
+  static BlankWait = 1000;
+  static BlankPoll = 25;
   static Http = 'http:';
   static Https = 'https:';
   static BadgeColor = '#b45309';

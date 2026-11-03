@@ -1,6 +1,7 @@
 # Local runtime, credentials and generated dependencies
 **/.local/
 **/node_modules/
+**/package-lock.json
 **/.venv/
 **/.npm-cache/
 **/dist/

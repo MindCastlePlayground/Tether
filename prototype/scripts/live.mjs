@@ -36,11 +36,11 @@ try{
  let fixture=false;
  for(let i=0;i<50;i++){const tabs=await client.listTabs({sessionId:ids.sessionId});if(tabs.pages.find(p=>p.pageId===ids.pageId)?.url?.startsWith('http://127.0.0.1:18444/')){fixture=true;break;}await new Promise(r=>setTimeout(r,100));}
  if(!fixture)throw Error('fixture_page_required');
- const initial=await client.observe(ids);evidence.checks.push({name:'playwright_observe',pass:initial.engine==='playwright-core',url:initial.url});
+ const initial=await client.snapshot(ids);evidence.checks.push({name:'playwright_observe',pass:initial.engine==='playwright-core',url:initial.url});
  const fill=await client.fill({...ids,seq:1,selector:'#name',value:'M0 script verified'});evidence.checks.push({name:'fill_applied',pass:fill.sideEffect==='applied'});
  const click=await client.click({...ids,seq:2,selector:'#save'});evidence.checks.push({name:'click_applied',pass:click.sideEffect==='applied'});
- const after=await client.observe(ids);evidence.checks.push({name:'fill_click_result',pass:after.text.includes('saved: M0 script verified')});
- try{await other.observe(ids);evidence.checks.push({name:'cross_client_denied',pass:false});}catch(e){evidence.checks.push({name:'cross_client_denied',pass:e.message==='not_authorized',reason:e.message});}
+ const after=await client.snapshot(ids);evidence.checks.push({name:'fill_click_result',pass:after.tree.includes('saved: M0 script verified')});
+ try{await other.snapshot(ids);evidence.checks.push({name:'cross_client_denied',pass:false});}catch(e){evidence.checks.push({name:'cross_client_denied',pass:e.message==='not_authorized',reason:e.message});}
  if(mode==='attachExisting'){
   const competing=await other.requestSession({mode,tabId:request.tabId});
   const status=await other.approvalStatus({pendingId:competing.pendingId});
@@ -50,6 +50,6 @@ try{
  await client.closeTab({sessionId:ids.sessionId,pageId:created.pageId,seq:4});
  await client.release({sessionId:ids.sessionId,seq:5});
  if(mode==='attachExisting')evidence.checks.push({name:'existing_tab_retained',pass:(await client.availableTabs()).tabs.some(t=>t.tabId===request.tabId)});
- try{await client.observe(ids);evidence.checks.push({name:'released_denied',pass:false});}catch{evidence.checks.push({name:'released_denied',pass:true});}
+ try{await client.snapshot(ids);evidence.checks.push({name:'released_denied',pass:false});}catch{evidence.checks.push({name:'released_denied',pass:true});}
  if(evidence.checks.some(x=>!x.pass))throw Error('check_failed');
 }catch(e){evidence.error=e.message;process.exitCode=1;console.log('live_failed:'+e.message);}finally{await client.close();other.close();writeFileSync(`evidence/live-${mode}-${source}.json`,JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));}

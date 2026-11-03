@@ -70,7 +70,7 @@ export class Runtime {
     }
   }
   static build(root) {
-    Runtime.npm(['ci', '--no-audit', '--no-fund', '--offline=false', `--cache=${path.join(root, '.npm-cache')}`], root);
+    Runtime.npm(['install', '--package-lock=false', '--no-audit', '--no-fund', '--offline=false', `--cache=${path.join(root, '.npm-cache')}`], root);
     Runtime.npm(['run', 'build'], root);
   }
   static pip(root) { Runtime.run(Runtime.py(root), ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', path.join(root, 'python', 'requirements.txt')], root); }

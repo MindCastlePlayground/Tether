@@ -1,5 +1,4 @@
-import en from './_locales/en/messages.json' with { type: 'json' };
-import zh from './_locales/zh_CN/messages.json' with { type: 'json' };
+import { Catalogs } from './locales.js';
 import { Failure } from './protocol.js';
 
 export class Text {
@@ -108,7 +107,7 @@ export class Locale {
   static English = 'en';
   static Chinese = 'zh-CN';
   static Key = 'language';
-  static Catalogs = { en, 'zh-CN': zh };
+  static Catalogs = { en: Catalogs.English, 'zh-CN': Catalogs.Chinese };
 
   constructor(api, language = navigator.language) {
     this.api = api;
@@ -119,7 +118,7 @@ export class Locale {
   static normalize(value) { return /^zh(?:[-_]|$)/i.test(value) ? Locale.Chinese : Locale.English; }
   static valid(value) { return [Locale.Auto, Locale.English, Locale.Chinese].includes(value); }
   get language() { return Locale.normalize(this.choice === Locale.Auto ? this.system : this.choice); }
-  get(key) { return (Locale.Catalogs[this.language][key] || en[key])?.message || key; }
+  get(key) { return (Locale.Catalogs[this.language][key] || Catalogs.English[key])?.message || key; }
 
   async load() {
     try {

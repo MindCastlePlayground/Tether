@@ -136,6 +136,24 @@ async function approvedExisting() {
 
 function manual(c) { c.autoApprove = false; return c; }
 
+test('popup adoption uses navigation source for background tabs and closes owned popup', async () => {
+  const {api,c,approved}=await approvedExisting();
+  const sessionId=approved.sessionId,openerPageId=approved.pages[0].pageId;
+  api.tabs.data.set(2,{id:2,openerTabId:99,url:'https://example.test/popup',groupId:-1});
+  c.createdTarget({tabId:2,sourceTabId:1});
+  c.createdTarget({tabId:3,sourceTabId:99});
+  assert.equal(c.openers.has(3),false);
+  const ids={clientId:clientA,sessionId};
+  assert.equal((await c.dispatch(Wire.PopupCandidates,ids)).tabs[0].openerPageId,openerPageId);
+  await c.dispatch(Wire.AdoptPopup,{...ids,seq:1,tabId:2,openerPageId});
+  assert.equal((await c.dispatch(Wire.PopupCandidates,ids)).tabs.length,0);
+  const popup=[...c.pages.values()].find(p=>p.tabId===2);
+  await c.dispatch(Wire.CloseTab,{...ids,pageId:popup.pageId,seq:2});
+  await c.dispatch(Wire.Release,{...ids,seq:3});
+  assert.equal(api.tabs.data.has(2),false);
+  assert.equal(api.tabs.data.has(1),true);
+});
+
 test('request exposes no page metadata until the user approves in the extension popup', async () => {
   const api = new FakeChrome();
   const c = manual(new ExtensionController(api));
@@ -553,7 +571,7 @@ test('grants are client and page scoped; release detaches but keeps a user-owned
   await c.dispatch(Wire.Release, { clientId: clientA, sessionId: approved.sessionId });
   assert.equal(api.tabs.data.size, 1);
   assert.ok(api.debugger.calls.some(call => call[0] === 'detach'));
-  await assert.rejects(c.dispatch(Wire.Observe, ids), /not_authorized/);
+  await assert.rejects(c.dispatch("observe", ids), /not_authorized/);
 });
 
 test('concurrent approval creates one grant and one owned tab', async () => {
@@ -614,6 +632,18 @@ test('CDP rejects unreviewed and cross-target commands', async () => {
   assert.deepEqual(await c.dispatch(Wire.Cdp, { ...ids, method: 'Target.setAutoAttach', params: { flatten: true } }), {});
 });
 
+test('OOPIF child commands stay on page descendants and unrelated targets are detached', async () => {
+  const { c, approved } = await approvedExisting();
+  const ids={clientId:clientA,sessionId:approved.sessionId,pageId:approved.pages[0].pageId};
+  await c.dispatch(Wire.Attach,ids);
+  c.event({tabId:1},'Target.attachedToTarget',{sessionId:'iframe-session',targetInfo:{targetId:'iframe-target',type:'iframe'}},undefined);
+  await c.dispatch(Wire.Cdp,{...ids,childSessionId:'iframe-session',method:'Runtime.evaluate',params:{expression:'1'}});
+  assert.ok(c.api.debugger.calls.some(([method,target])=>method==='Runtime.evaluate'&&target.sessionId==='iframe-session'));
+  c.event({tabId:1},'Target.attachedToTarget',{sessionId:'popup-session',targetInfo:{targetId:'external-target',type:'page'}},undefined);
+  assert.ok(c.api.debugger.calls.some(([method,_target,params])=>method==='Target.detachFromTarget'&&params.sessionId==='popup-session'));
+  await assert.rejects(c.dispatch(Wire.Cdp,{...ids,childSessionId:'popup-session',method:'Runtime.evaluate'}),/unsupported_operation/);
+});
+
 test('new-group approval and createTab enforce safe URLs and the ten-tab limit', async () => {
   const api = new FakeChrome();
   const c = manual(new ExtensionController(api));
@@ -626,6 +656,24 @@ test('new-group approval and createTab enforce safe URLs and the ten-tab limit',
   await assert.rejects(c.dispatch(Wire.CreateTab, { ...ids, seq: 0, url: 'file:///secret' }), /invalid_request/);
   for (let seq = 1; seq <= 9; seq++) await c.dispatch(Wire.CreateTab, { ...ids, seq, url: 'about:blank' });
   await assert.rejects(c.dispatch(Wire.CreateTab, { ...ids, seq: 9, url: 'about:blank' }), /group_full/);
+});
+
+test('createTab waits for the initial blank navigation to commit', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'newGroup', url: 'https://safe.test/start' });
+  await c.approve(pending.pendingId);
+  const grant = await c.approvalStatus({ clientId: clientA, pendingId: pending.pendingId });
+  const get = api.tabs.get;
+  let reads = 0;
+  api.tabs.get = async id => {
+    const tab = await get(id);
+    if (++reads === 1) return { ...tab, url: '', pendingUrl: 'about:blank' };
+    return tab;
+  };
+  const page = await c.dispatch(Wire.CreateTab, { clientId: clientA, sessionId: grant.sessionId, seq: 1, url: 'about:blank' });
+  assert.ok(page.pageId);
+  assert.ok(reads >= 2);
 });
 
 test('native disconnect revokes every grant and lease expiry revokes a client', async () => {

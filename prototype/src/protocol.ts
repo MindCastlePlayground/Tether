@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '1.4.0';
+  static readonly Version = '3.0.0';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';
@@ -33,10 +33,10 @@ export class PolicyKey {
 }
 export enum Method {
   Request = 'requestSession', Status = 'approvalStatus', Tabs = 'listTabs', Create = 'createTab',
-  Close = 'closeTab', Release = 'release', Observe = 'observe', Fill = 'fill', Click = 'click',
+  Close = 'closeTab', Release = 'release', Html = 'html', Fill = 'fill', Click = 'click',
   Navigate = 'navigate', Capabilities = 'capabilities', Attach = 'cdpAttach', CDP = 'cdp',
   Detach = 'cdpDetach', Event = 'cdpEvent', Heartbeat = 'heartbeat', Lost = 'clientLost', Available = 'availableTabs',
-  Snapshot = 'snapshot', Locate = 'locate'
+  Snapshot = 'snapshot', Locate = 'locate', Network = 'network'
 }
 export class Limit {
   static readonly Frame = 512 * 1024;
@@ -58,7 +58,7 @@ export class Wire {
 export type Params = Record<string, any>;
 export interface RPC { jsonrpc: string; id?: string | number; method?: string; params?: Params; result?: any; error?: {code:number;message:string}; }
 export type Forward = (method: string, params: Params) => Promise<any>;
-export const PUBLIC = new Set<string>([Method.Request,Method.Status,Method.Tabs,Method.Create,Method.Close,Method.Release,Method.Observe,Method.Fill,Method.Click,Method.Navigate,Method.Capabilities,Method.Available,Method.Snapshot,Method.Locate]);
+export const PUBLIC = new Set<string>([Method.Request,Method.Status,Method.Tabs,Method.Create,Method.Close,Method.Release,Method.Html,Method.Fill,Method.Click,Method.Navigate,Method.Capabilities,Method.Available,Method.Snapshot,Method.Locate,Method.Network]);
 export const WRITES = new Set<string>([Method.Create,Method.Close,Method.Release,Method.Fill,Method.Click,Method.Navigate]);
 export class Autostart {
   static readonly Client = 'BB_CLIENT_CONFIG';
@@ -95,11 +95,11 @@ export class Wake {
   };
   static readonly Bases = ['LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)'];
   /** The request was never sent to the browser, so any call may be retried. */
-  static readonly Unsent = new Set(['host_unavailable', 'connectionFailed', 'connectionTimeout']);
+  static readonly Unsent = new Set(['host_unavailable', 'connectionFailed', 'connectionTimeout', 'broker_unavailable', 'broker_busy']);
   /** The link dropped after sending; only side-effect free calls are retried. */
   static readonly Lost = new Set(['host_disconnected', 'connectionClosed']);
   /** Side-effect free calls that may be retried once after recovery. */
-  static readonly Reads = new Set<string>([Method.Status, Method.Tabs, Method.Observe, Method.Available, Method.Snapshot, Method.Locate]);
+  static readonly Reads = new Set<string>([Method.Status, Method.Tabs, Method.Html, Method.Available, Method.Snapshot, Method.Locate]);
 }
 export class BrokerControl {
   static readonly Type = 'broker.control';
@@ -142,8 +142,8 @@ export class BrokerControl {
 /** Element lookup used by snapshot, locate, fill and click. */
 export class Find {
   /** Engine methods that run in Playwright, and the reads that share the observe policy action. */
-  static readonly Engine = new Set<string>([Method.Observe, Method.Fill, Method.Click, Method.Snapshot, Method.Locate]);
-  static readonly Reads = new Set<string>([Method.Snapshot, Method.Locate]);
+  static readonly Engine = new Set<string>([Method.Html, Method.Fill, Method.Click, Method.Snapshot, Method.Locate]);
+  static readonly Reads = new Set<string>([Method.Snapshot, Method.Locate, Method.Html]);
   static readonly Wait = 3000;
   static readonly Step = 250;
   static readonly Chars = 30_000;

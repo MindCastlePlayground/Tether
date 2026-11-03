@@ -21,7 +21,7 @@ class Bench {
   static tempDirs() { return fs.readdirSync(os.tmpdir()).filter(name => name.startsWith('tether-update-')).sort(); }
 }
 
-test('update runs clone, revision, npm ci, upgrade and records fetched metadata', () => {
+test('update runs clone, revision, lock-free npm install, upgrade and records fetched metadata', () => {
   const root = Bench.root(), calls = [];
   Bench.with((cmd, args, cwd) => {
     calls.push([path.basename(cmd), ...args]);
@@ -35,9 +35,9 @@ test('update runs clone, revision, npm ci, upgrade and records fetched metadata'
   }, () => {
     const before = Bench.tempDirs();
     assert.equal(Update.apply(root, 'zh-CN'), 0);
-    assert.deepEqual(calls.map(([, ...args]) => args[0] === 'clone' || args[0] === 'rev-parse' ? args[0] : args[1] === 'ci' ? 'ci' : args[1] === 'upgrade' ? 'upgrade' : 'unexpected'), ['clone', 'rev-parse', 'ci', 'upgrade']);
+    assert.deepEqual(calls.map(([, ...args]) => args[0] === 'clone' || args[0] === 'rev-parse' ? args[0] : args[1] === 'install' ? 'install' : args[1] === 'upgrade' ? 'upgrade' : 'unexpected'), ['clone', 'rev-parse', 'install', 'upgrade']);
     assert.ok(calls[0].includes(Update.REPO) && calls[0].includes(Update.BRANCH));
-    assert.ok(calls[2].includes('--no-audit') && calls[2].includes('--no-fund'));
+    assert.ok(calls[2].includes('--package-lock=false') && calls[2].includes('--no-audit') && calls[2].includes('--no-fund'));
     assert.ok(calls[3].includes('--language') && calls[3].includes('zh-CN'));
     const result = JSON.parse(fs.readFileSync(path.join(root, Update.RESULT), 'utf8'));
     assert.deepEqual({ version: result.version, revision: result.revision, source: result.source }, { version: '2.0.0', revision: 'abc123', source: Update.REPO });

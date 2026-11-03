@@ -9,11 +9,16 @@ import { Policy } from './policy.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Config } from './config.js';
 import { Engine } from './engine.js';
+import { Support, Journal, Conditions } from './support.js';
+import { BusinessApi } from './business-api.js';
+import { BusinessMethod } from './business.js';
 import { Method, Limit, Wire, Action, Effect, PolicyKey, Brand, BrokerControl as Control, Find, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
 
 interface Pending {resolve:(v:any)=>void;reject:(e:Error)=>void;timer:NodeJS.Timeout;}
 interface Ledger {high:number; records:Map<number,{body:string,result:Promise<any>,at:number}>; tail:Promise<any>;}
 export class Broker {
+  static { for(const method of BusinessApi.Names){PUBLIC.add(method);if(method!==BusinessApi.PopupCandidates)WRITES.add(method);} }
+  private journal=new Journal();
   private host?:WebSocket; private clients=new Map<string,WebSocket>();
   private pending=new Map<string,Pending>();private ledger=new Map<string,Ledger>();
   private engine=new Engine((m,p)=>this.forward(m,p),(p,url)=>this.policy.check(Broker.identity(p.clientId),Action.Observe,url)!==Effect.Deny);
@@ -87,11 +92,24 @@ export class Broker {
     });
   }
   async handle(clientId:string,msg:RPC):Promise<any>{
-    if(msg.jsonrpc!==Wire.Version||msg.id===undefined||!msg.method||!PUBLIC.has(msg.method)||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)||Object.hasOwn(msg.params,'clientId'))throw Error('invalid_request');
-    if(msg.method===Method.Capabilities)return {prototype:'M0',browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC],locators:['ref','selector','role','text','xpath-text-rewrite','actionable-ancestor'],unsupported:['oopif','autoPopup','files','rawCDP','chunks'],policy:this.policy.summary()};
+    const start=Date.now();
+    try{const result=await this.dispatch(clientId,msg);this.journal.add(Broker.identity(clientId),msg.method??'invalid',start,result);return result;}
+    catch(e){this.journal.add(Broker.identity(clientId),msg.method??'invalid',start,undefined,(e as Error).message);throw e;}
+  }
+  private async dispatch(clientId:string,msg:RPC):Promise<any>{
+    if(msg.jsonrpc!==Wire.Version||msg.id===undefined||!msg.method||!(PUBLIC.has(msg.method)||Support.Methods.includes(msg.method))||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)||Object.hasOwn(msg.params,'clientId'))throw Error('invalid_request');
+    if(msg.method===Support.Records)return this.journal.read(Broker.identity(clientId),msg.params.op??'list');
+    if(msg.method===Support.Diagnose){
+      let browser;let code;try{browser=await this.forward(Method.Capabilities,{clientId});}catch(e){code=(e as Error).message;}
+      const versionMatch=browser?.version?browser.version===Brand.Version:null;
+      return {version:Brand.Version,extensionVersion:browser?.version??null,versionMatch,broker:'connected',nativeHost:this.host?'connected':'disconnected',browser:browser?'responsive':'unavailable',code,policy:this.policy.summary(),hint:versionMatch===false?'Update the runtime and reload the matching extension.':browser?'ready':'Load the matching extension and inspect Native Messaging status in its popup.'};
+    }
+    if(msg.method===Support.Wait||msg.method===Support.Assert)return Conditions.run({...msg.params,clientId},(method,p)=>this.dispatch(clientId,{jsonrpc:Wire.Version,id:msg.id,method,params:Object.fromEntries(Object.entries(p).filter(([k])=>k!=='clientId'))}));
+    if(msg.method===Method.Capabilities)return {prototype:'M0',version:Brand.Version,browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC,...Support.Methods],locators:['ref','selector','role','text','xpath-text-rewrite','actionable-ancestor'],unsupported:['rawCDP'],policy:this.policy.summary()};
+    if(BusinessApi.Names.includes(msg.method))BusinessApi.valid(msg.method,msg.params);
     const params:Params={...msg.params,clientId};
     const who=Broker.identity(clientId);this.policy.check(who,null,null);
-    const action=msg.method===Method.Request?Action.Session:Find.Reads.has(msg.method)?Action.Observe:Object.values(Action).find(a=>a===msg.method)??null;
+    const action=msg.method===Method.Request?Action.Session:Find.Reads.has(msg.method)||msg.method===Method.Network?Action.Observe:Object.values(Action).find(a=>a===msg.method)??null;
     let origin:string|null=null;let pages:Params[]|undefined;
     if(action===Action.Navigate||action===Action.Create||(action===Action.Session&&params.mode===PolicyKey.New))origin=params.url??null;
     else if([Action.Observe,Action.Fill,Action.Click,Action.Close].includes(action as Action)||(action===Action.Session&&params.mode===PolicyKey.Attach)){
@@ -112,13 +130,47 @@ export class Broker {
     const key=`${clientId}/${params.sessionId}`;let l=this.ledger.get(key);
     if(!l){l={high:0,records:new Map(),tail:Promise.resolve()};this.ledger.set(key,l);}
     const body=JSON.stringify([msg.method,Object.entries(msg.params).sort(([a],[b])=>a.localeCompare(b))]);
-    if(params.seq<=l.high){const old=l.records.get(params.seq);if(!old||Date.now()-old.at>300000)throw Error('request_expired');if(old.body!==body)throw Error('request_conflict');return old.result;}
+    const old=l.records.get(params.seq);
+    if(old){if(Date.now()-old.at>300000)throw Error('request_expired');if(old.body!==body)throw Error('request_conflict');return old.result;}
+    if(params.seq<=l.high)throw Error('request_expired');
     if(l.records.size>=Limit.Records)throw Error('queue_full');
-    l.high=params.seq;
-    const result=l.tail.catch(()=>{}).then(()=>{if(!this.clients.has(clientId))throw Error('client_disconnected');return this.run(msg.method!,params);});
-    l.tail=result;l.records.set(params.seq,{body,result,at:Date.now()});return result;
+    // Dialog handling must unblock an in-flight click instead of waiting behind it.
+    const dialog=msg.method===BusinessMethod.Dialog;
+    // A dialog may arrive while the earlier click is still checking page policy.
+    // Reserve its sequence without expiring that earlier request.
+    if(!dialog)l.high=params.seq;
+    const result=(dialog?Promise.resolve():l.tail.catch(()=>{})).then(()=>{if(!this.clients.has(clientId))throw Error('client_disconnected');return this.run(msg.method!,params);});
+    l.tail=dialog?Promise.allSettled([l.tail,result]).then(()=>{}):result;l.records.set(params.seq,{body,result,at:Date.now()});return result;
   }
   private async run(method:string,p:Params,known?:Params[]):Promise<any>{
+    if(method===BusinessApi.PopupCandidates||method===BusinessApi.AdoptPopup){
+      const candidates=await this.forward(BusinessApi.PopupCandidates,{clientId:p.clientId,sessionId:p.sessionId});
+      const tabs=(candidates.tabs??[]).filter((tab:Params)=>this.policy.check(Broker.identity(p.clientId),Action.Create,tab.url??null)!==Effect.Deny);
+      if(method===BusinessApi.PopupCandidates)return {tabs};
+      if(!tabs.some((tab:Params)=>tab.tabId===p.tabId&&tab.openerPageId===p.openerPageId))throw Error(PolicyKey.Denied);
+      return this.forward(method,p);
+    }
+    if(BusinessApi.Names.includes(method)){
+      const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});
+      const page=(tabs.pages??tabs).find((v:Params)=>v.pageId===p.pageId);
+      if(!page)throw Error('page_forbidden');
+      const action=method.startsWith('upload')?Action.Fill:method===BusinessMethod.Dialog?Action.Click:Action.Observe;
+      if(this.policy.check(Broker.identity(p.clientId),action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
+      return this.engine.run(method,p);
+    }
+    if(method===Method.Network){
+      const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});
+      const pages:Params[]=Array.isArray(tabs)?tabs:(tabs.pages??tabs.tabs??[]);
+      const page=pages.find(v=>v.pageId===p.pageId);if(!page)throw Error('page_forbidden');
+      if(this.policy.check(Broker.identity(p.clientId),Action.Observe,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
+      const result=await this.forward(method,p);
+      // Navigation or policy changes during a body read must not bypass observe rules.
+      const current=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});
+      const now:Params[] = Array.isArray(current)?current:(current.pages??current.tabs??[]);
+      const active=now.find(v=>v.pageId===p.pageId);if(!active)throw Error('page_forbidden');
+      if(this.policy.check(Broker.identity(p.clientId),Action.Observe,active.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
+      return result;
+    }
     if(Find.Engine.has(method)){
       // Ask authority on every request, even when reusing an engine. Queued writes re-check policy on fresh state.
       let pages:Params[]=known??[];
@@ -126,6 +178,14 @@ export class Broker {
       const page=pages.find((v:Params)=>v.pageId===p.pageId);if(!page)throw Error('page_forbidden');
       if(this.policy.check(Broker.identity(p.clientId),Find.Reads.has(method)?Action.Observe:method as Action,page.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
       Broker.validate(method,p);
+      if(method===Method.Html){
+        const result=await this.engine.run(method,p);
+        const current=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});
+        const active=(Array.isArray(current)?current:current.pages??[]).find((v:Params)=>v.pageId===p.pageId);
+        if(!active)throw Error('page_forbidden');
+        if(this.policy.check(Broker.identity(p.clientId),Action.Observe,active.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
+        return result;
+      }
       try{return await this.engine.run(method,p);}catch{if(!WRITES.has(method))throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
     }
     const result=await this.forward(method,p);
@@ -133,6 +193,14 @@ export class Broker {
     return result;
   }
   static validate(method:string,p:Params):void{
+    if(method===Method.Html){
+      if(typeof p.sessionId!=='string'||!p.sessionId||typeof p.pageId!=='string'||!p.pageId||
+        p.offset!==undefined&&(!Number.isSafeInteger(p.offset)||p.offset<0)||
+        p.maxChars!==undefined&&(!Number.isSafeInteger(p.maxChars)||p.maxChars<1||p.maxChars>30000)||
+        p.captureId!==undefined&&(typeof p.captureId!=='string'||!p.captureId||p.captureId.length>100)||
+        (p.offset??0)>0&&!p.captureId)throw Error('invalid_params');
+      return;
+    }
     const text=(v:unknown,max=2000)=>v===undefined||(typeof v==='string'&&v.length>0&&v.length<=max);
     const ref=p.ref===undefined||(typeof p.ref==='string'&&Find.Ref.test(p.ref));
     const scoped=(scope:unknown,scopeRef:unknown)=>text(scope)&& (scopeRef===undefined||typeof scopeRef==='string'&&Find.Ref.test(scopeRef))&&!(scope!==undefined&&scopeRef!==undefined);

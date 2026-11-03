@@ -36,7 +36,7 @@ For supported agent setup, prefer the repository root's installer; see [agent in
 Requirements: Node.js, Windows PowerShell, Python 3.12, and an existing Chrome/Edge browser. Dependency installation requires registry access. When manual setup is needed:
 
 ```powershell
-npm ci
+npm install --package-lock=false
 python -m pip install -r python/requirements.txt
 python scripts/setup.py
 & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/launchers.ps1

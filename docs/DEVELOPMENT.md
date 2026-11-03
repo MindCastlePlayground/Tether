@@ -9,4 +9,6 @@
 
 `prototype/` is the historical name of the active runtime source directory. The installer copies and builds it; it is required for release. Keep this path until an explicit migration updates installer references and existing workflows.
 
-Before merging, run `npm test` and `npm run docs:check` at the root. For runtime changes, also build and test in `prototype/`. Validate installation changes using an isolated home and project. Use `--no-register --no-open` when the verification should leave the current browser registration unchanged.
+Release versions follow `a.b.c`: `a` changes for major features or breaking updates and requires coordinated updates to companion components; `b` changes for features; `c` changes for fixes. The current feature release is `3.0.0`; keep the root installer and `prototype/` package versions aligned. Dependencies use compatible same-major ranges, and installs use `npm install --package-lock=false` so npm inherits the user's configured registry and enterprise settings. Do not commit either package lock file.
+
+Before merging, run `npm test` and `npm run docs:check` at the root. For runtime changes, also run `npm run build` and `npm test` in `prototype/`; install dependencies with `npm install --package-lock=false` when needed. Validate installation changes using an isolated home and project. Use `--no-register --no-open` when the verification should leave the current browser registration unchanged.

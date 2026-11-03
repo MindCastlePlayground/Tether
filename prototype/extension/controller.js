@@ -1,5 +1,6 @@
-import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, PolicySummary, PopupMessage, SessionMode, Storage, Wire } from './protocol.js';
+import { Broker, BrowserAction, CdpMethod, Failure, Limits, NativeStatus, NetworkOp, PolicySummary, PopupMessage, SessionMode, Storage, Wire } from './protocol.js';
 import { Locale, Text } from './i18n.js';
+import { NetworkCapture } from './network.js';
 
 export class ExtensionController {
   constructor(api = globalThis.chrome, clock = () => Date.now(), userAgent = () => globalThis.navigator.userAgent) {
@@ -14,6 +15,9 @@ export class ExtensionController {
     this.attached = new Set();
     this.lease = new Map();
     this.intentionalDetach = new Set();
+    this.childTargets = new Map();
+    this.openers = new Map();
+    this.dialogs = new Map();
     this.approving = new Set();
     this.autoApprove = true;
     this.ready = null;
@@ -31,6 +35,7 @@ export class ExtensionController {
     this.update = null;
     this.reloadTried = null;
     this.locale = new Locale(api);
+    this.network = new NetworkCapture(api);
   }
 
   start() {
@@ -47,6 +52,7 @@ export class ExtensionController {
     this.api.alarms?.create?.(Broker.Alarm, { periodInMinutes: 0.5 });
     this.api.notifications?.onButtonClicked?.addListener((id, index) => this.notificationClicked(id, index));
     this.api.tabs.onRemoved.addListener(tabId => this.dropTab(tabId));
+    this.api.webNavigation?.onCreatedNavigationTarget.addListener(info => this.createdTarget(info));
     this.api.tabs.onReplaced.addListener((added, removed) => { this.dropTab(removed); });
     this.api.tabs.onUpdated.addListener((tabId, change) => {
       if (change.url) this.checkUrl(tabId, change.url);
@@ -235,8 +241,8 @@ export class ExtensionController {
         tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1
       })) };
     }
-    if (method === Wire.Capabilities) return { methods: [Wire.SessionRequest, Wire.ApprovalStatus, Wire.ListTabs,
-      Wire.AvailableTabs, Wire.CreateTab, Wire.CloseTab, Wire.Release, Wire.Navigate] };
+    if (method === Wire.Capabilities) return { version:this.api.runtime.getManifest?.()?.version??'',methods: [Wire.SessionRequest, Wire.ApprovalStatus, Wire.ListTabs,
+      Wire.AvailableTabs, Wire.CreateTab, Wire.CloseTab, Wire.Release, Wire.Navigate, Wire.Network, Wire.Dialog, Wire.PopupCandidates, Wire.AdoptPopup] };
     if (method === Wire.Heartbeat) {
       this.client(p);
       const expires = this.clock() + Limits.LeaseMs;
@@ -247,12 +253,16 @@ export class ExtensionController {
     if (method === Wire.ClientLost) { this.client(p); await this.revokeClient(p.clientId); return { ok: true }; }
     const grant = this.grant(p);
     if (method === Wire.ListTabs) return this.listTabs(grant);
+    if (method === Wire.PopupCandidates) return this.popupCandidates(grant);
+    if (method === Wire.AdoptPopup) return this.adoptPopup(grant,p);
     if (method === Wire.Release) { await this.release(grant); return { ok: true }; }
     if (method === Wire.CreateTab) return this.createTab(grant, p);
     if (method === Wire.CloseTab) return this.closeTab(grant, p);
     if (method === Wire.Attach) return this.attach(grant, p);
     if (method === Wire.Detach) return this.detach(grant, p);
     if (method === Wire.Cdp) return this.cdp(grant, p);
+    if (method === Wire.Network) return this.networkOp(grant, p);
+    if (method === Wire.Dialog) return this.dialog(grant, p);
     if (method === Wire.Navigate) return this.navigate(grant, p);
     throw new Error(Failure.Unsupported);
   }
@@ -517,7 +527,13 @@ export class ExtensionController {
         session.managedGroupId = groupId;
       } else await this.api.tabs.group({ tabIds: [tab.id], groupId });
       this.grant({clientId:session.clientId,sessionId:session.sessionId});
-      const current=await this.api.tabs.get(tab.id);
+      let current=await this.api.tabs.get(tab.id);
+      const until=this.clock()+BrowserAction.BlankWait;
+      while (!current.url && current.pendingUrl === BrowserAction.NewTab && this.clock()<until) {
+        await new Promise(resolve=>setTimeout(resolve,BrowserAction.BlankPoll));
+        this.grant({clientId:session.clientId,sessionId:session.sessionId});
+        current=await this.api.tabs.get(tab.id);
+      }
       if(current.url!==BrowserAction.NewTab||current.groupId!==groupId)throw new Error(Failure.Forbidden);
       const pageId = this.id();
       const page = { clientId: session.clientId, sessionId: session.sessionId, pageId,
@@ -574,20 +590,59 @@ export class ExtensionController {
 
   async attach({ session, page }) {
     await this.checkPage(page);
-    if (page.attached) throw new Error(Failure.Busy);
+    if (page.attached) return this.attachInfo(page);
     await this.api.debugger.attach({ tabId: page.tabId }, BrowserAction.DebuggerVersion);
     this.attached.add(page.tabId); page.attached = true;
     try {
       await this.checkPage(page);
-      const {targetInfo}=await this.api.debugger.sendCommand({tabId:page.tabId},'Target.getTargetInfo');
-      const version=this.version();
-      return {tabId:page.tabId,targetInfo,version};
+      return await this.attachInfo(page);
     } catch (err) { await this.detachPage(page); throw err; }
+  }
+
+  async networkOp(grant, p) {
+    if (!grant.page) throw new Error(Failure.Forbidden);
+    if (p.op === NetworkOp.Start && !grant.page.attached) await this.attach(grant);
+    this.grant({ clientId: grant.session.clientId, sessionId: grant.session.sessionId, pageId: grant.page.pageId });
+    return this.network.run(grant.page, p, () => this.checkPage(grant.page));
+  }
+
+  createdTarget(info) {
+    if([...this.pages.values()].some(page=>page.tabId===info.sourceTabId))this.openers.set(info.tabId,info.sourceTabId);
+  }
+
+  async popupCandidates({session}) {
+    const parents=new Map([...session.pages].map(id=>[this.pages.get(id)?.tabId,id]).filter(([tabId])=>Number.isInteger(tabId)));
+    const tabs=await this.api.tabs.query({});
+    return{tabs:tabs.filter(t=>parents.has(this.openers.get(t.id)??t.openerTabId)&&!parents.has(t.id)&&Number.isInteger(t.id)&&/^https?:\/\//i.test(t.url??'')).map(t=>({tabId:t.id,openerPageId:parents.get(this.openers.get(t.id)??t.openerTabId),url:t.url,title:t.title??''}))};
+  }
+
+  async adoptPopup({session},p) {
+    this.seq(session,p.seq);
+    const parent=this.pages.get(p.openerPageId);if(!parent||parent.sessionId!==session.sessionId||parent.clientId!==session.clientId||session.pages.size>=Limits.GroupTabs)throw new Error(Failure.Forbidden);
+    await this.checkPage(parent);const tab=await this.api.tabs.get(p.tabId);
+    if([...this.pages.values()].some(page=>page.tabId===tab.id))throw new Error(Failure.Forbidden);
+    this.grant({clientId:session.clientId,sessionId:session.sessionId,pageId:parent.pageId});
+    if((this.openers.get(tab.id)??tab.openerTabId)!==parent.tabId)throw new Error(Failure.Forbidden);
+    this.safeUrl(tab.url,false);
+    const popupGroup=tab.groupId??-1;
+    if(parent.groupId===-1&&popupGroup!==-1)throw new Error(Failure.Forbidden);
+    if(parent.groupId!==-1&&popupGroup!==parent.groupId)await this.api.tabs.group({tabIds:[tab.id],groupId:parent.groupId});
+    const current=await this.api.tabs.get(tab.id);this.grant({clientId:session.clientId,sessionId:session.sessionId,pageId:parent.pageId});this.checkGroup(parent,current);
+    const pageId=this.id(),page={clientId:session.clientId,sessionId:session.sessionId,pageId,tabId:tab.id,groupId:parent.groupId,owned:true,url:current.url,title:current.title??'',seq:-1,attached:false};
+    this.pages.set(pageId,page);session.pages.add(pageId);session.owned.add(pageId);this.publishSessions();return{pageId,url:current.url,sideEffect:'applied'};
   }
 
   async detach({ page }) { await this.detachPage(page); return { ok: true }; }
 
+  async attachInfo(page) {
+    await this.checkPage(page);
+    const { targetInfo } = await this.api.debugger.sendCommand({ tabId: page.tabId }, 'Target.getTargetInfo');
+    await this.checkPage(page);
+    return { tabId: page.tabId, targetInfo, version: this.version() };
+  }
+
   async detachPage(page) {
+    this.network.drop(page.pageId);
     if (!page.attached) return;
     page.attached = false;
     this.attached.delete(page.tabId);
@@ -599,7 +654,13 @@ export class ExtensionController {
   async cdp({ page }, p) {
     await this.checkPage(page);
     if (!page.attached) throw new Error(Failure.Forbidden);
-    if (p.childSessionId) throw new Error(Failure.Unsupported);
+    if (p.childSessionId) {
+      const targetId=this.childTargets.get(page.pageId)?.get(p.childSessionId);
+      if(!targetId)throw new Error(Failure.Unsupported);
+      if(p.method===CdpMethod.NoChildTargets&&p.params?.flatten===false)throw new Error(Failure.Unsupported);
+      if(!CdpMethod.Allowed.has(p.method)||CdpMethod.Internal.has(p.method))throw new Error(Failure.Unsupported);
+      return this.api.debugger.sendCommand({tabId:page.tabId,sessionId:p.childSessionId},p.method,p.params??{});
+    }
     if (p.method === 'Target.getTargetInfo') {
       const targetInfo = (await this.api.debugger.getTargets()).find(t => t.tabId === page.tabId);
       if (!targetInfo) throw new Error(Failure.Missing);
@@ -610,7 +671,7 @@ export class ExtensionController {
     }
     if (!CdpMethod.Allowed.has(p.method) || CdpMethod.Internal.has(p.method)) throw new Error(Failure.Unsupported);
     if (p.method === CdpMethod.NoChildTargets && p.params?.flatten === false) throw new Error(Failure.Unsupported);
-    if (p.method === CdpMethod.NoChildTargets) return {};
+    if (p.method === CdpMethod.NoChildTargets) { await this.api.debugger.sendCommand({tabId:page.tabId},p.method,p.params??{}); return {}; }
     if (p.method === 'Page.navigate') this.safeUrl(p.params?.url, page.owned);
     return this.api.debugger.sendCommand({ tabId: page.tabId }, p.method, p.params ?? {});
   }
@@ -673,18 +734,36 @@ export class ExtensionController {
     const p = [...this.pages.values()].find(x => x.tabId === source.tabId && x.attached);
     if (!p) return;
     try{this.grant({clientId:p.clientId,sessionId:p.sessionId,pageId:p.pageId});}catch{return;}
+    if(method==='Target.attachedToTarget'){
+      const info=params?.targetInfo, sid=params?.sessionId;
+      const parents=this.childTargets.get(p.pageId);
+      if(info?.type==='iframe'&&typeof info.targetId==='string'&&typeof sid==='string'&&(!childSessionId||parents?.has(childSessionId))){
+        const targets=this.childTargets.get(p.pageId)??new Map();targets.set(sid,info.targetId);this.childTargets.set(p.pageId,targets);
+        void this.api.debugger.sendCommand({tabId:p.tabId,sessionId:sid},'Runtime.runIfWaitingForDebugger').catch(()=>{});
+      } else { if(typeof sid==='string')void this.api.debugger.sendCommand({tabId:p.tabId,...(childSessionId?{sessionId:childSessionId}:{})},'Target.detachFromTarget',{sessionId:sid}).catch(()=>{});return; }
+    }
+    if(method==='Target.detachedFromTarget'){this.childTargets.get(p.pageId)?.delete(params?.sessionId);}
+    if(method==='Page.javascriptDialogOpening'&&!childSessionId){
+      const items=this.dialogs.get(p.pageId)??[];items.push({id:this.id(),type:params?.type??'',message:String(params?.message??'').slice(0,2000),defaultValue:String(params?.defaultPrompt??'').slice(0,500)});if(items.length>32)items.shift();this.dialogs.set(p.pageId,items);
+    }
+    if(method==='Page.javascriptDialogClosed'&&!childSessionId)this.dialogs.get(p.pageId)?.shift();
+    if (!childSessionId) this.network.event(p.pageId, method, params);
     const event = { method: Wire.Event, params: { clientId: p.clientId, sessionId: p.sessionId,
       pageId: p.pageId, method, params: params ?? {}, ...(childSessionId ? { childSessionId } : {}) } };
     if (new TextEncoder().encode(JSON.stringify(event)).length <= Limits.MaxBytes) this.reply(event);
   }
 
   dropTab(tabId) {
+    this.openers.delete(tabId);
+    for(const [child,parent] of this.openers)if(parent===tabId)this.openers.delete(child);
     for (const p of [...this.pages.values()]) if (p.tabId === tabId) void this.revokePage(p.pageId);
   }
 
   dropPage(id, broadcast = true) {
     const p = this.pages.get(id);
     if (!p) return;
+    this.network.drop(id);
+    this.childTargets.delete(id);this.dialogs.delete(id);
     this.pages.delete(id);
     const s = this.sessions.get(p.sessionId);
     if (s) {
@@ -692,6 +771,15 @@ export class ExtensionController {
       if (![...s.pages].some(pageId => this.pages.get(pageId)?.groupId === s.managedGroupId)) s.managedGroupId = null;
     }
     if (broadcast) this.publishSessions();
+  }
+
+  async dialog({page},p){
+    await this.checkPage(page);if(!page.attached)throw new Error(Failure.Forbidden);
+    const items=this.dialogs.get(page.pageId)??[];
+    if(p.action==='list')return{dialogs:items.map(({id,type,message,defaultValue})=>({id,type,message,defaultValue}))};
+    const i=items.findIndex(x=>x.id===p.dialogId);if(i<0||!['accept','dismiss'].includes(p.action))throw new Error(Failure.Missing);
+    items.splice(i,1);this.dialogs.set(page.pageId,items);
+    return this.api.debugger.sendCommand({tabId:page.tabId},'Page.handleJavaScriptDialog',{accept:p.action==='accept',...(typeof p.promptText==='string'?{promptText:p.promptText.slice(0,2000)}:{})});
   }
 
   // An upgrade rewrites the extension on disk; reload once per build so the new code runs.

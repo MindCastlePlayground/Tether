@@ -29,7 +29,7 @@ function findBrowser() {
   const candidates = [process.env.TETHER_QA_CHROME, chromium.executablePath()];
   for (const base of [join(process.env.LOCALAPPDATA ?? '', 'ms-playwright'), join(process.env.USERPROFILE ?? '', '.cache', 'ms-playwright')]) {
     try {
-      for (const d of readdirSync(base)) {
+      for (const d of readdirSync(base).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))) {
         if (!/^(chromium|chrome)-/.test(d)) continue;
         for (const exe of ['chrome-win64/chrome.exe', 'chrome-win/chrome.exe']) {
           const p = join(base, d, exe); if (existsSync(p)) candidates.push(p);
@@ -113,6 +113,11 @@ async function run() {
   const busy = ps(`if (Test-Path -LiteralPath '${registryPath}') { 'present' } else { 'absent' }`);
   if (busy !== 'absent') throw Error('qa_registry_key_already_exists');
   cpSync(join(root, 'extension'), ext, { recursive: true });
+  writeFileSync(join(ext,'service-worker.js'), `import { ExtensionController } from './controller.js';
+globalThis.qaDispatch=[];
+const dispatch=ExtensionController.prototype.dispatch;
+ExtensionController.prototype.dispatch=async function(method,p){globalThis.qaDispatch.push(['start',method]);try{const r=await dispatch.call(this,method,p);globalThis.qaDispatch.push(['done',method]);return r;}catch(e){globalThis.qaDispatch.push(['error',method,String(e)]);throw e;}};
+new ExtensionController().start();`);
   const proto = join(ext, 'protocol.js');
   writeFileSync(proto, readFileSync(proto, 'utf8').replace("com.freebird.browser_bridge", hostName));
   const hostCfg = JSON.parse(readFileSync(join(root, '.local', 'host.json'), 'utf8'));
@@ -132,8 +137,12 @@ async function run() {
   registryMade = true;
   ps(`New-Item -Path '${registryPath}' -Force | Out-Null; Set-Item -Path '${registryPath}' -Value '${join(local, 'native-host.json').replaceAll("'", "''")}'`);
   server = createServer((req, res) => {
-    const html = '<!doctype html><meta charset="utf-8"><title>Locator fixture</title><label>Name<input id="name"></label><output id="out"></output><button id="deep" onclick="document.querySelector(\'#out\').textContent=\'nested-ok\'"><div><span><i>*</i><span>Deep Save</span></span></div></button><div role="button" tabindex="0" onclick="document.querySelector(\'#out\').textContent=\'xpath-ok\'"><span>Deep <b>Go</b></span></div><button onclick="document.querySelector(\'#out\').textContent=\'dup-1\'"><span>Dup</span></button><button onclick="document.querySelector(\'#out\').textContent=\'dup-2\'"><span>Dup</span></button>';
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(html);
+    if(req.url==='/popup'){res.writeHead(200,{'content-type':'text/html'});res.end('<title>Popup fixture</title><main>Popup ready</main>');return;}
+    if(req.url==='/frame'){res.writeHead(200,{'content-type':'text/html'});res.end('<input type="file" id="frameFiles">');return;}
+    if(req.url==='/download'){const bytes=Buffer.from(Array.from({length:90_000},(_,i)=>i%251));res.writeHead(200,{'content-type':'application/octet-stream','content-disposition':'attachment; filename="bridge.bin"','content-length':bytes.length});res.end(bytes);return;}
+    const crossHost=`http://localhost:${server.address().port}`;
+    const html = `<!doctype html><meta charset="utf-8"><title>Locator fixture</title><label>Name<input id="name"></label><input type="file" id="mainFiles"><iframe id="uploadFrame" src="${crossHost}/frame"></iframe><output id="out"></output><button id="alert" onclick="alert('bridge dialog');document.querySelector('#out').textContent='dialog-ok'">Alert</button><button id="deep" onclick="document.querySelector('#out').textContent='nested-ok'"><div><span><i>*</i><span>Deep Save</span></span></div></button><div role="button" tabindex="0" onclick="document.querySelector('#out').textContent='xpath-ok'"><span>Deep <b>Go</b></span></div><button onclick="document.querySelector('#out').textContent='dup-1'"><span>Dup</span></button><button onclick="document.querySelector('#out').textContent='dup-2'"><span>Dup</span></button>`;
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(html+(process.env.TETHER_QA_READ_ONLY==='1'?`<div hidden id="html-only" data-proof="${'x'.repeat(600000)}">full-html-proof</div>`:''));
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const fixtureUrl = `http://127.0.0.1:${server.address().port}/`;
@@ -144,20 +153,26 @@ async function run() {
     page.on('console', m => { if (m.type() === 'error') popupErrors.push(m.text()); });
   });
   const sw = await waitFor(() => context.serviceWorkers().find(w => w.url().startsWith(`chrome-extension://${id}/`)), 'extension_service_worker');
+  await sw.evaluate(()=>{globalThis.qaCommands=[];const send=chrome.debugger.sendCommand.bind(chrome.debugger);chrome.debugger.sendCommand=async(target,method,params)=>{globalThis.qaCommands.push(['send',method,target.sessionId??'root']);try{const result=await send(target,method,params);globalThis.qaCommands.push(['ok',method]);return result;}catch(e){globalThis.qaCommands.push(['error',method,String(e)]);throw e;}};chrome.debugger.onEvent.addListener((target,method)=>globalThis.qaCommands.push(['event',method,target.sessionId??'root']));});
   await waitFor(async () => { const s = ps(`if (Test-Path '${join(local, 'broker-state.json')}') {(Get-Content '${join(local, 'broker-state.json')}' -Raw)} else {''}`); return s && JSON.parse(s).state === 'running'; }, 'auto_broker_start');
   brokerOwned = true;
 
   // Locator closure through the real extension: snapshot refs, nested-text rewrite, refusal and precise locate.
   const { BridgeClient, loadConfig } = await import(pathToFileURL(join(root, 'dist/client.js')).href);
   const client = new BridgeClient(await loadConfig(join(local, 'agent.json')));
+  const invoke=client.call.bind(client);
+  client.call=async(method,params)=>{say(`RPC ${method} ${params.seq??''}`);return invoke(method,params);};
   const grant = await client.requestSession({ mode: 'newGroup', url: fixtureUrl });
   const sessionId = grant.sessionId;
   if (!sessionId) throw Error(`request_session_${grant.status ?? 'missing_id'}`);
   const pageId = grant.pages?.[0]?.pageId;
   const page = await waitFor(() => context.pages().find(v => v.url() === fixtureUrl), 'fixture_navigation');
+  page.on('dialog',()=>{}); // Tether, rather than the test connection, handles dialogs.
   await page.waitForFunction(() => document.readyState === 'complete' && document.title === 'Locator fixture');
   const out = async () => page.locator('#out').textContent();
   const steps = {};
+  if(process.env.TETHER_QA_READ_ONLY!=='1'){
+  if(process.env.TETHER_QA_BUSINESS_ONLY!=='1'){
   const snap = await client.snapshot({ sessionId, pageId });
   const ref = snap.tree.match(/button "\*?Deep Save" \[ref=([A-Za-z0-9]{1,64})\]/)?.[1];
   if (!ref || /- generic \[ref=[A-Za-z0-9]{1,64}\]:$/m.test(snap.tree)) throw Error('snapshot_tree_failed');
@@ -197,21 +212,65 @@ async function run() {
   if (stale.error !== 'ref_stale' || stale.sideEffect !== 'none' || await out() !== '') throw Error('cross_document_ref_not_stale');
   steps.staleRef = { error: stale.error, sideEffect: stale.sideEffect };
   steps.scopeConflict = { error: scoped.error };
-  await client.release({ sessionId, seq: 9 }); client.close();
+  }
+  if(process.env.TETHER_QA_BUSINESS_ONLY!=='1')await client.navigate({sessionId,pageId,seq:9,url:fixtureUrl});
+  await page.waitForLoadState('load');
+  const proof=Buffer.from(Array.from({length:70_000},(_,i)=>i%239));let seq=10;
+  const upload=await client.call('uploadStart',{sessionId,pageId,seq:seq++,files:[{name:'bridge.bin',mimeType:'application/octet-stream',size:proof.length}]});
+  for(let offset=0;offset<proof.length;){const chunk=proof.subarray(offset,offset+upload.chunkBytes);await client.call('uploadChunk',{sessionId,pageId,seq:seq++,uploadId:upload.uploadId,fileIndex:0,offset,data:chunk.toString('base64')});offset+=chunk.length;}
+  await client.call('uploadFinish',{sessionId,pageId,seq:seq++,uploadId:upload.uploadId,selector:'frame=iframe#uploadFrame >> #frameFiles'});
+  if(await page.frameLocator('#uploadFrame').locator('#frameFiles').evaluate(e=>e.files[0].size)!==proof.length)throw Error('bridge_oopif_upload_failed');
+  const download=await client.call('downloadStart',{sessionId,pageId,seq:seq++,url:`${fixtureUrl}download`});
+  let downloaded=Buffer.alloc(0),offset=0;for(;;){const chunk=await client.call('downloadRead',{sessionId,pageId,seq:seq++,downloadId:download.downloadId,offset});downloaded=Buffer.concat([downloaded,Buffer.from(chunk.data,'base64')]);offset=chunk.nextOffset;if(chunk.done)break;}
+  if(downloaded.length!==90_000||downloaded[17]!==17)throw Error('bridge_download_failed');
+  const clickPromise=client.click({sessionId,pageId,seq:seq++,selector:'#alert'});
+  void clickPromise.catch(()=>{});
+  const dialogs=await waitFor(async()=>{const items=(await client.call('dialog',{sessionId,pageId,seq:seq++,action:'list'})).dialogs;return items.length?items:null;},'dialog_capture');
+  if(dialogs[0]?.message!=='bridge dialog')throw Error('bridge_dialog_not_captured');
+  await client.call('dialog',{sessionId,pageId,seq:seq++,action:'accept',dialogId:dialogs[0].id});
+  const dialogClick=await clickPromise;if(dialogClick.sideEffect!=='applied'||await out()!=='dialog-ok')throw Error('bridge_dialog_click_chain_failed');
+  await page.evaluate(()=>{const button=document.createElement('button');button.id='popup';button.textContent='Open popup';button.onclick=()=>window.open('/popup','_blank');document.body.append(button);});
+  const popupClick=await client.click({sessionId,pageId,seq:seq++,selector:'#popup'});
+  if(popupClick.sideEffect!=='applied')throw Error(`popup_click_${popupClick.error}`);
+  const candidate=await waitFor(async()=> (await client.call('popupCandidates',{sessionId})).tabs.find(t=>t.url===`${fixtureUrl}popup`),'popup_candidate');
+  const adopted=await client.call('adoptPopup',{sessionId,seq:seq++,tabId:candidate.tabId,openerPageId:candidate.openerPageId});
+  if((await client.snapshot({sessionId,pageId:adopted.pageId})).title!=='Popup fixture')throw Error('popup_adoption_failed');
+  if((await client.call('popupCandidates',{sessionId})).tabs.some(t=>t.tabId===candidate.tabId))throw Error('popup_still_candidate');
+  steps.business={uploadBytes:proof.length,uploadOopif:true,downloadBytes:downloaded.length,dialogClick:true,popupAdopted:true};
+  await client.closeTab({sessionId,pageId:adopted.pageId,seq:seq++});
+  await waitFor(()=>sw.evaluate(id=>chrome.tabs.query({}).then(tabs=>!tabs.some(tab=>tab.id===id)),candidate.tabId),'popup_release');
+  await client.release({ sessionId, seq }); client.close();
+  }else{await client.release({sessionId,seq:1});client.close();}
   const mcp = new Client({ name: 'tether-usability-qa', version: '1.0.0' });
   const transport = new StdioClientTransport({ command: process.execPath, args: [join(root, 'dist/mcp.js')], env: { ...process.env, BB_CLIENT_CONFIG: join(local, 'agent.json'), BB_BROWSER_WAKE: '0' }, stderr: 'pipe' });
   try {
     await mcp.connect(transport);
     const tools = (await mcp.listTools()).tools;
     if (!tools.find(t => t.name === 'snapshot')?.inputSchema.properties?.outline || !tools.find(t => t.name === 'click')?.inputSchema.properties?.observe) throw Error('mcp_schema_missing');
+    if(tools.some(t=>t.name==='observe')||!tools.some(t=>t.name==='html'))throw Error('mcp_reading_contract_failed');
     const call = async (name, args) => { const r = await mcp.callTool({ name, arguments: args }); if (r.isError) throw Error(`mcp_${name}_failed`); return JSON.parse(r.content[0].text); };
     const grant = await call('requestSession', { mode: 'newGroup', url: fixtureUrl });
     const target = { sessionId: grant.sessionId, pageId: grant.pages[0].pageId };
+    await call('wait',{...target,condition:'visible',value:'#deep',timeoutMs:10000});
     const tree = await call('snapshot', { ...target, outline: true });
     const scopeRef = tree.tree.match(/\[ref=([a-z0-9]+)\]/)?.[1];
     if (!scopeRef) throw Error('mcp_outline_no_ref');
     const expanded = await call('snapshot', { ...target, scopeRef });
     if (!expanded.tree) throw Error('mcp_scope_expansion_failed');
+    if(process.env.TETHER_QA_READ_ONLY==='1'){
+      if(tree.tree.includes('full-html-proof'))throw Error('hidden_fixture_in_summary');
+      let part=await call('html',{...target,maxChars:30000}),source=part.html,pages=1;
+      const captureId=part.captureId,total=part.totalChars;
+      while(part.nextOffset!==null){part=await call('html',{...target,captureId,offset:part.nextOffset,maxChars:30000});source+=part.html;pages++;}
+      if(source.length!==total||total<=512*1024||!source.startsWith('<!DOCTYPE html>')||!source.includes('full-html-proof')||!part.complete)throw Error('html_full_pagination_failed');
+      steps.html={chars:total,pages,complete:true,hiddenStructure:true};
+      await call('navigate',{...target,seq:1,url:`${fixtureUrl}popup`});
+      await call('wait',{...target,condition:'text',value:'Popup ready',timeoutMs:10000});
+      const stale=await mcp.callTool({name:'html',arguments:{...target,captureId,offset:0}});
+      if(!stale.isError||JSON.parse(stale.content[0].text).code!=='html_capture_expired')throw Error('html_navigation_not_expired');
+      await call('release',{sessionId:grant.sessionId,seq:2});
+      steps.mcp={tools:tools.length,snapshot:true,html:true,removedObserve:true,wait:true,navigationExpiry:true};
+    }else{
     const located = await call('locate', { ...target, selector: '#deep' });
     const clicked = await call('click', { ...target, seq: 1, ref: located.candidates[0].ref, observe: { maxChars: 500 } });
     if (clicked.sideEffect !== 'applied' || !clicked.observed) throw Error('mcp_click_observe_failed');
@@ -219,6 +278,7 @@ async function run() {
     if (!filled.observed || JSON.stringify(filled).includes('mcp-secret')) throw Error('mcp_fill_redaction_failed');
     await call('release', { sessionId: grant.sessionId, seq: 3 });
     steps.mcp = { tools: tools.length, outline: true, scopeRef: true, clickObserved: true, fillRedacted: true };
+    }
   } finally { await mcp.close(); }
   await ctl(hostCfg, '/control/stop'); await waitListening(p, false); brokerOwned = false;
   const report = { result: 'passed', runtime: root, extensionServiceWorker: sw.url(), nativeHost: hostName, steps };
@@ -226,7 +286,7 @@ async function run() {
   say(JSON.stringify({ ...report, resultFile: join(qa, 'result.json') }, null, 1));
 }
 try { await run(); }
-catch (e) { writeFileSync(join(qa, 'failure.log'), `${e?.stack ?? e?.message ?? 'unknown'}\n`); say(`BLOCKER ${e?.message ?? 'unknown'} log=${join(qa, 'failure.log')}`); process.exitCode = 1; }
+catch (e) { writeFileSync(join(qa, 'failure.log'), `${e?.stack ?? e?.message ?? 'unknown'}\n`);const sw=context?.serviceWorkers()[0];if(sw){writeFileSync(join(qa,'commands.log'),JSON.stringify(await sw.evaluate(()=>globalThis.qaCommands).catch(()=>[]),null,2));writeFileSync(join(qa,'dispatch.log'),JSON.stringify(await sw.evaluate(()=>globalThis.qaDispatch).catch(()=>[]),null,2));} say(`BLOCKER ${e?.message ?? 'unknown'} log=${join(qa, 'failure.log')}`); process.exitCode = 1; }
 finally {
   try { if (context) await Promise.race([context.close(), delay(5000)]); } catch {}
   try { if (server) await new Promise(r => server.close(r)); } catch {}

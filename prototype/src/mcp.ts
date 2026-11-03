@@ -1,8 +1,9 @@
+import { BusinessApi } from './business-api.js';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { BridgeClient, loadConfig } from "./client.js";
-import { Rpc } from "./client-constants.js";
+import { BridgeClient, ClientError, loadConfig } from "./client.js";
+import { Rpc, NetworkOp, SupportMethod } from "./client-constants.js";
 import { Config } from "./config.js";
 import { Brand, Method, Wake } from "./protocol.js";
 import { Autostart } from "./autostart.js";
@@ -17,7 +18,8 @@ class McpTools {
   static readonly RELEASE = z.object({ sessionId: z.string(), seq: z.number().int().positive() });
   static readonly CREATE = z.object({ sessionId: z.string(), seq: z.number().int().positive(), url: z.string().optional() });
   static readonly PAGE = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive() });
-  static readonly OBSERVE = z.object({ sessionId: z.string(), pageId: z.string() });
+  static readonly HTML = z.object({ sessionId:z.string(), pageId:z.string(), offset:z.number().int().nonnegative().optional(), maxChars:z.number().int().min(1).max(30000).optional(), captureId:z.string().min(1).max(100).optional() }).strict();
+  static readonly NETWORK = z.object({ sessionId: z.string(), pageId: z.string(), op: z.enum(NetworkOp.All), requestId: z.string().optional(), url: z.string().optional(), type: z.string().optional(), offset: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional(), maxChars: z.number().int().min(1).max(30000).optional() }).strict().refine(p => !([NetworkOp.Detail, NetworkOp.Body] as string[]).includes(p.op) || !!p.requestId, {message: 'requestIdRequired'});
   static readonly TARGET = (o: { selector?: string; ref?: string }) => (o.selector === undefined) !== (o.ref === undefined);
   static readonly OBSERVATION = z.object({ scope: z.string().optional(), scopeRef: z.string().regex(/^[a-z0-9]{1,64}$/).optional(), maxChars: z.number().int().positive().optional() }).strict().refine(o => !(o.scope !== undefined && o.scopeRef !== undefined), { message: "scopeOrScopeRef" });
   static readonly FILL = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), selector: z.string().optional(), ref: z.string().regex(/^[a-z0-9]{1,64}$/).optional(), value: z.string(), observe: McpTools.OBSERVATION.optional() }).refine(McpTools.TARGET, { message: "selectorOrRef" });
@@ -25,22 +27,9 @@ class McpTools {
   static readonly SNAPSHOT = z.object({ sessionId: z.string(), pageId: z.string(), scope: z.string().optional(), scopeRef: z.string().regex(/^[a-z0-9]{1,64}$/).optional(), outline: z.boolean().optional(), depth: z.number().int().positive().optional(), maxChars: z.number().int().positive().optional() }).refine(o => !(o.scope !== undefined && o.scopeRef !== undefined), { message: "scopeOrScopeRef" });
   static readonly LOCATE = z.object({ sessionId: z.string(), pageId: z.string(), text: z.string().optional(), role: z.string().optional(), name: z.string().optional(), exact: z.boolean().optional(), selector: z.string().optional(), ref: z.string().regex(/^[a-z0-9]{1,64}$/).optional(), scope: z.string().optional(), scopeRef: z.string().regex(/^[a-z0-9]{1,64}$/).optional() }).refine(o => !(o.scope !== undefined && o.scopeRef !== undefined), { message: "scopeOrScopeRef" });
   static readonly NAVIGATE = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), url: z.string() });
-  static readonly SCHEMAS = [
-    { type: "object", properties: { mode: { type: "string", enum: ["newGroup", "attachExisting"] }, url: { type: "string" }, tabId: { type: "integer", minimum: 0 } }, required: ["mode"], additionalProperties: false },
-    { type: "object", properties: { pendingId: { type: "string" } }, required: ["pendingId"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" } }, required: ["sessionId"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, seq: { type: "integer", minimum: 1 }, url: { type: "string" } }, required: ["sessionId", "seq"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 } }, required: ["sessionId", "pageId", "seq"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, seq: { type: "integer", minimum: 1 } }, required: ["sessionId", "seq"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" } }, required: ["sessionId", "pageId"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, selector: { type: "string" }, ref: { type: "string", pattern: "^[a-z0-9]{1,64}$", description: "Opaque ref from a fresh snapshot, e.g. tabc123e12" }, value: { type: "string" }, observe: { type: "object", properties: { scope: { type: "string" }, scopeRef: { type: "string", pattern: "^[a-z0-9]{1,64}$" }, maxChars: { type: "integer", minimum: 1 } }, additionalProperties: false, not: { required: ["scope", "scopeRef"] } } }, required: ["sessionId", "pageId", "seq", "value"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, selector: { type: "string" }, ref: { type: "string", pattern: "^[a-z0-9]{1,64}$", description: "Opaque ref from a fresh snapshot, e.g. tabc123e12" }, observe: { type: "object", properties: { scope: { type: "string" }, scopeRef: { type: "string", pattern: "^[a-z0-9]{1,64}$" }, maxChars: { type: "integer", minimum: 1 } }, additionalProperties: false, not: { required: ["scope", "scopeRef"] } } }, required: ["sessionId", "pageId", "seq"], additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, seq: { type: "integer", minimum: 1 }, url: { type: "string" } }, required: ["sessionId", "pageId", "seq", "url"], additionalProperties: false },
-    { type: "object", properties: {}, additionalProperties: false },
-    { type: "object", properties: {}, additionalProperties: false },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, scope: { type: "string" }, scopeRef: { type: "string", pattern: "^[a-z0-9]{1,64}$", description: "Opaque ref from a fresh snapshot" }, outline: { type: "boolean" }, depth: { type: "integer", minimum: 1 }, maxChars: { type: "integer", minimum: 1 } }, required: ["sessionId", "pageId"], additionalProperties: false, not: { required: ["scope", "scopeRef"] } },
-    { type: "object", properties: { sessionId: { type: "string" }, pageId: { type: "string" }, text: { type: "string" }, role: { type: "string" }, name: { type: "string" }, exact: { type: "boolean" }, selector: { type: "string" }, ref: { type: "string", pattern: "^[a-z0-9]{1,64}$" }, scope: { type: "string" }, scopeRef: { type: "string", pattern: "^[a-z0-9]{1,64}$" } }, required: ["sessionId", "pageId"], additionalProperties: false, not: { required: ["scope", "scopeRef"] } },
-  ];
+  static readonly WAIT = z.object({sessionId:z.string(),pageId:z.string(),condition:z.enum(SupportMethod.Conditions),value:z.string().min(1).max(2000),timeoutMs:z.number().int().min(0).max(15000).optional()}).strict();
+  static readonly RECORDS = z.object({op:z.enum(SupportMethod.RecordOps).optional()}).strict();
+
 }
 
 async function main(): Promise<void> {
@@ -59,7 +48,7 @@ async function main(): Promise<void> {
     ["createTab", descriptions.createTab, McpTools.CREATE],
     ["closeTab", descriptions.closeTab, McpTools.PAGE],
     ["release", descriptions.release, McpTools.RELEASE],
-    ["observe", descriptions.observe, McpTools.OBSERVE],
+    [Method.Html, descriptions.html, McpTools.HTML],
     ["fill", descriptions.fill, McpTools.FILL],
     ["click", descriptions.click, McpTools.CLICK],
     ["navigate", descriptions.navigate, McpTools.NAVIGATE],
@@ -67,20 +56,29 @@ async function main(): Promise<void> {
     ["availableTabs", descriptions.availableTabs, McpTools.EMPTY],
     ["snapshot", descriptions.snapshot, McpTools.SNAPSHOT],
     ["locate", descriptions.locate, McpTools.LOCATE],
+    [Method.Network, descriptions.network, McpTools.NETWORK],
+    [SupportMethod.Diagnose, descriptions.diagnose, McpTools.EMPTY],
+    [SupportMethod.Wait, descriptions.wait, McpTools.WAIT],
+    [SupportMethod.Assert, descriptions.assert, McpTools.WAIT],
+    [SupportMethod.Records, descriptions.records, McpTools.RECORDS],
+    ...BusinessApi.Names.map(name => [name, BusinessApi.Descriptions[name][I18n.language()==='zh-CN'?1:0], BusinessApi.Schemas[name]] as const),
   ] as const;
-  server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).ListToolsRequestSchema, async () => ({ tools: tools.map(([name, description], i) => ({ name, description, inputSchema: McpTools.SCHEMAS[i] })) }));
+  server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).ListToolsRequestSchema, async () => ({ tools: tools.map(([name,description,schema]) => ({name,description,inputSchema:z.toJSONSchema(schema) as any})) }));
   server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).CallToolRequestSchema, async request => {
     const { name, arguments: args = {} } = request.params;
-    if (!(Rpc.METHODS as readonly string[]).includes(name)) throw new Error("unsupportedMethod");
+    if (!(Rpc.METHODS as readonly string[]).includes(name)) return {isError:true,content:[{type:'text',text:JSON.stringify({code:'unsupportedMethod'})}]};
     const item = tools.find(t => t[0] === name);
     if (!item) throw new Error("unsupportedMethod");
-    const parsed = item[2].parse(args) as Record<string, unknown>;
+    let parsed: Record<string, unknown>;
     const run = async () => {
-      if (name !== Method.Capabilities) await wake.ready();
+      if (name !== Method.Capabilities && name !== SupportMethod.Diagnose && name !== SupportMethod.Records) await wake.ready();
       return client.call(name as typeof Rpc.METHODS[number], parsed);
     };
     let result;
     try {
+      const validation = item[2].safeParse(args);
+      if (!validation.success) throw new ClientError('invalid_params');
+      parsed = validation.data as Record<string, unknown>;
       try { result = await run(); }
       catch (e) {
         // Recover the Broker/browser link, then retry what is known to be safe.
@@ -91,10 +89,11 @@ async function main(): Promise<void> {
         result = await run();
       }
     } catch (e) {
-      if ((e as Error).message === Wake.Missing) throw new Error(McpHint.BROWSER[I18n.language()].replace("$1", () => folder));
-      throw e;
+      const err = e as Error & { code?: string; rpcCode?: number };
+      const hint = err.message === Wake.Missing ? McpHint.BROWSER[I18n.language()].replace("$1", () => folder) : undefined;
+      return { isError: true, content: [{ type: "text", text: JSON.stringify({ code: err.code ?? err.message, rpcCode: err.rpcCode, hint }) }] };
     }
-    return { content: [{ type: "text", text: JSON.stringify(result) }] };
+    return { isError: !!result?.error || result?.passed === false, content: [{ type: "text", text: JSON.stringify(result) }] };
   });
   await server.connect(new StdioServerTransport());
   process.stdin.on('end', () => client.close());

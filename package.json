@@ -1,6 +1,6 @@
 {
   "name": "@mindcastleplayground/tether",
-  "version": "1.4.0",
+  "version": "3.0.0",
   "private": true,
   "description": "Install Tether browser MCP and skills for local agents",
   "type": "module",
@@ -24,7 +24,6 @@
     "assets/README*.md",
     "assets/*.png",
     "prototype/package.json",
-    "prototype/package-lock.json",
     "prototype/tsconfig.json",
     "prototype/src/",
     "prototype/scripts/setup.py",
@@ -38,8 +37,8 @@
     "prototype/VERIFICATION*.md"
   ],
   "dependencies": {
-    "@clack/prompts": "1.8.1",
-    "jsonc-parser": "3.3.1",
-    "smol-toml": "1.9.1"
+    "@clack/prompts": "^1.8.1",
+    "jsonc-parser": "^3.3.1",
+    "smol-toml": "^1.9.1"
   }
 }

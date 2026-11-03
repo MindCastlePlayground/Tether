@@ -35,11 +35,7 @@ if errorlevel 1 (
   goto finish
 )
 echo Tether: Installing CLI dependencies...
-if exist package-lock.json (
-  call npm.cmd ci --ignore-scripts --no-audit --no-fund
-) else (
-  call npm.cmd install --ignore-scripts --no-audit --no-fund
-)
+call npm.cmd install --package-lock=false --ignore-scripts --no-audit --no-fund
 if errorlevel 1 (
   echo Tether: Dependency installation failed. Check the npm error above and your network, then retry.
   popd

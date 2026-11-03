@@ -6,6 +6,7 @@ export class Cmd {
   static UPGRADE = 'upgrade';
   static UPDATE = 'update';
   static POLICY = 'policy';
+  static RECORDS = 'records';
 }
 
 export class Interactive {
@@ -104,6 +105,8 @@ export class InstallOption {
   static FORCE = 'force';
   static UPGRADE = 'upgrade';
   static EXTENSION_DIR = 'extension-dir';
+  static ONLINE = 'online';
+  static OUTPUT = 'output';
 }
 
 export class ServiceKey {
@@ -173,17 +176,17 @@ export class Install {
   static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
-  static VERSION = '1.4.0';
+  static VERSION = '3.0.0';
   static RETRIES = 5;
   static RETRY_MS = 2000;
   static SERVER = 'tether';
   static HOST = 'com.freebird.browser_bridge';
-  static SOURCE = ['package.json', 'package-lock.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'scripts/update.mjs', 'update.cmd', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
+  static SOURCE = ['package.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/launchers.ps1', 'scripts/register.ps1', 'scripts/update.mjs', 'update.cmd', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
   static REQUIRED = ['dist/mcp.js', 'dist/broker.js', 'dist/host.js', 'dist/lifecycle.js', '.local/mcp.exe', '.local/host.exe', '.local/broker.exe', '.local/agent.json', '.local/broker.json', '.local/native-host.json', 'extension/manifest.json'];
   static VALUES = [Arg.AGENT, Arg.SCOPE, Arg.PROJECT, Arg.HOME, Arg.RUNTIME, Arg.BROWSER, Arg.LANGUAGE, Arg.PYTHON];
-  static FLAGS = ['dry-run', 'open-browser', 'no-register', 'help', Opt.NO_OPEN];
+  static FLAGS = ['dry-run', 'open-browser', 'no-register', 'help', Opt.NO_OPEN, InstallOption.ONLINE];
   static EXTRA_FLAGS = [InstallOption.FORCE, InstallOption.UPGRADE];
-  static COMMANDS = [Cmd.INSTALL, Cmd.DOCTOR, Cmd.EXTENSION, Cmd.HELP, Cmd.UPGRADE, Cmd.UPDATE, Cmd.POLICY];
+  static COMMANDS = [Cmd.INSTALL, Cmd.DOCTOR, Cmd.RECORDS, Cmd.EXTENSION, Cmd.HELP, Cmd.UPGRADE, Cmd.UPDATE, Cmd.POLICY];
   static OPTION = { DRY: 'dry-run', OPEN: 'open-browser', NO_REGISTER: 'no-register', NO_OPEN: Opt.NO_OPEN };
   static BROWSERS = ['chrome', 'edge'];
   static LANGUAGES = [Lang.EN, Lang.ZH];

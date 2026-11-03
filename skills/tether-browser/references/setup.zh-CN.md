@@ -36,7 +36,7 @@ Start-Process -FilePath (Join-Path (Get-Location) '.local\broker.exe') -WindowSt
 要求：Node.js、Windows PowerShell、Python 3.12，以及现有的 Chrome/Edge 浏览器。安装依赖需要访问软件包注册表。需要手动初始化时执行：
 
 ```powershell
-npm ci
+npm install --package-lock=false
 python -m pip install -r python/requirements.txt
 python scripts/setup.py
 & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/launchers.ps1

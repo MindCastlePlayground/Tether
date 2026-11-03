@@ -7,7 +7,7 @@ Use the existing installation's `installation.json` locator first. The `tether` 
 For a checkout, run from its root:
 
 ```powershell
-npm ci
+npm install --package-lock=false
 node bin/tether.mjs install --agent codex --dry-run
 node bin/tether.mjs install --agent codex
 ```

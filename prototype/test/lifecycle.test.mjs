@@ -11,6 +11,7 @@ import { Autostart } from '../dist/autostart.js';
 import { Config } from '../dist/config.js';
 import { BrokerControl as C, PolicyKey } from '../dist/protocol.js';
 import { BridgeClient } from '../dist/client.js';
+import { Rpc } from '../dist/client-constants.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -64,10 +65,16 @@ test('real stdio MCP starts the Broker and serves tools without an extension',as
   const transport=new StdioClientTransport({command:process.execPath,args:[resolve('dist/mcp.js')],env:{...process.env,BB_CLIENT_CONFIG:join(f.root,'agent.json')},stderr:'pipe'});
   try{
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length,14);
+    assert.deepEqual((await client.listTools()).tools.map(t=>t.name).sort(),[...Rpc.METHODS].sort());
+    assert.ok(!Rpc.METHODS.includes('observe'));
+    const removed=await client.callTool({name:'observe',arguments:{sessionId:'s',pageId:'p'}});
+    assert.equal(removed.isError,true);
     const result=await client.callTool({name:'capabilities',arguments:{}});
-    assert.equal(result.isError,undefined);
+    assert.equal(result.isError,false);
     assert.equal(JSON.parse(result.content[0].text).browserConnected,false);
+    const invalid=await client.callTool({name:'wait',arguments:{condition:'text'}});
+    assert.equal(invalid.isError,true);
+    assert.equal(JSON.parse(invalid.content[0].text).code,'invalid_params');
     assert.equal(f.life.state().state,C.Running);
   }finally{await client.close();}
 });

@@ -44,6 +44,20 @@ class Bench {
   }
 }
 
+test('runtime build installs dependency ranges without a lock file', () => {
+  const calls = [], npm = Runtime.npm, run = Runtime.run;
+  Runtime.npm = (args, cwd) => calls.push({ args, cwd });
+  Runtime.run = (command, args, cwd) => calls.push({ command, args, cwd });
+  try {
+    Runtime.build('runtime');
+    assert.deepEqual(calls[0].args.slice(0, 5), ['install', '--package-lock=false', '--no-audit', '--no-fund', '--offline=false']);
+    assert.deepEqual(calls[1].args, ['run', 'build']);
+  } finally {
+    Runtime.npm = npm;
+    Runtime.run = run;
+  }
+});
+
 test('pause turns auto-start off and restore brings back the previous mode', () => {
   const { runtime } = Bench.runtime();
   assert.equal(Service.pause(runtime), null);

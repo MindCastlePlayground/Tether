@@ -38,7 +38,7 @@ export class Update {
       const revision = Update.run('git', ['rev-parse', 'HEAD'], source, true);
       const npm = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
       if (!fs.existsSync(npm)) throw new Error('npm CLI not found beside Node. Install a standard Node.js distribution.');
-      Update.run(process.execPath, [npm, 'ci', '--no-audit', '--no-fund'], source);
+      Update.run(process.execPath, [npm, 'install', '--package-lock=false', '--no-audit', '--no-fund'], source);
       Update.run(process.execPath, [path.join(source, Update.ENTRY), 'upgrade', '--runtime', root, '--language', language, '--no-open'], source);
       const installed = JSON.parse(fs.readFileSync(path.join(root, Update.MARKER), 'utf8'));
       const expected = JSON.parse(fs.readFileSync(path.join(source, 'prototype/package.json'), 'utf8'));

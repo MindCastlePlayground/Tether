@@ -24,6 +24,17 @@ test('real TLS WSS client keeps authenticated connection across requests',async(
  const c=new BridgeClient(base);try{assert.equal((await c.capabilities()).prototype,'M0');assert.equal((await c.capabilities()).prototype,'M0');}finally{c.close();await new Promise(r=>setTimeout(r,30));}
 });
 test('wrong token rejected',async()=>{const c=new BridgeClient({...base,token:'wrong'});await assert.rejects(c.capabilities());c.close();});
+
+test('diagnostics work offline and exported records survive reconnect under the same identity',async()=>{
+ const first=new BridgeClient(base);
+ await first.records({op:'clear'});
+ const status=await first.diagnose();assert.equal(status.nativeHost,'disconnected');
+ await assert.rejects(first.snapshot({sessionId:'s',pageId:'p'}));first.close();
+ await new Promise(r=>setTimeout(r,30));
+ const next=new BridgeClient(base);
+ try{const report=JSON.parse((await next.records({op:'export'})).text);assert.ok(report.records.some(r=>r.method==='snapshot'&&r.status==='failed'));assert.ok(report.records.every(r=>!('params'in r)));}
+ finally{next.close();}
+});
 test('wrong certificate pin rejected before authenticated upgrade',async()=>{
  let upgrades=0;const server=createServer({key:readFileSync(cfg.keyFile),cert:readFileSync(cfg.certFile)});server.on('upgrade',(_,s)=>{upgrades++;s.destroy();});await new Promise(r=>server.listen(18446,'127.0.0.1',r));
  const c=new BridgeClient({...base,url:'wss://127.0.0.1:18446/bridge',pin:'A'.repeat(43)+'='});await assert.rejects(c.capabilities());assert.equal(upgrades,0);c.close();await new Promise(r=>server.close(r));

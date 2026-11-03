@@ -1,6 +1,8 @@
 import { chromium, type Browser, type Page, type ConnectOverCDPTransport } from 'playwright-core';
 import { Find, Method, type Params, type Forward } from './protocol.js';
 import { Finder, Snapshot } from './locator.js';
+import { Business, BusinessMethod } from './business.js';
+import { Html } from './html.js';
 
 class CDP {
   static readonly Version='Browser.getVersion'; static readonly Auto='Target.setAutoAttach';
@@ -13,6 +15,7 @@ export class TabTransport implements ConnectOverCDPTransport {
   onmessage?: (message:object)=>void; onclose?: (reason?:string)=>void;
   readonly methods=new Set<string>();
   private closed=false; private attached=false;
+  private childSessions=new Set<string>();
   readonly root='bb-page';
   constructor(private sendRPC:Forward, readonly grant:Params, private info:Params,private version:Params){}
   send(message:object):void { queueMicrotask(()=>{void this.dispatch(message as Params);}); }
@@ -32,17 +35,18 @@ export class TabTransport implements ConnectOverCDPTransport {
           default:throw Error('cdp_forbidden');
         }
       }else{
-        if(m.sessionId!==this.root)throw Error('unsupported_frame');
-        // No child auto-attach in M0; main frame is already attached explicitly.
-        if(m.method===CDP.Auto)result={};
+        if(m.sessionId!==this.root){if(!this.childSessions.has(m.sessionId))throw Error('unsupported_frame');result=await this.sendRPC(Method.CDP,{...this.grant,childSessionId:m.sessionId,method:m.method,params:m.params??{}});}
         else result=await this.sendRPC(Method.CDP,{...this.grant,method:m.method,params:m.params??{}});
       }
       if(!this.closed)this.onmessage?.({id:m.id,sessionId:m.sessionId,result});
     }catch{if(/^[A-Za-z]+\.[A-Za-z]+$/.test(m.method))process.stderr.write(`cdp_failed:${m.method}\n`);if(!this.closed)this.onmessage?.({id:m.id,sessionId:m.sessionId,error:{code:-32000,message:'cdp_forbidden_or_failed'}});}
   }
   event(p:Params):void{
-    if(this.closed||p.childSessionId)return;
-    this.onmessage?.({sessionId:this.root,method:p.method,params:p.params});
+    if(this.closed)return;
+    const sessionId=typeof p.childSessionId==='string'?p.childSessionId:this.root;
+    if(p.method==='Target.attachedToTarget'&&p.params?.targetInfo?.type==='iframe'&&typeof p.params?.sessionId==='string')this.childSessions.add(p.params.sessionId);
+    if(p.method==='Target.detachedFromTarget'&&typeof p.params?.sessionId==='string')this.childSessions.delete(p.params.sessionId);
+    this.onmessage?.({sessionId,method:p.method,params:p.params});
   }
   close():void {if(!this.closed){this.closed=true;this.onclose?.();}}
 }
@@ -51,6 +55,7 @@ export class Engine {
   private engines=new Map<string,{transport:TabTransport,browser:Browser,page:Page}>();
   private transports=new Map<string,TabTransport>();
   private connects=new Map<string,Promise<Page>>();
+  private business=new Map<string,Business>();
   constructor(private forward:Forward,private observeAllowed:(p:Params,url:string)=>boolean=()=>true){}
   private redact(target:Params,value:string):void{
     // Text-derived metadata can contain a truncated or escaped previous value.
@@ -76,12 +81,16 @@ export class Engine {
       await this.forward(Method.CDP,{...grant,method:CDP.Focus,params:{enabled:true}});
       const browser=await chromium.connectOverCDP(transport,{noDefaults:true,timeout:15000});
       const page=browser.contexts()[0]?.pages()[0];if(!page)throw Error('engine_page_missing');
-      page.setDefaultTimeout(8000);this.engines.set(key,{transport,browser,page});return page;
+      page.setDefaultTimeout(8000);this.engines.set(key,{transport,browser,page});this.business.set(key,new Business(page,key));return page;
     }catch{this.transports.delete(key);transport.close();await this.forward(Method.Detach,grant).catch(()=>{});throw Error('engine_connect_failed');}
   }
   async run(method:string,p:Params):Promise<Params>{
     const page=await this.page(p);
-    if(method===Method.Observe)return {url:page.url(),title:await page.title(),text:(await page.locator('body').innerText()).slice(0,16000),sideEffect:'none',engine:'playwright-core'};
+    if([BusinessMethod.UploadStart,BusinessMethod.UploadChunk,BusinessMethod.UploadFinish,BusinessMethod.UploadDrop,BusinessMethod.DownloadStart,BusinessMethod.DownloadRead,BusinessMethod.DownloadDrop,BusinessMethod.Dialog].includes(method as any)){
+      let service=this.business.get(this.key(p));if(!service){service=new Business(page,this.key(p));this.business.set(this.key(p),service);}
+      return service.run(method,p);
+    }
+    if(method===Method.Html)return {...await Html.read(page,p),sideEffect:'none',engine:'playwright-core'};
     if(method===Method.Snapshot)return {...await Finder.snapshot(page,p),engine:'playwright-core'};
     if(method===Method.Locate)return {...await Finder.locate(page,p),engine:'playwright-core'};
     if(method!==Method.Fill&&method!==Method.Click)throw Error('unsupported_method');
@@ -126,8 +135,8 @@ export class Engine {
     }
     return result;
   }
-  event(p:Params):void{this.transports.get(this.key(p))?.event(p);}
+  event(p:Params):void{if(p.method==='Page.javascriptDialogClosed'&&!p.childSessionId)this.business.get(this.key(p))?.closedDialog();this.transports.get(this.key(p))?.event(p);}
   drop(clientId?:string,sessionId?:string):void{
-    for(const [key,t]of this.transports){if(clientId&&t.grant.clientId!==clientId)continue;if(sessionId&&t.grant.sessionId!==sessionId)continue;t.close();this.transports.delete(key);this.engines.delete(key);}
+    for(const [key,t]of this.transports){if(clientId&&t.grant.clientId!==clientId)continue;if(sessionId&&t.grant.sessionId!==sessionId)continue;const page=this.engines.get(key)?.page;if(page)void Html.drop(page);t.close();this.business.get(key)?.close();this.business.delete(key);this.transports.delete(key);this.engines.delete(key);}
   }
 }

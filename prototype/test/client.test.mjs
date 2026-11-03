@@ -19,5 +19,10 @@ test("client refuses RPC methods outside the public allowlist", async () => {
 
 test("client exposes scoped snapshot, locate and optional action observation params", () => {
   const c = new BridgeClient(cfg());
-  for (const method of ["snapshot", "locate", "click", "fill"]) assert.equal(typeof c[method], "function");
+  for (const method of ["snapshot", "locate", "click", "fill", "network"]) assert.equal(typeof c[method], "function");
+});
+
+test('configuration IO errors use ClientError and retain no filesystem details', async () => {
+  const c=new BridgeClient(cfg());
+  await assert.rejects(c.connect(), e=>e instanceof ClientError&&e.code==='invalidConfig');
 });

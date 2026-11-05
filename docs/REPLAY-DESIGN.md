@@ -64,4 +64,4 @@ Acceptance should demonstrate: a scenario can be authored from reusable actions 
 
 - [Playwright network mocking](https://playwright.dev/docs/mock) and [BrowserContext `routeFromHAR`](https://playwright.dev/docs/api/class-browsercontext#browser-context-route-from-har): HAR-based request matching and fulfillment.
 - [Playwright Trace Viewer](https://playwright.dev/docs/trace-viewer): action timeline, snapshots, screenshots, console, and network diagnostics.
-- [MinimumWebAuto](../../../MinimumWebAuto/README.md) and its [API reference](../../../MinimumWebAuto/docs/API.md): existing local authoring/API patterns examined for this design.
+- MinimumWebAuto (`README.md`) and its API reference (`docs/API.md`): existing local authoring/API patterns examined for this design.

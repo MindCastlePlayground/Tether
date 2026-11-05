@@ -53,6 +53,8 @@ class Task {
 
 如果任务失败后释放会话也出错，应在诊断结果中同时保留这两个错误，而不是丢失原始错误。写操作或释放操作超时时，应报告结果不确定；关闭传输会撤销绑定到该连接的访问权，但不能证明先前的网站操作失败。
 
+点击会先激活已授权的目标标签，包括弹窗，再进行指针操作检查。iframe 控件可使用 `frame=iframe#vendor >> input[name=company]`；返回引用保留对应框架的文档作用域，元素被替换后失效。
+
 ## 网络流量检查
 
 使用 MCP 的 `network` 工具、Node 的 `client.network(params)`，或 Python 的 `client.network(params)` / `client.call('network', params)`。所有操作均需已授权的 `sessionId` 和 `pageId`，沿用 `observe` 策略，无需 `seq`。先开始监听，再刷新页面或触发目标请求；开始前的历史流量需重新触发。

@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, readdir, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Server } from '../prototype/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js';
 import { StreamableHTTPServerTransport } from '../prototype/node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js';
@@ -50,6 +50,7 @@ class Sandbox {
       this.context = null;
       this.client.close();
       await this.connection?.close();
+      this.connection = null;
       if (this.chrome?.exitCode === null) {
         const stopped = new Promise(resolve => this.chrome.once('exit', resolve));
         this.chrome.kill('SIGTERM');
@@ -66,22 +67,49 @@ class Sandbox {
       this.chrome.on('error', error => console.error(error.message));
       const end = Date.now() + 20000;
       while (Date.now() < end) {
+        if (!this.connection) {
+          let listening = false;
+          try { listening = (await fetch('http://127.0.0.1:9222/json/version', { signal: AbortSignal.timeout(500) })).ok; } catch {}
+          if (listening) {
+            this.connection = await chromium.connectOverCDP('http://127.0.0.1:9222');
+            this.context = this.connection.contexts()[0];
+            // Inspection leaves dialogs for the authorized Tether session to answer.
+            this.context.on('dialog', () => {});
+            this.context.setDefaultTimeout(10000);
+            await this.refresh();
+          }
+        }
         let ready = false;
         try { ready = (await this.client.capabilities()).browserConnected; } catch {}
-        if (ready) {
-          this.connection = await chromium.connectOverCDP('http://127.0.0.1:9222');
-          this.context = this.connection.contexts()[0];
-          this.context.setDefaultTimeout(10000);
-          return this.status();
-        }
+        if (ready && this.context) return this.status();
         await new Promise(resolve => setTimeout(resolve, 250));
       }
-      // Keep browser inspection available even when its extension/native bridge fails.
-      this.connection = await chromium.connectOverCDP('http://127.0.0.1:9222');
-      this.context = this.connection.contexts()[0];
       throw Error('native_bridge_start_timeout');
     }
     return this.status();
+  }
+
+  async refresh() {
+    const hash = createHash('sha256');
+    const files = (await readdir(Paths.Extension)).filter(name => name.endsWith('.js') || name === 'manifest.json').sort();
+    for (const name of files) hash.update(name).update(await readFile(`${Paths.Extension}/${name}`));
+    const build = hash.digest('hex');
+    let previous;
+    try { previous = await readFile(Paths.ExtensionStamp, 'utf8'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    // The WebUI survives extension reload and waits for Chrome to finish it.
+    const manager = await this.context.newPage();
+    try {
+      await manager.goto('chrome://extensions');
+      await manager.evaluate(async ({ id, changed }) => {
+        const chrome = globalThis.chrome;
+        await chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true });
+        if (changed) await chrome.developerPrivate.reload(id, { failQuietly: true });
+        const info = await chrome.management.get(id);
+        if (!info.enabled) await chrome.management.setEnabled(id, true);
+      }, { id: this.extensionId, changed: previous !== build });
+    } finally { await manager.close(); }
+    await writeFile(Paths.ExtensionStamp, build);
   }
 
   async exec({ command, timeoutMs = Wire.Timeout }) {

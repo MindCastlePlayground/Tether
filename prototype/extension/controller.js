@@ -224,7 +224,10 @@ export class ExtensionController {
   reply(value) {
     if (!this.port) return;
     try {
-      if (new TextEncoder().encode(JSON.stringify(value)).length > Limits.MaxBytes) return;
+      if (new TextEncoder().encode(JSON.stringify(value)).length > Limits.MaxBytes) {
+        if (value.id === undefined) return;
+        value = { jsonrpc: Wire.Version, id: value.id, error: { code: -32000, message: Failure.Payload } };
+      }
       this.port.postMessage(value);
     } catch { /* The native port may have closed. */ }
   }
@@ -414,6 +417,12 @@ export class ExtensionController {
         groupId = groups;
         await this.api.tabGroups.update(groupId, { title: `${Limits.GroupPrefix}${this.id().slice(0, 6)}` });
         tab = await this.api.tabs.get(tab.id);
+        const until = this.clock() + BrowserAction.BlankWait;
+        while (!tab.url && tab.pendingUrl === BrowserAction.NewTab && this.clock() < until) {
+          await new Promise(resolve => setTimeout(resolve, BrowserAction.BlankPoll));
+          this.validPending(id, p);
+          tab = await this.api.tabs.get(tab.id);
+        }
         this.validPending(id,p);
         if(tab.url !== BrowserAction.NewTab || tab.groupId !== groupId) throw new Error(Failure.Forbidden);
       } else {

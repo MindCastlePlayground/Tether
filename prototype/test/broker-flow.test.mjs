@@ -32,6 +32,40 @@ test('oversized incoming WSS frame closes connection',async()=>{
  const ws=new WebSocket(base.url,Config.tls(base));ws.on('error',()=>{});await once(ws,'open');
  const closed=once(ws,'close');ws.send('x'.repeat(512*1024+1));const[code]=await closed;assert.equal(code,1009);
 });
+test('oversized host forward rejects and cleans pending without losing host connection',async()=>{
+ const pendingBefore=broker.pending.size;
+ const oversized={data:'x'.repeat(512*1024)};
+ await assert.rejects(broker.forward('oversizedProbe',{clientId:'probe',...oversized}),/payload_too_large/);
+ assert.equal(broker.pending.size,pendingBefore);
+ assert.equal(host.readyState,WebSocket.OPEN);
+ const result=await broker.forward('smallProbe',{clientId:'probe'});
+ assert.deepEqual(result,{ok:true});
+ assert.ok(broker.pending.size<=pendingBefore);
+});
+test('heartbeat queue_full does not terminate the host',async()=>{
+ const isolated=new Broker(config);
+ const previousHost=isolated.host,previousClients=isolated.clients,previousForward=isolated.forward;
+ let terminated=false;
+ const stubHost={terminate:()=>{terminated=true;}};
+ try{
+  isolated.host=stubHost;
+  isolated.clients=new Map([['client-instance',{}]]);
+  isolated.forward=()=>Promise.reject(Error('queue_full'));
+  isolated.heartbeat();
+  await Promise.resolve();
+  assert.equal(terminated,false);
+ }finally{
+  isolated.host=previousHost;
+  isolated.clients=previousClients;
+  isolated.forward=previousForward;
+ }
+});
+test('oversized broker response sends an id-matched payload error',()=>{
+ const sent=[];let closed=false;const ws={send:body=>sent.push(JSON.parse(body)),close:()=>{closed=true;}};
+ broker.send(ws,{jsonrpc:'2.0',id:'response-1',result:{data:'x'.repeat(512*1024)}});
+ assert.equal(closed,false);
+ assert.deepEqual(sent,[{jsonrpc:'2.0',id:'response-1',error:{code:-32000,message:'payload_too_large'}}]);
+});
 test('host disconnect invalidates client connection',async()=>{
  const ws=new WebSocket(base.url,Config.tls(base));await once(ws,'open');const closed=once(ws,'close');host.close();const[code]=await closed;assert.equal(code,1011);
 });

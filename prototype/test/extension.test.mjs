@@ -126,6 +126,22 @@ test('popup live regions are stable and stay outside the rebuilt list', () => {
 
 const clientB = 'client-bravo-0002';
 
+test('oversized native replies preserve the port and sessions while returning a payload error', () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  const port = api.native;
+  c.port = port;
+  c.sessions.set('session-1', { sessionId: 'session-1', clientId: clientA });
+  c.reply({ jsonrpc: Wire.Version, id: 'request-1', result: { data: 'x'.repeat(512 * 1024) } });
+  assert.deepEqual(port.messages, [{ jsonrpc: Wire.Version, id: 'request-1', error: { code: -32000, message: 'payload_too_large' } }]);
+  assert.equal(c.port, port);
+  assert.equal(c.sessions.size, 1);
+  c.reply({ jsonrpc: Wire.Version, method: Wire.Event, params: { data: 'x'.repeat(512 * 1024) } });
+  assert.equal(port.messages.length, 1);
+  assert.equal(c.port, port);
+  assert.equal(c.sessions.size, 1);
+});
+
 async function approvedExisting() {
   const api = new FakeChrome();
   const c = new ExtensionController(api, undefined, () => 'Mozilla/5.0 Chrome/145.0.0.0');
@@ -820,4 +836,22 @@ test('extension reloads once when the build on disk changes and no session is ac
     await c.reloadIfIdle();
     assert.equal(reloads, 1);
   } finally { c.stop(); }
+});
+
+test('newGroup approval waits for its initial blank navigation to commit', async () => {
+  const api = new FakeChrome();
+  const c = manual(new ExtensionController(api));
+  const get = api.tabs.get;
+  let reads = 0;
+  api.tabs.get = async id => {
+    const tab = await get(id);
+    if (tab.groupId === 9 && ++reads === 1) return { ...tab, url: '', pendingUrl: 'about:blank' };
+    return tab;
+  };
+  const pending = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'newGroup', url: 'https://safe.test/start' });
+  await c.approve(pending.pendingId);
+  const grant = await c.approvalStatus({ clientId: clientA, pendingId: pending.pendingId });
+  assert.equal(grant.status, 'approved');
+  assert.ok(grant.sessionId);
+  assert.ok(reads >= 2);
 });

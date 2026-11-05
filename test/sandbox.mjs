@@ -6,9 +6,11 @@ import path from 'node:path';
 export class Sandbox {
   static ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-home-'));
   static VARS = ['USERPROFILE', 'HOME', 'LOCALAPPDATA', 'APPDATA'];
+  static HOME = path.join(Sandbox.ROOT, 'home');
   static UNSET = ['CODEX_HOME', 'XDG_CONFIG_HOME'];
   static apply() {
     for (const name of Sandbox.VARS) process.env[name] = path.join(Sandbox.ROOT, name);
+    process.env.HOME = process.env.USERPROFILE = Sandbox.HOME;
     for (const name of Sandbox.UNSET) delete process.env[name];
     for (const name of Sandbox.VARS) fs.mkdirSync(process.env[name], { recursive: true });
     if (path.resolve(os.homedir()) !== path.resolve(process.env.USERPROFILE)) throw new Error('Test sandbox failed to redirect the home directory');

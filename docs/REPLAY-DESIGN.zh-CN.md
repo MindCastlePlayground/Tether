@@ -64,4 +64,4 @@
 
 - [Playwright 网络模拟](https://playwright.dev/docs/mock) 与 [BrowserContext `routeFromHAR`](https://playwright.dev/docs/api/class-browsercontext#browser-context-route-from-har)：基于 HAR 匹配请求并填充响应。
 - [Playwright Trace Viewer](https://playwright.dev/docs/trace-viewer)：动作时间线、快照、截图、控制台和网络诊断。
-- [MinimumWebAuto](../../../MinimumWebAuto/README.md) 与其 [API 参考](../../../MinimumWebAuto/docs/API.md)：本设计实际查阅的本地编写/API 模式。
+- MinimumWebAuto (`README.md`) 与其 API 参考（`docs/API.md`）：本设计实际查阅的本地编写/API 模式。

@@ -1,5 +1,6 @@
 import type { Page, Locator } from 'playwright-core';
 import { Refs } from './refs.js';
+import { BusinessSelector } from './business.js';
 import { Find, FindCode, FindHint, Method, Strategy, type Params } from './protocol.js';
 
 interface Info { role: string; name: string }
@@ -105,7 +106,7 @@ export class Finder {
     const max = Number.isInteger(p.maxChars) && p.maxChars > 0 ? Math.min(p.maxChars, Find.Chars) : Find.Chars;
     const first = Snapshot.cut(tree, max);
     const refs = Snapshot.parse(first.tree);
-    const mapped = new Map(await Promise.all([...refs.keys()].map(async ref => [ref, await Refs.issue(page.getByRef(ref))] as const)));
+    const mapped = await Refs.batch(page, [...refs.keys()], scope?.loc);
     tree = first.tree.replace(/\[ref=([a-z0-9]+)\]/g, (_, ref) => mapped.get(ref) ? `[ref=${mapped.get(ref)}]` : '');
     const result = Snapshot.cut(tree, max);
     const truncated = first.truncated || result.truncated;
@@ -158,7 +159,41 @@ export class Finder {
     return ref ? Refs.loc(loc.page(), ref) : undefined;
   }
 
+  /** Frame controls share the upload selector syntax and document-owned identities. */
+  private static frameSelector(sel: string): { frame: string; inner: string } | undefined {
+    if (!sel.startsWith(BusinessSelector.Frame)) return;
+    const body = sel.slice(BusinessSelector.Frame.length);
+    const cut = body.indexOf(BusinessSelector.Delimiter);
+    if (cut <= 0) return;
+    const frame = body.slice(0, cut);
+    const inner = body.slice(cut + BusinessSelector.Delimiter.length);
+    if (!frame || !inner || inner.includes(BusinessSelector.Delimiter)) return;
+    return { frame, inner };
+  }
+
+  private static async byFrame(page: Page, sel: string): Promise<Resolved | undefined> {
+    const parsed = Finder.frameSelector(sel);
+    if (!parsed) return;
+    let loc: Locator;
+    try { loc = page.frameLocator(parsed.frame).locator(parsed.inner); }
+    catch { return { fail: { sideEffect: 'none', error: FindCode.Invalid, hint: FindHint.Invalid } }; }
+    const end = Date.now() + Find.Wait;
+    for (;;) {
+      const n = await Finder.count(loc);
+      if (n === 1) {
+        const pinned = await Finder.pin(loc);
+        return pinned ? { loc: pinned, how: Strategy.Selector } : { fail: { sideEffect: 'none', error: FindCode.Stale, hint: FindHint.Stale } };
+      }
+      if (n > 1) return { fail: { sideEffect: 'none', error: FindCode.Ambiguous, hint: FindHint.Ambiguous, count: n, shown: n } };
+      if (n < 0) return { fail: { sideEffect: 'none', error: FindCode.Invalid, hint: FindHint.Invalid } };
+      if (Date.now() >= end) return { fail: { sideEffect: 'none', error: FindCode.Missing, hint: FindHint.Missing } };
+      await Finder.wait(Find.Step);
+    }
+  }
+
   private static async bySelector(page: Page, sel: string, method: string): Promise<Resolved> {
+    const framed = await Finder.byFrame(page, sel);
+    if (framed) return framed;
     const tries = Rewrite.all(sel, method);
     const end = Date.now() + Find.Wait;
     let invalid = true;

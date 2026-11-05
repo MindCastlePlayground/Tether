@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '3.0.1';
+  static readonly Version = '3.0.2';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';
@@ -39,6 +39,7 @@ export enum Method {
   Snapshot = 'snapshot', Locate = 'locate', Network = 'network'
 }
 export class Limit {
+  static readonly Payload = 'payload_too_large';
   static readonly Frame = 512 * 1024;
   static readonly Wait = 20_000;
   static readonly Heartbeat = 5_000;

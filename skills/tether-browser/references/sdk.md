@@ -53,6 +53,8 @@ For an existing tab, use `availableTabs()` and pass the selected `tabId` with `m
 
 If a release error follows a task failure, retain both in the diagnostic result rather than losing the original failure. Report uncertainty if a write or release timed out; closing the transport revokes connection-bound access but does not prove an earlier website action failed.
 
+Click activates its authorized tab before pointer checks, including popups. Frame controls accept `frame=iframe#vendor >> input[name=company]`; returned refs keep the frame document scope and expire when the element is replaced.
+
 ## Network inspection
 
 Use the MCP `network` tool, Node `client.network(params)`, or Python `client.network(params)` / `client.call('network', params)`. All operations require the same authorized `sessionId` and `pageId` and use the `observe` policy. No `seq` is required. Start before reloading or triggering the requests you want to inspect; earlier traffic cannot be reconstructed.

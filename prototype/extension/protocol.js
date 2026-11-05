@@ -140,6 +140,7 @@ export class PolicySummary {
 }
 
 export class Failure {
+  static Payload = 'payload_too_large';
   static Invalid = 'invalid_request';
   static Forbidden = 'not_authorized';
   static Missing = 'resource_unavailable';
@@ -176,11 +177,11 @@ export class CdpMethod {
   static Allowed = new Set([
     'Accessibility.getFullAXTree', 'Accessibility.getPartialAXTree',
     'DOM.describeNode', 'DOM.disable', 'DOM.enable', 'DOM.getBoxModel', 'DOM.getContentQuads',
-    'DOM.getDocument', 'DOM.querySelector', 'DOM.querySelectorAll', 'DOM.resolveNode', 'DOM.scrollIntoViewIfNeeded',
+    'DOM.getDocument', 'DOM.getFrameOwner', 'DOM.querySelector', 'DOM.querySelectorAll', 'DOM.resolveNode', 'DOM.scrollIntoViewIfNeeded',
     'Emulation.clearDeviceMetricsOverride', 'Emulation.setDeviceMetricsOverride', 'Emulation.setFocusEmulationEnabled',
     'Input.dispatchKeyEvent', 'Input.dispatchMouseEvent', 'Input.insertText',
     'Log.disable', 'Log.enable', 'Page.addScriptToEvaluateOnNewDocument', 'Page.captureScreenshot',
-    'Page.createIsolatedWorld', 'Page.disable', 'Page.enable', 'Page.getFrameTree',
+    'Page.bringToFront', 'Page.createIsolatedWorld', 'Page.disable', 'Page.enable', 'Page.getFrameTree',
     'Page.navigate', 'Page.reload', 'Page.setLifecycleEventsEnabled', 'Page.stopLoading', 'Page.handleJavaScriptDialog',
     'Network.enable', 'Network.setCacheDisabled',
     'Performance.disable', 'Performance.enable', 'Runtime.callFunctionOn', 'Runtime.disable',

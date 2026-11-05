@@ -46,7 +46,14 @@ export class Broker {
       });
       await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(bind.port,bind.ip,()=>resolve());});this.servers.push(server);
     } } catch (err) { await this.stop(); throw err; }
-    this.timer=setInterval(()=>{if(this.host)for(const clientId of this.clients.keys())void this.forward(Method.Heartbeat,{clientId}).catch(()=>{this.host?.terminate();});},Limit.Heartbeat);
+    this.timer=setInterval(()=>this.heartbeat(),Limit.Heartbeat);
+  }
+  private heartbeat():void{
+    const host=this.host;
+    if(!host)return;
+    for(const clientId of this.clients.keys())void this.forward(Method.Heartbeat,{clientId}).catch(error=>{
+      if(error.message!=='queue_full'&&this.host===host)host.terminate();
+    });
   }
   private control(req:IncomingMessage,res:ServerResponse):void {
     const auth=req.headers[Wire.Auth];
@@ -82,13 +89,22 @@ export class Broker {
   }
   private instance(identity:string):string{let id:string;do id=identity+Wire.Instance+randomUUID().slice(0,8);while(this.clients.has(id));return id;}
   static identity(clientId:string):string{return clientId.split(Wire.Instance)[0];}
-  private send(ws:WebSocket,msg:RPC):void{const body=JSON.stringify(msg);if(Buffer.byteLength(body)>Limit.Frame){ws.close(1009);return;}ws.send(body);}
+  private send(ws:WebSocket,msg:RPC):void{
+    let body=JSON.stringify(msg);
+    if(Buffer.byteLength(body)>Limit.Frame){
+      if(msg.method)throw Error(Limit.Payload);
+      body=JSON.stringify({jsonrpc:Wire.Version,id:msg.id,error:{code:-32000,message:Limit.Payload}});
+    }
+    ws.send(body);
+  }
   private forward(method:string,params:Params):Promise<any>{
     if(!this.host||this.host.readyState!==WebSocket.OPEN)return Promise.reject(Error('host_unavailable'));
     if(this.pending.size>=128)return Promise.reject(Error('queue_full'));
     const id=randomUUID();return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('outcome_unknown'));},Limit.Wait);
-      this.pending.set(id,{resolve,reject,timer});this.send(this.host!,{jsonrpc:Wire.Version,id,method,params});
+      this.pending.set(id,{resolve,reject,timer});
+      try{this.send(this.host!,{jsonrpc:Wire.Version,id,method,params});}
+      catch(error){clearTimeout(timer);this.pending.delete(id);reject(error);}
     });
   }
   async handle(clientId:string,msg:RPC):Promise<any>{
@@ -186,7 +202,7 @@ export class Broker {
         if(this.policy.check(Broker.identity(p.clientId),Action.Observe,active.url??null)===Effect.Deny)throw Error(PolicyKey.Denied);
         return result;
       }
-      try{return await this.engine.run(method,p);}catch{if(!WRITES.has(method))throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
+      try{return await this.engine.run(method,p);}catch(error){if(error instanceof Error&&error.message===Limit.Payload)throw error;if(!WRITES.has(method))throw Error('engine_failed');return {sideEffect:'possible',error:'outcome_unknown'};}
     }
     const result=await this.forward(method,p);
     if(method===Method.Release)this.engine.drop(p.clientId,p.sessionId);

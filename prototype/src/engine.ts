@@ -1,8 +1,11 @@
 import { chromium, type Browser, type Page, type ConnectOverCDPTransport } from 'playwright-core';
-import { Find, Method, type Params, type Forward } from './protocol.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Find, Limit, Method, type Params, type Forward } from './protocol.js';
 import { Finder, Snapshot } from './locator.js';
 import { Business, BusinessMethod } from './business.js';
 import { Html } from './html.js';
+
+interface Call { payload: boolean }
 
 class CDP {
   static readonly Version='Browser.getVersion'; static readonly Auto='Target.setAutoAttach';
@@ -17,9 +20,9 @@ export class TabTransport implements ConnectOverCDPTransport {
   private closed=false; private attached=false;
   private childSessions=new Set<string>();
   readonly root='bb-page';
-  constructor(private sendRPC:Forward, readonly grant:Params, private info:Params,private version:Params){}
-  send(message:object):void { queueMicrotask(()=>{void this.dispatch(message as Params);}); }
-  private async dispatch(m:Params):Promise<void>{
+  constructor(private sendRPC:Forward, readonly grant:Params, private info:Params,private version:Params,private calls?:AsyncLocalStorage<Call>){}
+  send(message:object):void { const call=this.calls?.getStore();queueMicrotask(()=>{void this.dispatch(message as Params,call);}); }
+  private async dispatch(m:Params,call?:Call):Promise<void>{
     if(this.closed) return;
     this.methods.add(m.method);
     try {
@@ -39,7 +42,12 @@ export class TabTransport implements ConnectOverCDPTransport {
         else result=await this.sendRPC(Method.CDP,{...this.grant,method:m.method,params:m.params??{}});
       }
       if(!this.closed)this.onmessage?.({id:m.id,sessionId:m.sessionId,result});
-    }catch{if(/^[A-Za-z]+\.[A-Za-z]+$/.test(m.method))process.stderr.write(`cdp_failed:${m.method}\n`);if(!this.closed)this.onmessage?.({id:m.id,sessionId:m.sessionId,error:{code:-32000,message:'cdp_forbidden_or_failed'}});}
+    }catch(error){
+      const payload=error instanceof Error&&error.message===Limit.Payload;
+      if(payload&&call)call.payload=true;
+      if(/^[A-Za-z]+\.[A-Za-z]+$/.test(m.method))process.stderr.write(`cdp_failed:${m.method}\n`);
+      if(!this.closed)this.onmessage?.({id:m.id,sessionId:m.sessionId,error:{code:-32000,message:payload?Limit.Payload:'cdp_forbidden_or_failed'}});
+    }
   }
   event(p:Params):void{
     if(this.closed)return;
@@ -52,6 +60,7 @@ export class TabTransport implements ConnectOverCDPTransport {
 }
 
 export class Engine {
+  private calls=new AsyncLocalStorage<Call>();
   private engines=new Map<string,{transport:TabTransport,browser:Browser,page:Page}>();
   private transports=new Map<string,TabTransport>();
   private connects=new Map<string,Promise<Page>>();
@@ -75,7 +84,7 @@ export class Engine {
     const grant={clientId:p.clientId,sessionId:p.sessionId,pageId:p.pageId};
     const attached=await this.forward(Method.Attach,grant);
     if(!attached.targetInfo?.targetId||!attached.version?.product)throw Error('invalid_browser_info');
-    const transport=new TabTransport(this.forward,grant,attached.targetInfo,attached.version);
+    const transport=new TabTransport(this.forward,grant,attached.targetInfo,attached.version,this.calls);
     this.transports.set(key,transport);
     try{
       await this.forward(Method.CDP,{...grant,method:CDP.Focus,params:{enabled:true}});
@@ -85,6 +94,17 @@ export class Engine {
     }catch{this.transports.delete(key);transport.close();await this.forward(Method.Detach,grant).catch(()=>{});throw Error('engine_connect_failed');}
   }
   async run(method:string,p:Params):Promise<Params>{
+    const call:Call={payload:false};
+    return this.calls.run(call,async()=>{
+      try{return await this.execute(method,p);}
+      catch(error){
+        const message=error instanceof Error?error.message:'';
+        if(call.payload||message.includes(Limit.Payload))throw Error(Limit.Payload);
+        throw error;
+      }
+    });
+  }
+  private async execute(method:string,p:Params):Promise<Params>{
     const page=await this.page(p);
     if([BusinessMethod.UploadStart,BusinessMethod.UploadChunk,BusinessMethod.UploadFinish,BusinessMethod.UploadDrop,BusinessMethod.DownloadStart,BusinessMethod.DownloadRead,BusinessMethod.DownloadDrop,BusinessMethod.Dialog].includes(method as any)){
       let service=this.business.get(this.key(p));if(!service){service=new Business(page,this.key(p));this.business.set(this.key(p),service);}
@@ -103,7 +123,7 @@ export class Engine {
     if(method===Method.Fill)this.redact(target,p.value);
     const result:Params={sideEffect:'applied',target,strategy:r.how,...(r.hint?{hint:r.hint}:{}),engine:'playwright-core'};
     const handle=await r.loc.elementHandle();
-    try{if(!handle)throw Error('target_detached');if(method===Method.Fill)await handle.fill(p.value);else await handle.click({noWaitAfter:true});}
+    try{if(!handle)throw Error('target_detached');if(method===Method.Fill)await handle.fill(p.value);else{await page.bringToFront();await handle.click({noWaitAfter:true});}}
     catch{result.sideEffect='possible';result.error='outcome_unknown';}
     finally{await handle?.dispose();}
     if(p.observe){

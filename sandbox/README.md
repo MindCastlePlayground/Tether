@@ -96,3 +96,21 @@ Compose 对容器限制为 2 CPU、2304 MiB 内存、512 MiB `/dev/shm` 和 512 
 复跑：`docker exec tether-sandbox node /app/sandbox/acceptance.mjs`。测试会重置专用浏览器 profile，运行前保存需要保留的测试登录态。验收日志在 `/data/acceptance.log`，Chrome 日志在 `/data/chrome.log`；服务日志用 `docker logs tether-sandbox`。
 
 Beacon 服务标识为 `local/docker/tether-sandbox`，健康检查与版本已接入；管理入口为 [Beacon](http://192.168.3.23)。MCP 经 SSH 使用，服务卡片关闭自动生成的 HTTP 入口。
+
+## 完整业务验证
+
+`business-flows.mjs` 在专用浏览器中通过 Tether 的真实扩展、Native Messaging、Broker 和 MCP 执行业务动作，再独立核对服务端数据与页面结果。模拟站点覆盖购物车下单、资料持久化、工单、预约取消、分页表格、文件上传下载、JavaScript 对话框、弹窗接管、跨进程 iframe 表单，以及动态长页面和超大响应恢复。所有业务数据均为本地合成数据。
+
+部署最新沙箱后运行：
+
+```bash
+docker exec tether-sandbox node /app/sandbox/business-flows.mjs
+```
+
+程序会重启专用浏览器，保留 profile，并在每个场景结束时关闭该场景创建的标签、释放会话。失败返回非零退出码；日志应有十条 `PASS` 和 `SUMMARY passed=10 failed=0`。机器摘要写入容器 `/tmp/business-summary.json`。只复查失败场景时，可传入逗号分隔的名称，例如：
+
+```bash
+docker exec -e TETHER_BUSINESS_SCENARIOS=dialog,iframe,recovery tether-sandbox node /app/sandbox/business-flows.mjs
+```
+
+验证开始时启动 `tether-sandbox`，结束后停止容器；通过 Beacon 管理时同时标记停止。

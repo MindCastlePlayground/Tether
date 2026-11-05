@@ -14,9 +14,12 @@ class Bench {
     return root;
   }
   static with(run, fn) {
-    const old = Update.run;
+    const old = Update.run, exists = fs.existsSync;
+    const npm = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
     Update.run = run;
-    try { return fn(); } finally { Update.run = old; }
+    // Process execution is mocked; the Windows npm layout is part of this fixture.
+    fs.existsSync = file => file === npm || exists(file);
+    try { return fn(); } finally { Update.run = old; fs.existsSync = exists; }
   }
   static tempDirs() { return fs.readdirSync(os.tmpdir()).filter(name => name.startsWith('tether-update-')).sort(); }
 }

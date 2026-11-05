@@ -4,6 +4,7 @@ import { chromium } from 'playwright-core';
 import { Finder, Rewrite, Snapshot } from '../dist/locator.js';
 import { Engine } from '../dist/engine.js';
 import { Broker } from '../dist/broker.js';
+import { Refs } from '../dist/refs.js';
 
 const HTML = `<main><h1>Settings</h1>
 <form onsubmit="return false">
@@ -24,6 +25,25 @@ const click = async (p) => { const r = await run(p, 'click'); if (!('fail' in r)
 test.before(async () => { browser = await chromium.launch({ channel: 'chrome', headless: true }); page = await browser.newPage(); });
 test.after(async () => { await browser?.close(); });
 test.beforeEach(async () => { await page.setContent(HTML); await page.evaluate(() => { document.title = ''; }); });
+
+test('large snapshot assigns live identity refs with one browser evaluation', async () => {
+  await page.setContent(Array.from({length: 200}, (_, i) => `<button onclick="document.title='${i}'">B${i}</button>`).join(''));
+  const impl = page._connection.toImpl(page.mainFrame());
+  const original = impl.selectors.callOnSelector;
+  let batches = 0;
+  impl.selectors.callOnSelector = function(target, fn, arg) {
+    if (arg?.refs) batches++;
+    return original.call(this, target, fn, arg);
+  };
+  try {
+    const result = await Finder.snapshot(page, {});
+    assert.equal((result.tree.match(/- button /g) ?? []).length, 200);
+    assert.equal(batches, 1);
+    const ref = result.tree.match(/button "B199" \[ref=([a-z0-9]+)\]/)[1];
+    await (await Refs.loc(page, ref)).click();
+    assert.equal(await page.title(), '199');
+  } finally { impl.selectors.callOnSelector = original; }
+});
 
 test('snapshot is a compact tree with refs and no anonymous wrappers', async () => {
   const s = await Finder.snapshot(page, {});

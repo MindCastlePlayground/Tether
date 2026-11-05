@@ -1,6 +1,6 @@
 {
   "name": "@mindcastleplayground/tether",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "private": true,
   "description": "Install Tether browser MCP and skills for local agents",
   "type": "module",
@@ -11,7 +11,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test --test-isolation=none test/*.test.mjs",
+    "test": "node --test --experimental-test-isolation=none test/*.test.mjs",
     "docs:check": "node scripts/check-docs.mjs"
   },
   "files": [

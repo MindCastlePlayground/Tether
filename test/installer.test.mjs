@@ -26,6 +26,13 @@ class Fixture {
   static options(root) { return { agent: Agents.names.join(','), scope: 'project', project: path.join(root,'project'), language:'zh-CN', browser:'edge', runtime:path.join(root,'runtime') }; }
 }
 
+async function withWindowsPlatform(run) {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+  try { return await run(); }
+  finally { Object.defineProperty(process, 'platform', platform); }
+}
+
 test('fresh configs for all hosts are valid and idempotent, including key reorder', () => {
   const entry = {command:'C:\\Tether\\mcp.exe', args:[], env:{BB_LANGUAGE:'en'}};
   for (const name of Agents.names) {
@@ -178,7 +185,7 @@ test('setup-time skill edits abort before registration and config mutation', asy
       fs.writeFileSync(file,'edited during setup');
     };
     Runtime.register=() => {registrations++;};
-    await assert.rejects(Cli.main(['install','--agent','codex','--scope','project','--project',options.project,'--runtime',options.runtime]),/Skill changed during setup/);
+    await withWindowsPlatform(() => assert.rejects(Cli.main(['install','--agent','codex','--scope','project','--project',options.project,'--runtime',options.runtime]),/Skill changed during setup/));
     assert.equal(registrations,0);
     assert.ok(!fs.existsSync(path.join(options.project,'.codex','config.toml')));
   } finally {Runtime.prepare=prepare;Runtime.register=register;}
@@ -256,16 +263,16 @@ test('install opens the browser unless no-open or dry-run, and a missing browser
     Runtime.register = () => {};
     Browser.open = async plan => { calls.push(plan.url); };
     const args = ['install', '--agent', 'codex', '--scope', 'project', '--project', project, '--runtime', runtime, '--language', 'en'];
-    assert.equal(await Cli.main(args), 0);
+    assert.equal(await withWindowsPlatform(() => Cli.main(args)), 0);
     assert.equal(calls.length, 1);
-    assert.equal(await Cli.main([...args, '--open-browser']), 0);
+    assert.equal(await withWindowsPlatform(() => Cli.main([...args, '--open-browser'])), 0);
     assert.equal(calls.length, 2);
-    assert.equal(await Cli.main([...args, '--no-open', '--open-browser']), 0);
+    assert.equal(await withWindowsPlatform(() => Cli.main([...args, '--no-open', '--open-browser'])), 0);
     assert.equal(calls.length, 2);
     assert.equal(await Cli.main([...args, '--dry-run']), 0);
     assert.equal(calls.length, 2);
     Browser.open = async () => { throw new Error('Browser executable not found. Open chrome://extensions/ manually'); };
-    assert.equal(await Cli.main(args), 0);
+    assert.equal(await withWindowsPlatform(() => Cli.main(args)), 0);
     assert.match(logs.join('\n'), /Browser executable not found/);
   } finally {
     Runtime.prepare = prepare;
@@ -405,7 +412,7 @@ test('force install overwrites planned skills but still detects concurrent edits
   try {
     Runtime.prepare = () => {};
     Runtime.register = () => {};
-    await Cli.main(['install', '--agent', 'codex', '--scope', 'project', '--project', options.project, '--runtime', options.runtime, '--force', '--no-open']);
+    await withWindowsPlatform(() => Cli.main(['install', '--agent', 'codex', '--scope', 'project', '--project', options.project, '--runtime', options.runtime, '--force', '--no-open']));
     assert.notEqual(Files.read(skill), 'customized');
     assert.ok(fs.readdirSync(path.dirname(skill)).some(name => name.startsWith('SKILL.md.tether-backup-')));
   } finally { Runtime.prepare = prepare; Runtime.register = register; }

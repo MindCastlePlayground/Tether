@@ -33,11 +33,13 @@ The parent uses the result or handed-back page for subsequent business decisions
 ## Acquire the intended page
 
 1. Use `newGroup` for a new task. Call `requestSession({mode:"newGroup",url:"https://..."})` with the user's target URL; omit `url` only when a blank task page is useful.
-2. Use `attachExisting` when the user intends an existing tab. With automatic access enabled, call `availableTabs({})` and choose the matching title/URL. Pass its numeric `tabId` to `requestSession({mode:"attachExisting",tabId})`. If multiple tabs are plausible, resolve which one the user meant before acting.
+2. Use `attachExisting` when the user intends an existing tab. With both auto-approval and direct attachment enabled, call `availableTabs({})` and choose the matching title/URL. Pass its numeric `tabId` to `requestSession({mode:"attachExisting",tabId})`. If multiple tabs are plausible, resolve which one the user meant before acting.
 3. When auto-approval applies, `requestSession` returns `status:"approved"` with `sessionId`, `pages`, and `groupId` directly; use those IDs without polling `approvalStatus` (polling remains valid). Browser `tabId` and opaque `pageId` are different identifiers.
 4. When the result is `pending`, tell the user to open Tether's toolbar popup and approve/choose the tab, then poll `approvalStatus({pendingId})` with a bounded wait appropriate to the task. Requests expire after 120 seconds. A denial ends the request; do not bypass it by silently requesting again. On expiry, renew only if the user still wants access.
 
-Automatic approval is enabled by default: authenticated clients can create task groups and attach to a specified existing HTTP(S) tab. With the popup switch off, `availableTabs` is forbidden and an existing page must be selected in the popup. The switch is persisted in `chrome.storage.local` and keeps its value across extension background reloads. Turning it off does not revoke an active session; the popup can revoke sessions separately. Public MCP/SDK methods cannot approve requests or change that policy.
+Automatic approval is enabled by default: authenticated clients can create task groups and attach to a specified existing HTTP(S) tab. With the auto-approval master switch off, `availableTabs` is forbidden and an existing page must be selected in the popup. The switch is persisted in `chrome.storage.local` and keeps its value across extension background reloads. Turning it off does not revoke an active session; the popup can revoke sessions separately. Public MCP/SDK methods cannot approve requests or change that policy.
+
+Pass `groupName` to `requestSession` to name task groups (1–80 characters, no control characters; surrounding whitespace is trimmed). With “Custom group names” enabled in the extension, newly created task groups use that name; otherwise they use the default name. Existing user groups keep their names. Turning off “Direct tab takeover” requires manual approval and disables `availableTabs`; the auto-approval master switch and policy `ask` still apply. Both switches default to on and persist locally; changes apply to subsequent requests or new task groups.
 
 ## Read, act, verify
 
@@ -58,7 +60,7 @@ Automatic approval is enabled by default: authenticated clients can create task 
 | --- | --- | --- |
 | `capabilities` | `{}` | Check bridge readiness and supported methods |
 | `availableTabs` | `{}` | Discover existing HTTP(S) tabs if automatic access is enabled |
-| `requestSession` | `{mode,url?,tabId?}` | Request `newGroup` or `attachExisting` |
+| `requestSession` | `{mode,url?,tabId?,groupName?}` | Request `newGroup` or `attachExisting` |
 | `approvalStatus` | `{pendingId}` | Obtain approval status and authorized IDs |
 | `listTabs` | `{sessionId}` | Obtain current authorized `pages` |
 | `network` | `{sessionId,pageId,op,requestId?,url?,type?,offset?,limit?,maxChars?}` | Start/list/detail/body/stop/clear network capture; see [SDK usage](references/sdk.md) |

@@ -9,6 +9,8 @@ class Popup {
     this.pending = [];
     this.sessions = [];
     this.autoApproval = false;
+    this.nameGroups = true;
+    this.directAttach = true;
     this.brokerMode = Broker.Auto;
     this.brokerStatus = { state: Broker.StateStarting };
     this.locale = new Locale(api);
@@ -64,6 +66,8 @@ class Popup {
     this.port.postMessage({ type: PopupMessage.AutoApproval });
     this.port.postMessage({ type: PopupMessage.BrokerStatus });
     this.port.postMessage({ type: PopupMessage.Notify });
+    this.port.postMessage({ type: PopupMessage.NameGroups });
+    this.port.postMessage({ type: PopupMessage.DirectAttach });
   }
 
   receive(msg) {
@@ -96,6 +100,14 @@ class Popup {
       this.syncHeader();
       if (this.view === null) this.render();
     }
+    if (msg.type === PopupMessage.NameGroups) {
+      this.nameGroups = msg.enabled !== false;
+      if (this.view === null) this.render();
+    }
+    if (msg.type === PopupMessage.DirectAttach) {
+      this.directAttach = msg.enabled !== false;
+      if (this.view === null) this.render();
+    }
     if (msg.type === PopupMessage.BrokerStatus) {
       this.brokerStatus = msg;
       this.brokerMode = msg.mode ?? this.brokerMode;
@@ -120,6 +132,9 @@ class Popup {
   }
 
   render() {
+    const activeId = this.doc.activeElement?.id;
+    const focusRadio = this.doc.activeElement?.getAttribute?.('role') === 'radio';
+    const policyOpen = this.doc.getElementById('policy-details')?.open === true;
     this.view = null;
     this.clearCopyTimers();
     this.syncHeader();
@@ -130,6 +145,15 @@ class Popup {
       this.renderPendingSection(),
       this.renderSessionsSection()
     );
+    if (policyOpen) {
+      const details = this.doc.getElementById('policy-details');
+      if (details) details.open = true;
+    }
+    if (activeId && activeId !== 'items') {
+      this.doc.getElementById(activeId)?.focus();
+    } else if (focusRadio) {
+      this.root.querySelector('.seg-btn[aria-checked="true"]')?.focus();
+    }
   }
 
   syncHeader() {
@@ -229,28 +253,42 @@ class Popup {
       panel.append(alert);
     }
 
-    // Toggles Grid: Auto Approval
+    // Toggles Grid: Auto Approval, Direct Tab Takeover, Custom Group Names
     const toggles = this.el('div', '', 'toggles-grid');
-    const autoApprovalItem = this.el('label', '', 'toggle-item');
-    const autoApprovalLeft = this.el('div', '', 'toggle-label');
-    const autoApprovalInput = this.doc.createElement('input');
-    autoApprovalInput.type = 'checkbox';
-    autoApprovalInput.checked = this.autoApproval;
-    autoApprovalInput.addEventListener('change', () =>
-      this.port.postMessage({ type: PopupMessage.SetAutoApproval, enabled: autoApprovalInput.checked })
+    toggles.append(
+      this.renderToggle({
+        id: 'toggle-auto-approval',
+        label: this.locale.get(Text.AutoApprovalShort),
+        title: this.locale.get(Text.AutoApproval),
+        checked: this.autoApproval,
+        onChange: enabled => this.port.postMessage({ type: PopupMessage.SetAutoApproval, enabled })
+      }),
+      this.renderToggle({
+        id: 'toggle-direct-attach',
+        label: this.locale.get(Text.DirectAttachShort),
+        title: this.locale.get(Text.DirectAttachDesc),
+        checked: this.directAttach,
+        onChange: enabled => this.port.postMessage({ type: PopupMessage.SetDirectAttach, enabled })
+      }),
+      this.renderToggle({
+        id: 'toggle-name-groups',
+        label: this.locale.get(Text.NameGroupsShort),
+        title: this.locale.get(Text.NameGroupsDesc),
+        checked: this.nameGroups,
+        onChange: enabled => this.port.postMessage({ type: PopupMessage.SetNameGroups, enabled })
+      })
     );
-    autoApprovalLeft.append(autoApprovalInput, this.doc.createTextNode(this.locale.get(Text.AutoApprovalShort)));
-    const autoApprovalStatus = this.el('span', this.locale.get(this.autoApproval ? Text.Enabled : Text.Disabled), 'toggle-status');
-    autoApprovalItem.append(autoApprovalLeft, autoApprovalStatus);
-    toggles.append(autoApprovalItem);
-
     panel.append(toggles);
 
     // Progressive Disclosure: Policy Details
     const details = this.el('details', '', 'disclosure');
+    details.id = 'policy-details';
+
     const summary = this.el('summary', this.locale.get(Text.PolicyDetails));
+    summary.id = 'policy-summary';
     const body = this.el('div', '', 'disclosure-body');
     const notifyItem = this.el('label', '', 'toggle-item');
+    notifyItem.htmlFor = 'notify-new';
     const notifyLabel = this.el('div', '', 'toggle-label');
     const notifyInput = this.doc.createElement('input');
     notifyInput.type = 'checkbox';
@@ -264,6 +302,8 @@ class Popup {
     const policyText = this.policyText();
     body.append(
       this.el('p', this.autoApproval ? this.locale.get(Text.AutoOn) : this.locale.get(Text.AutoOff)),
+      this.el('p', this.directAttach ? this.locale.get(Text.PolicyDirectAttachOn) : this.locale.get(Text.PolicyDirectAttachOff)),
+      this.el('p', this.nameGroups ? this.locale.get(Text.PolicyNameGroupsOn) : this.locale.get(Text.PolicyNameGroupsOff)),
       this.el('p', this.locale.get(Text.AutoHint)),
       ...(policyText ? [this.el('p', policyText, 'policy-summary')] : []),
       notifyItem
@@ -272,6 +312,24 @@ class Popup {
     panel.append(details);
 
     return panel;
+  }
+
+  renderToggle({ id, label, title, checked, onChange }) {
+    const item = this.el('label', '', 'toggle-item');
+    item.htmlFor = id;
+    if (title) item.title = title;
+
+    const left = this.el('div', '', 'toggle-label');
+    const input = this.doc.createElement('input');
+    input.type = 'checkbox';
+    input.id = id;
+    input.checked = checked;
+    input.addEventListener('change', () => onChange(input.checked));
+
+    left.append(input, this.doc.createTextNode(label));
+    const status = this.el('span', this.locale.get(checked ? Text.Enabled : Text.Disabled), 'toggle-status');
+    item.append(left, status);
+    return item;
   }
 
   statusInfo() {
@@ -422,6 +480,17 @@ class Popup {
         card.append(urlBox);
       }
 
+      if (item.groupName) {
+        const groupBox = this.el('div', '', 'group-box');
+        const prefix = this.nameGroups ? this.locale.get(Text.GroupName) : this.locale.get(Text.GroupNameIgnored);
+        groupBox.append(
+          this.el('span', `${prefix}: `, 'group-label'),
+          this.el('span', item.groupName, 'group-name-text')
+        );
+        groupBox.title = item.groupName;
+        card.append(groupBox);
+      }
+
       const perms = this.el('div', '', 'perm-tags');
       const permKeys = [Text.PermRead, Text.PermControl, Text.PermNavigate];
       if (item.mode === SessionMode.NewGroup) permKeys.push(Text.PermTabs);
@@ -551,6 +620,16 @@ class Popup {
         this.port.postMessage({ type: PopupMessage.Revoke, sessionId: session.sessionId });
       }));
       card.append(top);
+
+      if (session.groupName) {
+        const groupBox = this.el('div', '', 'group-box');
+        groupBox.append(
+          this.el('span', `${this.locale.get(Text.GroupName)}: `, 'group-label'),
+          this.el('span', session.groupName, 'group-name-text')
+        );
+        groupBox.title = session.groupName;
+        card.append(groupBox);
+      }
 
       if (session.pages && session.pages.length > 0) {
         const pagesList = this.el('div', '', 'session-pages');

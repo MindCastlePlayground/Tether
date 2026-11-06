@@ -12,7 +12,7 @@ import { BrowserWake } from "./wake.js";
 
 class McpTools {
   static readonly EMPTY = z.object({});
-  static readonly SESSION = z.object({ mode: z.enum(["newGroup", "attachExisting"]), url: z.string().optional(), tabId: z.number().int().nonnegative().optional() });
+  static readonly SESSION = z.object({ mode: z.enum(["newGroup", "attachExisting"]), url: z.string().optional(), tabId: z.number().int().nonnegative().optional(), groupName: z.string().max(80).regex(/^[^\u0000-\u001f\u007f]+$/).trim().min(1).optional() });
   static readonly APPROVAL = z.object({ pendingId: z.string() });
   static readonly TABS = z.object({ sessionId: z.string() });
   static readonly RELEASE = z.object({ sessionId: z.string(), seq: z.number().int().positive() });

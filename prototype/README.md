@@ -29,11 +29,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/launchers.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register.ps1
 ```
 
-The repository intentionally has no lockfile; use `npm install` (or `npm install --package-lock=false`) so npm resolves dependencies using the configured registry/mirror. Release versions use `a.b.c`: increment `a` for major features or incompatible changes, `b` for compatible features, and `c` for fixes. Major releases update all companion components and documentation. The root package is version `3.0.1`.
+The repository intentionally has no lockfile; use `npm install` (or `npm install --package-lock=false`) so npm resolves dependencies using the configured registry/mirror. Release versions use `a.b.c`: increment `a` for major features or incompatible changes, `b` for compatible features, and `c` for fixes. Major releases update all companion components and documentation. The root package is version `3.1.0`.
 
 Load `extension/` as an unpacked extension in the existing browser. Select the directory containing `manifest.json`; each setup generates its own extension identity. To run a locally built Broker, use the generated executable in the local runtime directory. The fixture page can be started with `node scripts/fixture.mjs`.
 
 The preferred install and agent configuration flow is the repository-root Tether CLI in the [installation guide](../docs/INSTALL.md). Loading the extension enables its default `auto` Broker management. MCP and Native Host can start the Broker for the same runtime; shared runtime mode `off` prevents MCP from starting it again. Lifecycle probes and retries are described in the [v1.0.0 release notes](../docs/RELEASE-v1.0.0.md).
+
+## Task group names and existing tabs
+
+`requestSession({mode:"newGroup",url:"https://example.com",groupName:"Research"})` names the task group when the extension’s “Custom group names” switch is on. Names accept 1–80 characters, exclude control characters, and trim surrounding whitespace; the default name is used when naming is off or no name is supplied. A name does not grant access to another group with the same title.
+
+To use an existing page, call `availableTabs({})`, then `requestSession({mode:"attachExisting",tabId})`. Auto-approval and “Direct tab takeover” must both be on for immediate access; otherwise approve the pending request in the extension. Policy `ask` always requires approval. Turning off direct attachment also disables `availableTabs`. Both new switches default to on and persist locally. They affect subsequent requests or task-group creation, while existing sessions retain their grants.
+
+Existing tabs keep their URL, group, and title; release leaves them open. A supplied `groupName` applies only to Tether-created task groups, including a separate task group created later by `createTab` in an attached session.
 
 ## SDK use
 
@@ -82,4 +90,4 @@ File operations are page-scoped and use increasing `seq` values. Upload through 
 
 ## Troubleshooting
 
-The popup displays Broker connection state and a recovery hint. Check that the extension and runtime use matching configuration, certificates, and pin; keep the browser extension and runtime upgraded together. See [installation verification](../docs/INSTALL-VERIFICATION.md) and [v3.0.1 release notes](../docs/RELEASE-v3.0.1.md) for version-specific results.
+The popup displays Broker connection state and a recovery hint. Check that the extension and runtime use matching configuration, certificates, and pin; keep the browser extension and runtime upgraded together. See [installation verification](../docs/INSTALL-VERIFICATION.md) and [v3.1.0 release notes](../docs/RELEASE-v3.1.0.md) for version-specific results.

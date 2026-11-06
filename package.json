@@ -1,6 +1,6 @@
 {
   "name": "@mindcastleplayground/tether",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "private": true,
   "description": "Install Tether browser MCP and skills for local agents",
   "type": "module",

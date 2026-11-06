@@ -28,11 +28,13 @@
 ## 获取目标页面
 
 1. 新任务使用 `newGroup`。用用户提供的目标 URL 调用 `requestSession({mode:"newGroup",url:"https://..."})`；只有在空白任务页面有用时才省略 `url`。
-2. 用户指定已有标签页时使用 `attachExisting`。启用自动访问后，调用 `availableTabs({})` 并选择标题/URL 匹配的标签页。将其数字 `tabId` 传给 `requestSession({mode:"attachExisting",tabId})`。如果可能有多个匹配项，先确认用户指的是哪一个，再操作。
+2. 用户指定已有标签页时使用 `attachExisting`。同时启用自动批准和直接接管后，调用 `availableTabs({})` 并选择标题/URL 匹配的标签页。将其数字 `tabId` 传给 `requestSession({mode:"attachExisting",tabId})`。如果可能有多个匹配项，先确认用户指的是哪一个，再操作。
 3. 自动批准生效时，`requestSession` 会直接返回 `status:"approved"` 及 `sessionId`、`pages`、`groupId`；直接使用这些标识符，无需轮询 `approvalStatus`（轮询仍然兼容）。浏览器的 `tabId` 与不透明的 `pageId` 是不同标识符。
 4. 结果为 `pending` 时，请告知用户打开 Tether 工具栏弹窗并批准/选择标签页，然后按适合任务的有限等待时间轮询 `approvalStatus({pendingId})`。请求会在 120 秒后过期。用户拒绝后，请求即告结束；不要悄悄重新请求来绕过拒绝。过期后，仅在用户仍希望访问时续请求。
 
-自动批准默认启用：已认证客户端可以创建任务组并附加到指定的现有 HTTP(S) 标签页。关闭弹窗开关后，`availableTabs` 禁止使用，必须在弹窗中选择现有页面。开关保存在 `chrome.storage.local`，扩展后台重新加载后仍保持原值。关闭开关不会撤销活动会话；可在弹窗中单独撤销会话。公开的 MCP/SDK 方法无法批准请求或更改此策略。
+自动批准默认启用：已认证客户端可以创建任务组并附加到指定的现有 HTTP(S) 标签页。关闭自动批准总开关后，`availableTabs` 禁止使用，必须在弹窗中选择现有页面。开关保存在 `chrome.storage.local`，扩展后台重新加载后仍保持原值。关闭开关不会撤销活动会话；可在弹窗中单独撤销会话。公开的 MCP/SDK 方法无法批准请求或更改此策略。
+
+可在 `requestSession` 中传入 `groupName`（1–80 字符，不含控制字符，首尾空白会移除）。扩展中的“智能体命名标签组”开关启用时，新建的任务组使用该名称；关闭时使用默认名称。不会重命名用户已有组。“直接接管标签页”关闭时，请求需要人工批准，`availableTabs` 不可用；自动批准总开关与策略 `ask` 仍然生效。两个开关默认启用并保存到本机，切换只影响后续请求或新建任务组。
 
 ## 阅读、操作并验证
 
@@ -53,7 +55,7 @@
 | --- | --- | --- |
 | `capabilities` | `{}` | 检查桥接就绪状态和支持的方法 |
 | `availableTabs` | `{}` | 自动访问启用时发现现有 HTTP(S) 标签页 |
-| `requestSession` | `{mode,url?,tabId?}` | 请求 `newGroup` 或 `attachExisting` |
+| `requestSession` | `{mode,url?,tabId?,groupName?}` | 请求 `newGroup` 或 `attachExisting` |
 | `approvalStatus` | `{pendingId}` | 获取审批状态和已授权标识符 |
 | `listTabs` | `{sessionId}` | 获取当前已授权的 `pages` |
 | `network` | `{sessionId,pageId,op,requestId?,url?,type?,offset?,limit?,maxChars?}` | `start/list/detail/body/stop/clear` 网络采集；见 [SDK 用法](references/sdk.zh-CN.md) |

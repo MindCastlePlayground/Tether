@@ -29,11 +29,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/launchers.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register.ps1
 ```
 
-仓库有意不提交 lockfile；使用 `npm install`（或 `npm install --package-lock=false`），npm 会按本机配置的 registry/镜像解析依赖。发布版本使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。根包当前版本为 `3.0.1`。
+仓库有意不提交 lockfile；使用 `npm install`（或 `npm install --package-lock=false`），npm 会按本机配置的 registry/镜像解析依赖。发布版本使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。根包当前版本为 `3.1.0`。
 
 在现有浏览器中将 `extension/` 作为未打包扩展加载，并选择包含 `manifest.json` 的目录。每次初始化都会生成自己的扩展身份。运行本地构建的 Broker 时，使用本地 runtime 目录中生成的可执行文件。可用 `node scripts/fixture.mjs` 启动测试页。
 
 推荐使用仓库根目录的 Tether CLI 安装并配置 Agent，流程见[安装指南](../docs/INSTALL.zh-CN.md)。加载扩展后会启用默认的 `auto` Broker 管理。MCP 和 Native Host 可为同一 runtime 启动 Broker；共享 runtime 模式为 `off` 时，MCP 不会再次启动。生命周期探测与重试说明见 [v1.0.0 发布说明](../docs/RELEASE-v1.0.0.zh-CN.md)。
+
+## 任务组命名与现有标签页
+
+`requestSession({mode:"newGroup",url:"https://example.com",groupName:"资料检索"})` 在扩展的“智能体命名标签组”开关开启时使用指定组名。名称支持 1–80 字符，不含控制字符，首尾空白会移除；关闭命名或未传名称时沿用默认名称。同名组不会因此获得额外授权。
+
+接管现有页面时，先调用 `availableTabs({})`，再调用 `requestSession({mode:"attachExisting",tabId})`。自动批准总开关和“直接接管标签页”均开启时才直接授权，否则在扩展中批准待处理请求。策略 `ask` 始终要求人工审批。关闭直接接管也会禁用 `availableTabs`。两个新开关默认开启并保存到本机，影响后续请求或任务组创建，已有会话的授权保持有效。
+
+现有标签页保留 URL、组和标题，释放会话后仍然打开。`groupName` 仅用于 Tether 新建的任务组，包括接管会话稍后通过 `createTab` 创建的独立任务组。
 
 ## SDK 使用
 
@@ -82,4 +90,4 @@ try {
 
 ## 故障排查
 
-弹窗会显示 Broker 连接状态和恢复提示。检查扩展与 runtime 是否使用匹配的配置、证书和 pin；升级时应同时更新浏览器扩展和 runtime。各版本结果见[安装验收记录](../docs/INSTALL-VERIFICATION.zh-CN.md)和 [v3.0.1 发布说明](../docs/RELEASE-v3.0.1.zh-CN.md)。
+弹窗会显示 Broker 连接状态和恢复提示。检查扩展与 runtime 是否使用匹配的配置、证书和 pin；升级时应同时更新浏览器扩展和 runtime。各版本结果见[安装验收记录](../docs/INSTALL-VERIFICATION.zh-CN.md)和 [v3.1.0 发布说明](../docs/RELEASE-v3.1.0.zh-CN.md)。

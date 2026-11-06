@@ -54,7 +54,7 @@ class FakeChrome {
       focused: [],
       update: async (windowId, info) => { this.windows.focused.push([windowId, info]); return { id: windowId, ...info }; }
     };
-    this.tabGroups = { onUpdated: new Event(), update: async id => ({ id }) };
+    this.tabGroups = { updates: [], onUpdated: new Event(), update: async (id, changes) => { this.tabGroups.updates.push({ id, ...changes }); return { id }; } };
     this.debugger = {
       calls: [], onEvent: new Event(), onDetach: new Event(), attach: async target => this.debugger.calls.push(['attach', target]),
       detach: async target => this.debugger.calls.push(['detach', target]),
@@ -386,6 +386,98 @@ test('a notification resolving after disconnect is cleared and leaves no lingeri
   assert.ok(api.notifications.cleared.includes(pendingId));
   assert.equal(c.notices.size, 0);
   assert.equal(c.pending.size, 0);
+});
+
+test('name and direct-attach preferences default on, persist, broadcast, and reload', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  assert.equal(c.nameGroups, true);
+  assert.equal(c.directAttach, true);
+  const updates = [];
+  c.popups.add({ postMessage: value => updates.push(value) });
+  const port = { postMessage: value => updates.push(value) };
+  const sender = { url: api.runtime.getURL('popup.html') };
+  await c.popup({ type: PopupMessage.SetNameGroups, enabled: false }, sender, port);
+  await c.popup({ type: PopupMessage.SetDirectAttach, enabled: false }, sender, port);
+  assert.equal(api.storage.data[Storage.NameGroups], false);
+  assert.equal(api.storage.data[Storage.DirectAttach], false);
+  assert.deepEqual(updates.slice(-4), [
+    { type: PopupMessage.NameGroups, enabled: false }, { type: PopupMessage.NameGroups, enabled: false },
+    { type: PopupMessage.DirectAttach, enabled: false }, { type: PopupMessage.DirectAttach, enabled: false }
+  ]);
+  const restored = new ExtensionController(api);
+  await restored.load();
+  assert.equal(restored.nameGroups, false);
+  assert.equal(restored.directAttach, false);
+});
+
+test('group names are validated and control names for new and client-created groups', async () => {
+  const api = new FakeChrome();
+  const groupUpdates = [];
+  const updateGroup = api.tabGroups.update;
+  api.tabGroups.update = async (id, changes) => { groupUpdates.push({ id, ...changes }); return updateGroup(id, changes); };
+  const c = new ExtensionController(api);
+  for (const groupName of ['', '  ', 'x'.repeat(81), 'bad\u0000name', 'bad\u001fname', 'bad\u007fname']) {
+    await assert.rejects(c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'newGroup', groupName }), /invalid_request/);
+  }
+  const named = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'newGroup', groupName: '  Research  ' });
+  assert.equal(named.groupName, 'Research');
+  assert.deepEqual(groupUpdates[0], { id: named.groupId, title: 'Research' });
+  const session = c.sessions.get(named.sessionId);
+  await c.dispatch(Wire.CreateTab, { clientId: clientA, sessionId: named.sessionId, seq: 1 });
+  assert.equal(groupUpdates.length, 1);
+  await c.release({ session });
+
+  const attached = await c.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'attachExisting', tabId: 1, groupName: 'Client pages' });
+  await c.dispatch(Wire.CreateTab, { clientId: clientB, sessionId: attached.sessionId, seq: 1 });
+  assert.deepEqual(groupUpdates[1], { id: 9, title: 'Client pages' });
+
+  const unnamedApi = new FakeChrome();
+  const unnamed = new ExtensionController(unnamedApi);
+  unnamed.nameGroups = false;
+  const result = await unnamed.dispatch(Wire.SessionRequest, { clientId: clientB, mode: 'newGroup', groupName: 'Ignored' });
+  assert.match(unnamedApi.tabGroups.updates[0].title, new RegExp(`^${Limits.GroupPrefix}`));
+});
+
+test('existing user groups are never renamed and their tabs survive release', async () => {
+  const api = new FakeChrome();
+  api.tabs.data.get(1).groupId = 44;
+  const c = new ExtensionController(api);
+  const result = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1, groupName: 'Task' });
+  assert.equal(result.status, Wire.Approved);
+  assert.equal(api.tabGroups.updates.length, 0);
+  await c.dispatch(Wire.Release, { clientId: clientA, sessionId: result.sessionId });
+  assert.equal(api.tabs.data.has(1), true);
+  assert.equal(api.tabs.data.get(1).groupId, 44);
+});
+
+test('direct attachment off keeps specified-tab requests pending for manual approval', async () => {
+  const api = new FakeChrome();
+  const c = new ExtensionController(api);
+  c.directAttach = false;
+  const request = await c.dispatch(Wire.SessionRequest, { clientId: clientA, mode: 'attachExisting', tabId: 1 });
+  assert.equal(request.status, Wire.Pending);
+  assert.equal(api.notifications.created.length, 1);
+  await assert.rejects(c.dispatch(Wire.AvailableTabs, { clientId: clientA }), /not_authorized/);
+  await c.approve(request.pendingId, 1);
+  assert.equal((await c.approvalStatus({ clientId: clientA, pendingId: request.pendingId })).status, Wire.Approved);
+  assert.equal(api.tabGroups.updates.length, 0);
+  await c.dispatch(Wire.Release, { clientId: clientA, sessionId: c.results.get(request.pendingId).value.sessionId });
+  assert.equal(api.tabs.data.has(1), true);
+});
+
+test('manual policy and explicit ask notify even when direct attachment is enabled', async () => {
+  for (const configure of [c => { c.autoApprove = false; }, c => {}]) {
+    const api = new FakeChrome();
+    const c = new ExtensionController(api);
+    configure(c);
+    const request = await c.dispatch(Wire.SessionRequest, {
+      clientId: clientA, mode: 'attachExisting', tabId: 1, ...(c.autoApprove ? { _ask: true } : {})
+    });
+    assert.equal(request.status, Wire.Pending);
+    assert.equal(api.notifications.created.length, 1);
+    assert.equal(api.tabs.data.size, 1);
+  }
 });
 
 test('an unusable attach url still reaches pending approval', async () => {

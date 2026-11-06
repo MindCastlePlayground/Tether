@@ -6,7 +6,7 @@ export class Language {
 export class McpText {
   static readonly TOOLS = {
     en: {
-      requestSession: "Request a session under the extension policy; specify tabId to attach an existing tab",
+      requestSession: "Request a session under the extension policy; specify groupName for task groups or tabId to attach an existing tab. Extension switches control naming and direct attachment; manual approval may be required.",
       approvalStatus: "Check a pending session request",
       listTabs: "List session tabs",
       createTab: "Create a tab in the session",
@@ -24,7 +24,7 @@ export class McpText {
       availableTabs: "List existing HTTP(S) tabs when automatic access is enabled",
     },
     "zh-CN": {
-      requestSession: "按扩展程序策略请求会话；指定 tabId 可连接现有标签页",
+      requestSession: "按扩展策略请求会话；groupName 指定任务组名，tabId 指定接管的现有标签页。命名与直接接管由扩展开关控制，可能需要手动批准。",
       approvalStatus: "检查待处理的会话请求",
       listTabs: "列出会话中的标签页",
       createTab: "在会话中创建标签页",

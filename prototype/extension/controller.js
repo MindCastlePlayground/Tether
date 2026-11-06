@@ -20,6 +20,8 @@ export class ExtensionController {
     this.dialogs = new Map();
     this.approving = new Set();
     this.autoApprove = true;
+    this.nameGroups = true;
+    this.directAttach = true;
     this.ready = null;
     this.stopped = false;
     this.timer = null;
@@ -85,9 +87,13 @@ export class ExtensionController {
       const data = await this.api.storage.local.get(Storage.AutoApprove);
       const broker = await this.api.storage.local.get(Storage.BrokerMode);
       const notice = await this.api.storage.local.get(Storage.Notify);
+      const names = await this.api.storage.local.get(Storage.NameGroups);
+      const direct = await this.api.storage.local.get(Storage.DirectAttach);
       if (typeof data?.[Storage.AutoApprove] === 'boolean') this.autoApprove = data[Storage.AutoApprove];
       if ([Broker.Auto, Broker.On, Broker.Off].includes(broker?.[Storage.BrokerMode])) this.brokerMode = broker[Storage.BrokerMode];
       if (typeof notice?.[Storage.Notify] === 'boolean') this.notifyNew = notice[Storage.Notify];
+      if (typeof names?.[Storage.NameGroups] === 'boolean') this.nameGroups = names[Storage.NameGroups];
+      if (typeof direct?.[Storage.DirectAttach] === 'boolean') this.directAttach = direct[Storage.DirectAttach];
     } catch { /* Keep the default when preferences are unavailable. */ }
     this.updateBadge();
   }
@@ -141,13 +147,15 @@ export class ExtensionController {
 
   pendingItems() {
     return [...this.pending].map(([pendingId, x]) => ({
-      pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires
+      pendingId, clientId: x.clientId, mode: x.mode, url: x.url, expires: x.expires,
+      ...(x.groupName ? { groupName: x.groupName } : {})
     }));
   }
 
   sessionItems() {
     return [...this.sessions.values()].map(s => ({
       sessionId: s.sessionId, clientId: s.clientId, mode: s.mode, started: s.started,
+      ...(s.groupName ? { groupName: s.groupName } : {}),
       pages: [...s.pages].map(id => {
         const p = this.pages.get(id);
         return p ? {
@@ -238,7 +246,7 @@ export class ExtensionController {
     if (method === Wire.AvailableTabs) {
       this.client(p);
       await this.ready;
-      if (!this.autoApprove) throw new Error(Failure.Forbidden);
+      if (!this.autoApprove || !this.directAttach) throw new Error(Failure.Forbidden);
       const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });
       return { tabs: tabs.filter(t => /^https?:\/\//i.test(t.url ?? '')).map(t => ({
         tabId: t.id, title: t.title ?? '', url: t.url ?? '', groupId: t.groupId ?? -1
@@ -270,21 +278,36 @@ export class ExtensionController {
     throw new Error(Failure.Unsupported);
   }
 
+  canAutoApprove(p) {
+    return p._ask !== true && this.autoApprove &&
+      (p.mode === SessionMode.NewGroup || (this.directAttach && p.mode === SessionMode.AttachExisting && p.tabId !== undefined));
+  }
+
+  groupTitle(name) {
+    return this.nameGroups && name ? name : `${Limits.GroupPrefix}${this.id().slice(0, 6)}`;
+  }
+
   async requestSession(p) {
     this.client(p);
     await this.ready;
     if ([...this.pending.values()].some(x => x.clientId === p.clientId)) throw new Error(Failure.Busy);
-    if (!['newGroup', 'attachExisting'].includes(p.mode)) throw new Error(Failure.Invalid);
-    if (p.tabId !== undefined && !Number.isInteger(p.tabId)) throw new Error(Failure.Invalid);
+    if (![SessionMode.NewGroup, SessionMode.AttachExisting].includes(p.mode)) throw new Error(Failure.Invalid);
+    if (p.tabId !== undefined && (!Number.isInteger(p.tabId) || p.tabId < 0)) throw new Error(Failure.Invalid);
+    let groupName;
+    if (p.groupName !== undefined) {
+      if (typeof p.groupName !== 'string' || !p.groupName.trim() ||
+          p.groupName.length > SessionMode.NameLimit || SessionMode.InvalidName.test(p.groupName)) throw new Error(Failure.Invalid);
+      groupName = p.groupName.trim();
+    }
     let url = null;
     if (p.mode === SessionMode.NewGroup) url = this.safeUrl(p.url ?? BrowserAction.NewTab, true);
     else if (typeof p.url === 'string') { try { url = this.safeUrl(p.url, false); } catch { url = null; } }
     const pendingId = this.id();
-    this.pending.set(pendingId, { clientId: p.clientId, mode: p.mode, url, expires: this.clock() + Limits.PendingMs });
+    this.pending.set(pendingId, { clientId: p.clientId, mode: p.mode, url, groupName, expires: this.clock() + Limits.PendingMs });
     this.statusSet(pendingId, p.clientId, { status: Wire.Pending });
     this.publishPending();
     await this.notify(pendingId, p);
-    if (p._ask !== true && this.autoApprove && (p.mode === 'newGroup' || (p.mode === 'attachExisting' && p.tabId !== undefined))) {
+    if (this.canAutoApprove(p)) {
       try { await this.approve(pendingId, p.tabId); }
       catch { if (this.pending.has(pendingId)) this.deny(pendingId); }
     }
@@ -294,7 +317,7 @@ export class ExtensionController {
   }
 
   async notify(id, p) {
-    if (this.autoApprove || !this.notifyNew || !this.pending.has(id)) return;
+    if (this.canAutoApprove(p) || !this.notifyNew || !this.pending.has(id)) return;
     this.notices.add(id);
     await this.locale.load();
     if (!this.pending.has(id)) return;
@@ -367,6 +390,20 @@ export class ExtensionController {
         this.notifyNew = msg.enabled === true;
         try { await this.api.storage.local.set({ [Storage.Notify]: this.notifyNew }); } catch { /* Retain the choice in memory. */ }
         port.postMessage({ type: PopupMessage.Notify, enabled: this.notifyNew });
+      } else if ([PopupMessage.NameGroups, PopupMessage.DirectAttach].includes(msg?.type)) {
+        await this.ready;
+        port.postMessage({ type: msg.type, enabled: msg.type === PopupMessage.NameGroups ? this.nameGroups : this.directAttach });
+      } else if ([PopupMessage.SetNameGroups, PopupMessage.SetDirectAttach].includes(msg?.type)) {
+        await this.ready;
+        const names = msg.type === PopupMessage.SetNameGroups;
+        const enabled = msg.enabled === true;
+        await this.api.storage.local.set({ [names ? Storage.NameGroups : Storage.DirectAttach]: enabled });
+        if (names) this.nameGroups = enabled;
+        else this.directAttach = enabled;
+        for (const target of new Set([...this.popups, port])) {
+          try { target.postMessage({ type: names ? PopupMessage.NameGroups : PopupMessage.DirectAttach, enabled }); }
+          catch { this.popups.delete(target); }
+        }
       } else if (msg?.type === PopupMessage.Tabs) {
         const tabs = await this.api.tabs.query({ url: ['http://*/*', 'https://*/*'] });
         port.postMessage({ type: msg.type, pendingId: msg.pendingId, tabs: tabs.map(t => ({
@@ -408,6 +445,7 @@ export class ExtensionController {
     let groupId = null;
     let owned = false;
     let createdSessionId = null;
+    let groupName;
     try {
       if (p.mode === 'newGroup') {
         tab = await this.api.tabs.create({ url: BrowserAction.NewTab, active: false });
@@ -415,7 +453,8 @@ export class ExtensionController {
         this.validPending(id,p);
         const groups = await this.api.tabs.group({ tabIds: [tab.id] });
         groupId = groups;
-        await this.api.tabGroups.update(groupId, { title: `${Limits.GroupPrefix}${this.id().slice(0, 6)}` });
+        groupName = this.groupTitle(p.groupName);
+        await this.api.tabGroups.update(groupId, { title: groupName });
         tab = await this.api.tabs.get(tab.id);
         const until = this.clock() + BrowserAction.BlankWait;
         while (!tab.url && tab.pendingUrl === BrowserAction.NewTab && this.clock() < until) {
@@ -439,6 +478,7 @@ export class ExtensionController {
       const pageId = this.id();
       const now = this.clock();
       const session = { clientId: p.clientId, sessionId, mode: p.mode, groupId,
+        groupName, requestedGroupName: p.groupName,
         managedGroupId: p.mode === 'newGroup' ? groupId : null,
         pages: new Set(), owned: new Set(), seq: 0, started: now, expires: now + Limits.LeaseMs };
       const page = { clientId: p.clientId, sessionId, pageId, tabId: tab.id, groupId,
@@ -461,7 +501,7 @@ export class ExtensionController {
       page.url = finalTab.url;
       page.title = finalTab.title ?? '';
       this.results.set(id, { clientId: p.clientId, status: Wire.Approved,
-        value: { sessionId, pages: [{ pageId, url: finalTab.url }], groupId } });
+        value: { sessionId, pages: [{ pageId, url: finalTab.url }], groupId, ...(groupName ? { groupName } : {}) } });
       this.pending.delete(id);
       this.clearNotice(id);
       this.publishPending();
@@ -532,8 +572,10 @@ export class ExtensionController {
       let groupId = session.managedGroupId;
       if (groupId == null || groupId < 0) {
         groupId = await this.api.tabs.group({ tabIds: [tab.id] });
-        await this.api.tabGroups.update(groupId, { title: `${Limits.GroupPrefix}${this.id().slice(0, 6)}` });
+        const groupName = this.groupTitle(session.requestedGroupName);
+        await this.api.tabGroups.update(groupId, { title: groupName });
         session.managedGroupId = groupId;
+        session.groupName = groupName;
       } else await this.api.tabs.group({ tabIds: [tab.id], groupId });
       this.grant({clientId:session.clientId,sessionId:session.sessionId});
       let current=await this.api.tabs.get(tab.id);

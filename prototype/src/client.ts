@@ -35,7 +35,7 @@ export class BridgeClient {
     });
   }
   close():void{this.ws?.close();}
-  requestSession(p:{mode:'newGroup'|'attachExisting';url?:string;tabId?:number}){return this.call('requestSession',p);}
+  requestSession(p:{mode:'newGroup'|'attachExisting';url?:string;tabId?:number;groupName?:string}){return this.call('requestSession',p);}
   availableTabs(){return this.call('availableTabs',{});}
   approvalStatus(p:{pendingId:string}){return this.call('approvalStatus',p);}
   listTabs(p:{sessionId:string}){return this.call('listTabs',p);}

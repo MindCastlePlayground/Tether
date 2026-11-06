@@ -88,6 +88,18 @@ export class Text {
   static PolicyAllow = 'policyAllow';
   static PolicyDeny = 'policyDeny';
   static PolicySummary = 'policySummary';
+  static DirectAttach = 'directAttach';
+  static DirectAttachShort = 'directAttachShort';
+  static DirectAttachDesc = 'directAttachDesc';
+  static NameGroups = 'nameGroups';
+  static NameGroupsShort = 'nameGroupsShort';
+  static NameGroupsDesc = 'nameGroupsDesc';
+  static GroupName = 'groupName';
+  static GroupNameIgnored = 'groupNameIgnored';
+  static PolicyDirectAttachOn = 'policyDirectAttachOn';
+  static PolicyDirectAttachOff = 'policyDirectAttachOff';
+  static PolicyNameGroupsOn = 'policyNameGroupsOn';
+  static PolicyNameGroupsOff = 'policyNameGroupsOff';
 }
 
 export class ErrorText {

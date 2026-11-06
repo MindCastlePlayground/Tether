@@ -35,6 +35,9 @@ export class Wire {
 
 export class SessionMode {
   static NewGroup = 'newGroup';
+  static AttachExisting = 'attachExisting';
+  static NameLimit = 80;
+  static InvalidName = /[\u0000-\u001f\u007f]/;
 }
 
 export class PopupMessage {
@@ -55,6 +58,10 @@ export class PopupMessage {
   static SetBrokerMode = 'popup.setBrokerMode';
   static Notify = 'popup.notify';
   static SetNotify = 'popup.setNotify';
+  static NameGroups = 'popup.nameGroups';
+  static SetNameGroups = 'popup.setNameGroups';
+  static DirectAttach = 'popup.directAttach';
+  static SetDirectAttach = 'popup.setDirectAttach';
 }
 
 export class Storage {
@@ -62,6 +69,8 @@ export class Storage {
   static BrokerMode = 'brokerMode';
   static Notify = 'notify';
   static Reloaded = 'reloadedFor';
+  static NameGroups = 'nameGroups';
+  static DirectAttach = 'directAttach';
 }
 
 export class Broker {

@@ -162,9 +162,10 @@ export class Probe {
   static PATH = 'PATH';
   static PATHEXT = 'PATHEXT';
   static CODEX_HOME = 'CODEX_HOME';
+  static DSH_HOME = 'DSH_HOME';
   static CONFIG_HOME = 'XDG_CONFIG_HOME';
-  static BIN = { codex: 'codex', claude: 'claude', opencode: 'opencode', gemini: 'gemini' };
-  static HOME = { codex: '.codex', claude: '.claude', cursor: '.cursor', gemini: '.gemini', config: '.config', opencode: 'opencode' };
+  static BIN = { codex: 'codex', claude: 'claude', opencode: 'opencode', gemini: 'gemini', dsh: 'dsh' };
+  static HOME = { codex: '.codex', claude: '.claude', cursor: '.cursor', gemini: '.gemini', dsh: '.dsh', config: '.config', opencode: 'opencode' };
 }
 
 export class Install {
@@ -176,7 +177,7 @@ export class Install {
   static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
-  static VERSION = '3.1.0';
+  static VERSION = '3.2.0';
   static RETRIES = 5;
   static RETRY_MS = 2000;
   static SERVER = 'tether';

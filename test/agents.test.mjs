@@ -23,6 +23,7 @@ test('all agent paths resolve for project and user scopes', () => {
     cursor: ['.cursor/mcp.json', '.cursor/skills/tether-browser'],
     opencode: ['opencode.json', '.opencode/skills/tether-browser'],
     gemini: ['.gemini/settings.json', '.gemini/skills/tether-browser'],
+    dsh: ['.dsh/cordis.patch.yml', '.dsh/skills/tether-browser'],
   };
   for (const n of Agents.names) {
     const p = Agents.paths(n, 'project', c);

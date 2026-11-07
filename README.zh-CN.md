@@ -45,7 +45,7 @@ Tether 面向个人浏览器任务和小团队流程，适合 Agent 或脚本在
 npm install --package-lock=false
 node bin/tether.mjs install
 ```
-版本号使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。详见 [3.1.0 发布说明](docs/RELEASE-v3.1.0.zh-CN.md)。
+版本号使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。详见 [3.2.0 发布说明](docs/RELEASE-v3.2.0.zh-CN.md)。
 安装器会自动检测受支持的 Agent 宿主，一条命令完成 runtime 准备与配置，并打开扩展管理页和扩展目录。安装器本身不启动 Broker；加载扩展后默认由 `auto` 模式管理，每 30 秒探测一次。MCP 与 Native Host 都可拉起同一 runtime 的 Broker；共享 runtime 模式为 `off` 时，MCP 不会重新拉起。默认策略全放行，需要精细控制时可用 `tether policy` 添加 allow/deny/ask 规则。生成的 runtime 凭据与私钥应留在本机。
 
 ## 第一次浏览器任务
@@ -99,7 +99,7 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 - [验收摘要](prototype/VERIFICATION.zh-CN.md) / [Verification summary](prototype/VERIFICATION.md)。
 
 - [开发与发布](docs/DEVELOPMENT.zh-CN.md) — `dev` 开发集成与 `main` 发布流程。
-- [Tether 3.1.0 发布说明](docs/RELEASE-v3.1.0.zh-CN.md) / [English](docs/RELEASE-v3.1.0.md)。
+- [Tether 3.2.0 发布说明](docs/RELEASE-v3.2.0.zh-CN.md) / [English](docs/RELEASE-v3.2.0.md)。
 
 ## Agent Skill
 

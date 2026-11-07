@@ -7,7 +7,7 @@ export class Sandbox {
   static ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-home-'));
   static VARS = ['USERPROFILE', 'HOME', 'LOCALAPPDATA', 'APPDATA'];
   static HOME = path.join(Sandbox.ROOT, 'home');
-  static UNSET = ['CODEX_HOME', 'XDG_CONFIG_HOME'];
+  static UNSET = ['CODEX_HOME', 'XDG_CONFIG_HOME', 'DSH_HOME'];
   static apply() {
     for (const name of Sandbox.VARS) process.env[name] = path.join(Sandbox.ROOT, name);
     process.env.HOME = process.env.USERPROFILE = Sandbox.HOME;

@@ -67,7 +67,7 @@ export class Wizard {
     if (mode === Choice.CUSTOM) await Wizard.custom(ui, env, t, args);
     return args;
   }
-  static names = { codex: 'Codex', claude: 'Claude Code', cursor: 'Cursor', opencode: 'OpenCode', gemini: 'Gemini CLI' };
+  static names = { codex: 'Codex', claude: 'Claude Code', cursor: 'Cursor', opencode: 'OpenCode', gemini: 'Gemini CLI', dsh: 'DeepSeek Harness (dsh)' };
   static async custom(ui, env, t, args) {
     // Project scope is the rare case, so it only appears here.
     const scope = await ui.pick(Step.SCOPE, t.scope, [Scope.USER, Scope.PROJECT].map(value => Wizard.item(value, t.scopes[value])), Scope.DEFAULT);

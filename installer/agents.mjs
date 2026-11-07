@@ -5,9 +5,10 @@ import { parse as parseToml } from 'smol-toml';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenCode, Probe } from './constants.mjs';
 import { Conflict } from './files.mjs';
+import { Dsh } from './dsh.mjs';
 
 class Names {
-  static all = ['codex', 'claude', 'cursor', 'opencode', 'gemini'];
+  static all = ['codex', 'claude', 'cursor', 'opencode', 'gemini', 'dsh'];
   static key = 'tether';
 }
 
@@ -18,8 +19,8 @@ class ServerKeys {
 }
 
 class Paths {
-  static dirs = { codex: '.agents/skills', claude: '.claude/skills', cursor: '.cursor/skills', opencode: '.opencode/skills', gemini: '.gemini/skills' };
-  static project = { codex: '.codex/config.toml', claude: '.mcp.json', cursor: '.cursor/mcp.json', opencode: ['opencode.jsonc', 'opencode.json'], gemini: '.gemini/settings.json' };
+  static dirs = { codex: '.agents/skills', claude: '.claude/skills', cursor: '.cursor/skills', opencode: '.opencode/skills', gemini: '.gemini/skills', dsh: '.dsh/skills' };
+  static project = { codex: '.codex/config.toml', claude: '.mcp.json', cursor: '.cursor/mcp.json', opencode: ['opencode.jsonc', 'opencode.json'], gemini: '.gemini/settings.json', dsh: '.dsh/cordis.patch.yml' };
 }
 
 class Config {
@@ -105,7 +106,7 @@ export class Detect {
   static find(env, home, exists) {
     const hit = bin => Detect.onPath(bin, env, exists);
     const has = (...parts) => exists(path.join(home, ...parts));
-    const [codex, claude, cursor, opencode, gemini] = Names.all;
+    const [codex, claude, cursor, opencode, gemini, dsh] = Names.all;
     const names = [];
     const codexHome = env[Probe.CODEX_HOME];
     const configHome = env[Probe.CONFIG_HOME];
@@ -114,6 +115,7 @@ export class Detect {
     if (has(Probe.HOME.cursor)) names.push(cursor);
     if (hit(Probe.BIN.opencode) || (configHome && exists(path.join(configHome, Probe.HOME.opencode))) || has(Probe.HOME.config, Probe.HOME.opencode)) names.push(opencode);
     if (hit(Probe.BIN.gemini) || has(Probe.HOME.gemini)) names.push(gemini);
+    if (hit(Probe.BIN.dsh) || (env[Probe.DSH_HOME] && exists(env[Probe.DSH_HOME])) || has(Probe.HOME.dsh)) names.push(dsh);
     return names;
   }
 }
@@ -126,6 +128,7 @@ export class Agents {
     const project = path.resolve(context.project);
     const user = path.resolve(context.userHome);
     const codex = path.resolve(context.codexHome || path.join(user, '.codex'));
+    const dsh = path.resolve(context.dshHome || path.join(user, '.dsh'));
     const config = path.resolve(context.configHome || path.join(user, '.config'));
     let base, file;
     if (scope === 'project') {
@@ -135,19 +138,20 @@ export class Agents {
       else file = path.join(base, file);
     } else {
       base = user;
-      file = { codex: path.join(codex, 'config.toml'), claude: path.join(user, '.claude.json'), cursor: path.join(user, '.cursor', 'mcp.json'), opencode: path.join(config, 'opencode', 'opencode.jsonc'), gemini: path.join(user, '.gemini', 'settings.json') }[name];
+      file = { codex: path.join(codex, 'config.toml'), claude: path.join(user, '.claude.json'), cursor: path.join(user, '.cursor', 'mcp.json'), opencode: path.join(config, 'opencode', 'opencode.jsonc'), gemini: path.join(user, '.gemini', 'settings.json'), dsh: path.join(dsh, 'cordis.patch.yml') }[name];
       if (name === 'opencode') {
         const json = path.join(config, 'opencode', 'opencode.json');
         if (fs.existsSync(json)) file = json;
         if (fs.existsSync(path.join(config, 'opencode', 'opencode.jsonc'))) file = path.join(config, 'opencode', 'opencode.jsonc');
       }
     }
-    const skillRoot = scope === 'project' ? path.join(project, Paths.dirs[name]) : name === 'opencode' ? path.join(config, 'opencode', 'skills') : path.join(user, Paths.dirs[name]);
+    const skillRoot = scope === 'project' ? path.join(project, Paths.dirs[name]) : name === 'opencode' ? path.join(config, 'opencode', 'skills') : name === 'dsh' ? path.join(dsh, 'skills') : path.join(user, Paths.dirs[name]);
     return { config: path.resolve(file), skill: path.resolve(skillRoot, 'tether-browser'), format: path.extname(file).slice(1) };
   }
   static edit(name, text, entry, force = false) {
     if (!Names.all.includes(name)) throw new Error(`Unknown agent: ${name}`);
     if (typeof text !== 'string' || !Config.object(entry) || typeof entry.command !== 'string' || !Array.isArray(entry.args) || !Config.object(entry.env)) throw new Error('Invalid configuration input');
+    if (name === 'dsh') return Dsh.edit(text, entry, force);
     if (name === 'codex') return Config.toml(text.trim() ? text : '', entry, force);
     return Config.edit(name, text.trim() ? text : '{}\n', entry, force);
   }

@@ -48,7 +48,7 @@ test('all host plans copy complete skill and nonsecret installed location', () =
   const root = Fixture.root();
   const options = Fixture.options(root);
   const plans = Cli.plans(options,options.runtime);
-  assert.equal(plans.length,5);
+  assert.equal(plans.length,Agents.names.length);
   for (const plan of plans) {
     assert.equal(plan.skills.length, Files.entries(path.join(Cli.ROOT,'skills',Install.SKILL)).length + 1);
     for (const item of plan.skills) Files.write(item.file,item.text);
@@ -204,6 +204,7 @@ test('agent detection uses PATH, PATHEXT, and home directories', () => {
   files.add(path.join(home, Probe.HOME.cursor));
   files.add(path.join(home, Probe.HOME.config, Probe.HOME.opencode));
   files.add(path.join(alt, Probe.BIN.gemini) + '.PS1');
+  files.add(path.join(bin, Probe.BIN.dsh) + '.CMD');
   assert.deepEqual(Detect.find(env, home, exists), Agents.names);
   files = new Set([path.join(bin, 'cursor') + '.EXE']);
   assert.deepEqual(Detect.find(env, home, exists), []);

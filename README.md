@@ -17,8 +17,8 @@ The extension popup supports English and Simplified Chinese through Chrome local
 ## Features
 
 - [Messenger test sandbox](sandbox/README.md): autonomous extension testing through eight MCP tools, with container shell, Playwright, screenshots and unrestricted CDP inside a dedicated browser.
-- Network inspection (`network`): capture requests on an authorized page, inspect headers, payloads, response status and bodies, with URL/type filters and pagination.
-- Support tools (`diagnose`, `wait`, `assert`, `records`) report runtime state, wait for page conditions, and export up to 200 identity-isolated in-memory metadata records.
+- Network inspection (`network`): capture requests on an authorized page, inspect headers, payloads, response status and bodies, with URL/type filters and pagination. `op: "http"` returns the captured requests and responses as `.http` text.
+- Support tools (`diagnose`, `wait`, `assert`, `records`) report runtime state, wait for page conditions, and export up to 200 identity-isolated in-memory metadata records. `trace` keeps navigate, click, fill, wait and assert entries, including filled values. `preset` saves steps, exports a Playwright script, and runs a saved preset on an authorized page.
 - Page-scoped business tools handle file-input uploads, same-origin GET downloads, JavaScript dialogs, and explicitly selected popups. Uploads cap at 16 MiB per file; downloads cap at 16 MiB and do not capture arbitrary browser downloads.
 - Node.js and Python clients, plus a stdio MCP server.
 - Create a task tab group (`newGroup`) or attach to one explicitly selected existing HTTP(S) tab (`attachExisting`).
@@ -67,7 +67,7 @@ node bin/tether.mjs policy add --effect deny --actions fill,click,navigate --ori
 
 ## Network inspection
 
-Call `network` with `op: start` before triggering requests. It records up to 500 recent requests per page. Use `list` to find request IDs, `detail` for headers and metadata, `body` for paginated response content (continue with `nextOffset`), `stop` to retain results without continuing capture, and `clear` to discard them. Each call needs the authorized `sessionId` and `pageId`. Metadata may be truncated, and Chrome may evict response bodies. Capture covers the authorized page target and same-process frames; separate worker and out-of-process iframe (OOPIF) targets are outside the current bridge scope. Network records can contain cookies, authorization headers, and private payloads; handle them within the user's task and avoid logging them. Full CDP access in the Messenger sandbox applies only to its dedicated test browser.
+Call `network` with `op: start` before triggering requests. It records up to 500 recent requests per page. Use `list` to find request IDs, `detail` for headers and metadata, `body` for paginated response content (continue with `nextOffset`), `http` for the captured requests and responses as `.http` text, `stop` to retain results without continuing capture, and `clear` to discard them. Each call needs the authorized `sessionId` and `pageId`. Metadata may be truncated, and Chrome may evict response bodies. Capture covers the authorized page target and same-process frames; separate worker and out-of-process iframe (OOPIF) targets are outside the current bridge scope. Network records can contain cookies, authorization headers, and private payloads; handle them within the user's task and avoid logging them. Full CDP access in the Messenger sandbox applies only to its dedicated test browser.
 
 ## Troubleshooting and development
 

@@ -67,6 +67,9 @@ class Task {
 | `body` | `requestId`, `offset?`, `maxChars?` | 响应文本或 base64；默认 16000、最多 30000 字符；用 `nextOffset` 继续读取 |
 | `stop` | — | 停止采集，保留已记录数据 |
 | `clear` | — | 清空已记录数据 |
+| `http` | `offset?`, `limit?`, `maxChars?` | 已采集的请求和响应，`.http` 文本；默认 20 条，最多 20 条；每条响应正文默认 4000 字符 |
+
+`http` 为每条已采集的交换写一段：请求行、请求头、请求正文，然后是状态行、响应头和响应正文。缺失的正文在该段中记为 `# response` 说明。`offset` 和 `nextOffset` 用于翻页。该文件就是采集结果本身。
 
 从 `list` 获取请求 ID。响应正文依赖 Chrome 保留的已完成响应；内容缺失或被浏览器回收时会返回错误。二进制响应根据 `base64Encoded` 解码。网络数据可能包含 Cookie、认证头和私密正文，应在用户任务范围内使用并避免写入日志。`stop` 保留页面操作共用的调试连接；`release` 结束授权并清除采集状态。
 
@@ -91,7 +94,7 @@ class Task:
             client.close()
 ```
 
-通过 `call(method, params)` 使用相同的 request → approvalStatus → snapshot/html/action → release 流程；ref 是不透明值，必须来自新快照。调用保持顺序，避免在线程间共享实例。Node 和 Python 均以 `ClientError` 提供 `code` 与可选 JSON-RPC `rpcCode`。Python 辅助方法为 `diagnose()`、`wait(params)`、`assert_condition(params)`、`html(params)` 和 `records('export')`；Node 对应使用 `assert(params)` 和 `records({op:'export'})`。
+通过 `call(method, params)` 使用相同的 request → approvalStatus → snapshot/html/action → release 流程；ref 是不透明值，必须来自新快照。调用保持顺序，避免在线程间共享实例。Node 和 Python 均以 `ClientError` 提供 `code` 与可选 JSON-RPC `rpcCode`。Python 辅助方法为 `diagnose()`、`wait(params)`、`assert_condition(params)`、`html(params)`、`records('export')`、`trace(params)` 和 `preset(params)`；Node 对应使用 `assert(params)`、`records({op:'export'})`、`trace(params)` 和 `preset(params)`。
 
 ## 页面读取
 

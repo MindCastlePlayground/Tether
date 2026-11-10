@@ -17,8 +17,8 @@ Tether 面向个人浏览器任务和小团队流程，适合 Agent 或脚本在
 ## 功能
 
 - [信使测试沙箱](sandbox/README.md)：通过八个 MCP 工具无人值守测试扩展，提供容器命令、Playwright、截图和专用浏览器的完整 CDP 控制。
-- 网络流量检查（`network`）：监听已授权页面的请求，查看请求头、请求正文、响应状态和响应正文，按 URL/类型筛选与分页读取。
-- 支持工具（`diagnose`、`wait`、`assert`、`records`）可报告运行状态、等待页面条件，并导出最多 200 条按身份隔离的内存元数据。
+- 网络流量检查（`network`）：监听已授权页面的请求，查看请求头、请求正文、响应状态和响应正文，按 URL/类型筛选与分页读取。`op: "http"` 把已采集的请求和响应导出为 `.http` 文本。
+- 支持工具（`diagnose`、`wait`、`assert`、`records`）可报告运行状态、等待页面条件，并导出最多 200 条按身份隔离的内存元数据。`trace` 保留 navigate、click、fill、wait、assert 条目，包含填写值。`preset` 保存步骤、导出 Playwright 脚本，并在已授权页面上执行已保存的预设。
 - 页面业务工具支持文件输入框上传、同源 GET 下载、JavaScript 对话框以及显式选择的弹窗。上传每文件上限 16 MiB；下载上限 16 MiB，且不捕获任意浏览器下载。
 - 提供 Node.js、Python 客户端及 stdio MCP 服务。
 - 可新建任务标签组（`newGroup`），也可接管客户端明确指定的一个已有 HTTP(S) 标签（`attachExisting`）。
@@ -67,7 +67,7 @@ node bin/tether.mjs policy add --effect deny --actions fill,click,navigate --ori
 
 ## 网络检查
 
-触发请求前，调用 `network` 并设置 `op: start`，每个页面最多保留最近 500 条请求。用 `list` 查找请求 ID，`detail` 查看请求头和元数据，`body` 分页读取响应内容（通过 `nextOffset` 继续读取），`stop` 停止捕获并保留记录，`clear` 清除记录。每次调用都需携带已授权的 `sessionId` 和 `pageId`。元数据可能被截断，Chrome 也可能淘汰响应正文。捕获范围包括获授权的页面目标及同进程 frame；独立 worker 和进程外 iframe（OOPIF）不在当前桥接范围内。网络记录可能含 Cookie、授权头和私有正文，应按用户任务范围处理并避免写入日志。信使沙箱中的完整 CDP 权限仅作用于其专用测试浏览器。
+触发请求前，调用 `network` 并设置 `op: start`，每个页面最多保留最近 500 条请求。用 `list` 查找请求 ID，`detail` 查看请求头和元数据，`body` 分页读取响应内容（通过 `nextOffset` 继续读取），`http` 把已采集的请求和响应导出为 `.http` 文本，`stop` 停止捕获并保留记录，`clear` 清除记录。每次调用都需携带已授权的 `sessionId` 和 `pageId`。元数据可能被截断，Chrome 也可能淘汰响应正文。捕获范围包括获授权的页面目标及同进程 frame；独立 worker 和进程外 iframe（OOPIF）不在当前桥接范围内。网络记录可能含 Cookie、授权头和私有正文，应按用户任务范围处理并避免写入日志。信使沙箱中的完整 CDP 权限仅作用于其专用测试浏览器。
 
 ## 排错与开发
 

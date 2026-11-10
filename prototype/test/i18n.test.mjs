@@ -7,7 +7,7 @@ import { NativeStatus } from "../extension/protocol.js";
 
 const toolNames = [
   "requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release",
-  "html", "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", "network", "diagnose", "wait", "assert", "records",
+  "html", "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", "network", "diagnose", "wait", "assert", "records", "trace", "preset",
 ];
 
 test("language selection honors explicit values and falls back to system locale", () => {

@@ -10,7 +10,7 @@
 
 数据链路为现有 Chrome 浏览器 → MV3 扩展 → Native Messaging → 本机 TLS WebSocket Broker → Node/Python SDK 或 stdio MCP。Broker 默认仅监听回环地址。客户端可新建任务标签组，或明确接管一个已有 HTTP(S) 标签。为兼容已有注册，内部 Native Messaging 标识符仍为 `com.freebird.browser_bridge`。
 
-运行时提供浏览器、支持和业务 RPC 方法；调用 `capabilities({})` 查看当前方法。浏览器方法包括 `requestSession`、`approvalStatus`、`listTabs`、`createTab`、`closeTab`、`release`、`snapshot`、`html`、`locate`、`fill`、`click`、`navigate`、`availableTabs` 和 `network`。支持方法为 `diagnose`、`wait`、`assert`、`records`；业务方法包括 `uploadStart`、`uploadChunk`、`uploadFinish`、`uploadDrop`、`downloadStart`、`downloadRead`、`downloadDrop`、`dialog`、`popupCandidates` 和 `adoptPopup`。`snapshot` 返回带 `[ref=eN]` 元素引用的简易无障碍树；`html` 分页读取不可变的完整主文档 HTML；`locate` 列出匹配元素及经校验的唯一选择器；`fill`/`click` 接受 `ref` 或 `selector`，动作前先解析为恰好一个元素，否则以 `sideEffect:"none"` 拒绝并给出候选。策略规则把 `snapshot`、`html` 和 `locate` 等读取方法归入 `observe`。写请求使用 session 内递增的正整数 `seq`；相同请求重复提交会返回原结果，冲突复用会被拒绝。请求超时的结果不确定，因此 SDK 不会自动重放写操作。
+运行时提供浏览器、支持和业务 RPC 方法；调用 `capabilities({})` 查看当前方法。浏览器方法包括 `requestSession`、`approvalStatus`、`listTabs`、`createTab`、`closeTab`、`release`、`snapshot`、`html`、`locate`、`fill`、`click`、`navigate`、`availableTabs` 和 `network`。支持方法为 `diagnose`、`wait`、`assert`、`records`、`trace` 和 `preset`；业务方法包括 `uploadStart`、`uploadChunk`、`uploadFinish`、`uploadDrop`、`downloadStart`、`downloadRead`、`downloadDrop`、`dialog`、`popupCandidates` 和 `adoptPopup`。`snapshot` 返回带 `[ref=eN]` 元素引用的简易无障碍树；`html` 分页读取不可变的完整主文档 HTML；`locate` 列出匹配元素及经校验的唯一选择器；`fill`/`click` 接受 `ref` 或 `selector`，动作前先解析为恰好一个元素，否则以 `sideEffect:"none"` 拒绝并给出候选。策略规则把 `snapshot`、`html` 和 `locate` 等读取方法归入 `observe`。写请求使用 session 内递增的正整数 `seq`；相同请求重复提交会返回原结果，冲突复用会被拒绝。请求超时的结果不确定，因此 SDK 不会自动重放写操作。
 
 页面读取默认使用 `snapshot`。需要完整标记或无障碍树无法提供的结构时，调用 `html({sessionId,pageId,offset?,maxChars?,captureId?})`；默认每页 16,000 字符，最大 30,000。首次请求会在浏览器内生成 `<!doctype>` 与 `document.documentElement.outerHTML` 的不可变快照，最多 8 Mi UTF-16 字符。继续传入返回的 `captureId` 和 `nextOffset`，直到 `nextOffset` 为 `null`。快照 60 秒后过期，主文档导航也会使其失效；过期返回 `html_capture_expired`。HTML 只含主文档，不含 iframe 文档或 shadow DOM，也不会把实时表单控件值镜像为属性。标记可能包含脚本或隐藏令牌，应按页面数据处理，避免不必要地记录或暴露。大页面可先用 `outline`，再通过 `scopeRef` 展开区域；树被截断或缺少属性/布局上下文时用 HTML 获取实际结构，不要重复相同的简略快照调用。
 
@@ -86,7 +86,7 @@ try {
 
 文件操作限定在页面内，写请求需递增 `seq`。先用 `uploadStart({sessionId,pageId,seq,files:[{name,mimeType?,size}]})` 创建上传，再用 `uploadChunk({sessionId,pageId,seq,uploadId,fileIndex,offset,data})` 按序发送 base64 分块，最后用 `uploadFinish({sessionId,pageId,seq,uploadId,selector})` 指定唯一文件输入框。每个文件上限 16 MiB；最多 8 个文件，总计 32 MiB。`downloadStart({sessionId,pageId,seq,url})` 在页面中执行同源 GET，`downloadRead({sessionId,pageId,seq,downloadId,offset})` 返回 base64 分块；这不支持捕获任意浏览器下载。下载上限 16 MiB。用 `downloadDrop` 或 `uploadDrop` 丢弃传输内容。
 
-`dialog({sessionId,pageId,seq,action:"list"})` 列出待处理的 JavaScript 对话框；使用 `action:"accept"|"dismiss"` 和 `dialogId` 处理（可选 `promptText`）。弹窗发现和接管均为显式操作：先调用 `popupCandidates({sessionId})`，再用 `adoptPopup({sessionId,seq,openerPageId,tabId})` 接管选中的候选。两者都不会隐式授权弹窗。回放设计见 [REPLAY-DESIGN](../docs/REPLAY-DESIGN.zh-CN.md)，目前尚未实现。
+`dialog({sessionId,pageId,seq,action:"list"})` 列出待处理的 JavaScript 对话框；使用 `action:"accept"|"dismiss"` 和 `dialogId` 处理（可选 `promptText`）。弹窗发现和接管均为显式操作：先调用 `popupCandidates({sessionId})`，再用 `adoptPopup({sessionId,seq,openerPageId,tabId})` 接管选中的候选。两者都不会隐式授权弹窗。`trace` 记录 navigate、click、fill、wait 和 assert，包含填写值。`preset` 保存这些步骤，导出内含原值的 Playwright 脚本，并在已授权页面上执行已保存的预设。`network` 的 `op:"http"` 把已采集的请求和响应导出为 `.http` 文本。[REPLAY-DESIGN](../docs/REPLAY-DESIGN.zh-CN.md) 中的另一份设计不是这组 API。
 
 ## 故障排查
 

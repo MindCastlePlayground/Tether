@@ -22,9 +22,9 @@ class ClientError(ValueError):
 class Rpc:
     HTML = "html"
     NETWORK = "network"
-    DIAGNOSE, WAIT, ASSERT, RECORDS = "diagnose", "wait", "assert", "records"
+    DIAGNOSE, WAIT, ASSERT, RECORDS, TRACE, PRESET = "diagnose", "wait", "assert", "records", "trace", "preset"
     BUSINESS = ("uploadStart", "uploadChunk", "uploadFinish", "uploadDrop", "downloadStart", "downloadRead", "downloadDrop", "dialog", "popupCandidates", "adoptPopup")
-    METHODS = frozenset(("requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", HTML, "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", NETWORK, DIAGNOSE, WAIT, ASSERT, RECORDS) + BUSINESS)
+    METHODS = frozenset(("requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", HTML, "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", NETWORK, DIAGNOSE, WAIT, ASSERT, RECORDS, TRACE, PRESET) + BUSINESS)
 
 
 class PinnedContext(ssl.SSLContext):
@@ -106,6 +106,8 @@ class BridgeClient:
     def wait(self, params: dict): return self.call(Rpc.WAIT, params)
     def assert_condition(self, params: dict): return self.call(Rpc.ASSERT, params)
     def records(self, op="list"): return self.call(Rpc.RECORDS, {"op": op})
+    def trace(self, params=None): return self.call(Rpc.TRACE, params or {"op": "list"})
+    def preset(self, params): return self.call(Rpc.PRESET, params)
 
     def call(self, method: str, params: dict):
         if method not in Rpc.METHODS:
@@ -116,7 +118,7 @@ class BridgeClient:
             self.open()
             self.ws.send(json.dumps({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params}))
             sent = True
-            response = json.loads(self.ws.recv(timeout=25))
+            response = json.loads(self.ws.recv(timeout=120 if method == Rpc.PRESET else 25))
         except ClientError:
             raise
         except Exception as exc:

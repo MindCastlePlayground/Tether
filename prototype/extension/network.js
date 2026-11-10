@@ -21,6 +21,7 @@ export class NetworkCapture {
     if (!state) throw new Error(Failure.NetworkUnavailable);
     if (p.op === Op.Stop) { state.active = false; return { active: false, count: state.rows.length, dropped: state.dropped }; }
     if (p.op === Op.Clear) { state.rows.length = 0; state.byId.clear(); state.current.clear(); state.dropped = 0; return { count: 0, active: state.active }; }
+    if (p.op === Op.Http) return this.http(page, state, p, authorized);
     if (p.op === Op.List) {
       const offset = NetworkData.integer(p.offset, 0, 0, Number.MAX_SAFE_INTEGER);
       const limit = NetworkData.integer(p.limit, 50, 1, 100);
@@ -45,6 +46,36 @@ export class NetworkCapture {
     const body = result.body.slice(offset, offset + maxChars);
     return { body, base64Encoded: result.base64Encoded === true, total: result.body.length,
       offset, nextOffset: offset + body.length < result.body.length ? offset + body.length : null };
+  }
+
+  async http(page, state, p, authorized) {
+    const offset = NetworkData.integer(p.offset, 0, 0, Number.MAX_SAFE_INTEGER);
+    const limit = NetworkData.integer(p.limit, 20, 1, 20);
+    const maxChars = NetworkData.integer(p.maxChars, 4000, 1, Limit.BodyChunk);
+    const parts = [];
+    let used = 0;
+    let emitted = 0;
+    for (const row of state.rows.slice(offset, offset + limit)) {
+      const section = NetworkData.section(row, await this.httpBody(page, state, row, maxChars, authorized));
+      if (used + section.length > 350_000 && emitted) break;
+      parts.push(section);
+      used += section.length;
+      emitted++;
+    }
+    return { filename: 'capture.http', mimeType: 'text/plain', text: parts.join(''), total: state.rows.length, offset,
+      nextOffset: offset + emitted < state.rows.length ? offset + emitted : null };
+  }
+
+  async httpBody(page, state, row, maxChars, authorized) {
+    if (row.failed || row.redirected || row.type === Cdp.SocketType) return { missing: 'network_unavailable' };
+    if (!row.finished) return { missing: 'network_pending' };
+    let result;
+    try { result = await this.api.debugger.sendCommand({ tabId: page.tabId }, Cdp.Body, { requestId: row.cdpRequestId }); }
+    catch { return { missing: 'network_unavailable' }; }
+    await authorized();
+    if (this.pages.get(page.pageId) !== state || state.byId.get(row.requestId) !== row) throw new Error(Failure.Missing);
+    if (typeof result.body !== 'string') return { missing: 'network_unavailable' };
+    return { text: result.body.slice(0, maxChars), truncated: result.body.length > maxChars, base64: result.base64Encoded === true };
   }
 
   event(pageId, method, p = {}) {
@@ -108,6 +139,24 @@ export class NetworkData {
     if (row.events.length >= Limit.Events) { row.eventsDropped = (row.eventsDropped ?? 0) + 1; return; }
     row.events.push({method, ...NetworkData.copy(p, row, Limit.Message)});
   }
+  static section(row, body) {
+    const lines = [`### ${row.requestId}`, `${row.method || 'GET'} ${row.url} HTTP/1.1`];
+    for (const [key, value] of Object.entries(row.request?.headers ?? {})) if (typeof value === 'string') lines.push(`${key}: ${value.replace(/[\r\n]/g, ' ')}`);
+    lines.push('');
+    if (typeof row.request?.postData === 'string' && row.request.postData) lines.push(row.request.postData, '');
+    if (body.missing) lines.push(`# response ${body.missing}`, '');
+    else {
+      lines.push(`HTTP/1.1 ${row.response?.status ?? 0}${row.response?.statusText ? ` ${String(row.response.statusText).replace(/[\r\n]/g, ' ')}` : ''}`);
+      for (const [key, value] of Object.entries(row.response?.headers ?? {})) if (typeof value === 'string') lines.push(`${key}: ${value.replace(/[\r\n]/g, ' ')}`);
+      lines.push('');
+      if (typeof body.text === 'string') lines.push(body.text);
+      if (body.base64) lines.push('# base64Encoded');
+      if (body.truncated) lines.push('# body truncated');
+      lines.push('');
+    }
+    return `${lines.join('\n')}\n`;
+  }
+
   static summary(x) {
     return { requestId:x.requestId, url:x.url.slice(0,Limit.Url), method:x.method, type:x.type,
       status:x.response?.status, mimeType:x.response?.mimeType?.slice(0,128), finished:x.finished === true,

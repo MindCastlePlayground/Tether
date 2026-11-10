@@ -68,6 +68,28 @@ test('capture validates paging limits and ignores events outside an active captu
   await assert.rejects(() => net.run({ pageId: 'p' }, { op: 'list', limit: 101 }, async () => {}), e => e.message === Failure.Invalid);
 });
 
+test('http export writes request and response text, including plaintext bodies', async () => {
+  const f = new CaptureFixture();
+  await assert.rejects(f.run({ op: 'http' }), /network_unavailable/);
+  await f.run({ op: 'start' });
+  f.event(NetworkCdp.Request, { requestId: 'a', timestamp: 1, type: 'Fetch', request: { url: 'https://x/login', method: 'POST', headers: { 'Content-Type': 'application/json' }, postData: '{"password":"s3cret"}' } });
+  f.event(NetworkCdp.Response, { requestId: 'a', type: 'Fetch', response: { status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' } } });
+  f.event(NetworkCdp.Finished, { requestId: 'a', timestamp: 2, encodedDataLength: 11 });
+  f.event(NetworkCdp.Request, { requestId: 'b', timestamp: 3, type: 'Fetch', request: { url: 'https://x/next', method: 'GET' } });
+  const page = await f.run({ op: 'http', limit: 1, maxChars: 5 });
+  assert.match(page.text, /POST https:\/\/x\/login HTTP\/1\.1/);
+  assert.match(page.text, /\{"password":"s3cret"\}/);
+  assert.match(page.text, /HTTP\/1\.1 200 OK/);
+  assert.match(page.text, /abcab/);
+  assert.match(page.text, /# body truncated/);
+  assert.equal(page.nextOffset, 1);
+  assert.equal(page.total, 2);
+  const rest = await f.run({ op: 'http', offset: page.nextOffset });
+  assert.match(rest.text, /# response network_pending/);
+  assert.equal(rest.nextOffset, null);
+  await assert.rejects(f.run({ op: 'http', limit: 21 }), /invalid_request/);
+});
+
 test('body pagination reconstructs long content and unfinished/failed bodies are explicit errors',async()=>{
   const f=new CaptureFixture();await f.run({op:'start'});f.request();
   const id=(await f.run({op:'list'})).requests[0].requestId;

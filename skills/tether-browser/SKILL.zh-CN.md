@@ -58,7 +58,7 @@
 | `requestSession` | `{mode,url?,tabId?,groupName?}` | 请求 `newGroup` 或 `attachExisting` |
 | `approvalStatus` | `{pendingId}` | 获取审批状态和已授权标识符 |
 | `listTabs` | `{sessionId}` | 获取当前已授权的 `pages` |
-| `network` | `{sessionId,pageId,op,requestId?,url?,type?,offset?,limit?,maxChars?}` | `start/list/detail/body/stop/clear` 网络采集；见 [SDK 用法](references/sdk.zh-CN.md) |
+| `network` | `{sessionId,pageId,op,requestId?,url?,type?,offset?,limit?,maxChars?}` | `start`/`list`/`detail`/`body`/`stop`/`clear`，或 `http` 将已采集的请求和响应导出为 `.http` 文本；见 [SDK 用法](references/sdk.zh-CN.md) |
 | `snapshot` | `{sessionId,pageId,scope?,scopeRef?,outline?,depth?,maxChars?}` | 获取带 ref 的简易无障碍树 |
 | `html` | `{sessionId,pageId,offset?,maxChars?,captureId?}` | 分页读取不可变的主文档 HTML |
 | `locate` | `{sessionId,pageId,text?,role?,name?,exact?,selector?,ref?,scope?,scopeRef?}` | 列出匹配元素及唯一选择器 |
@@ -79,9 +79,10 @@
 
 - `diagnose({})` 报告 Broker、Native Host、浏览器和策略状态。用 `wait({sessionId,pageId,condition,value,timeoutMs?})` 等待 `text`、精确 `url`、`visible`、`hidden` 或已完成的 `request`；超时默认 5000 毫秒，最大 15000 毫秒。`assert` 接受相同参数并在同样的超时范围内重试断言。例如：`wait({sessionId,pageId,condition:"text",value:"已保存",timeoutMs:3000})`。
 - `records({op:"list"|"export"|"clear"})` 管理当前认证 client identity 的内存运行元数据，最多 200 条。记录不含 URL、页面正文、选择器或值；不同连接按身份隔离，Broker 重启后日志清空。CLI 使用已配置 Agent 身份导出：`tether records --runtime PATH --output PATH`。
+- `trace({op?:"list"|"export"|"clear",offset?,limit?})` 返回该身份的 `navigate`、`click`、`fill`、`wait`、`assert` 轨迹。条目包含选择器、ref、结果和填写值。每个身份在 Broker 内存中保留最近 100 条，重启后清空。`fill` 的调用结果本身仍不回显填写值。
 - 上传流程为 `uploadStart`、按序调用 `uploadChunk`，再用唯一文件输入框的 `selector` 调用 `uploadFinish`；每个文件上限 16 MiB，最多 8 个文件且总计 32 MiB。下载通过 `downloadStart` 和 `downloadRead` 执行同源页面 GET，上限 16 MiB；此功能不捕获任意浏览器下载。用 `uploadDrop`/`downloadDrop` 清除传输状态。所有业务写操作均使用下一个 session `seq`。
 - `dialog` 设置 `action:"list"` 可列出待处理的 JavaScript 对话框；用 `action:"accept"|"dismiss"` 和 `dialogId` 处理（可选 `promptText`）。弹窗访问必须显式执行：调用 `popupCandidates({sessionId})`，再对选定候选调用 `adoptPopup({sessionId,seq,openerPageId,tabId})`。
-- 回放见 `<checkout>/docs/REPLAY-DESIGN.zh-CN.md`；该设计尚未实现。
+- `preset({op:"save"|"get"|"list"|"delete"|"export"|"run",id?,title?,steps?,sessionId?,pageId?,seq?})` 保存步骤（`save`）、读取、把已保存预设编译成 Playwright 脚本（`export`），或在已授权页面上执行（`run`，从 `seq` 起）。步骤为 `navigate`（`url`）、`click` 或 `fill`（`selector`，或 `role` 与 `name`；`fill` 含 `value`）、`check`（`condition`、`expect`，`visible`/`hidden` 另需 `selector`）。填写值按原样保存并写入脚本。`export` 返回导入 `playwright` 的 JavaScript。`run` 返回 `results`、`stopped` 和 `nextSeq`，并在首个被拒绝、不确定或失败的步骤停止。预设保存在该客户端身份的 Broker 内存中，直到 `delete` 或 Broker 重启。`<checkout>/docs/REPLAY-DESIGN.zh-CN.md` 中的另一份设计不是这组 API。
 
 权限按客户端/会话/页面限定，而非按组内所有标签页限定。手动重新分组、撤销权限、浏览器/调试器限制、断开连接和租约过期都可能使标识符失效。遇到 `not_authorized` 时，重新检查会话/页面状态；仅在用户仍希望访问时重新请求授权。遇到 `debugger_busy` 时，说明冲突，不要打断另一个调试器。遇到 `policy_denied` 时，表示 Broker 访问规则拒绝了该请求：不得绕过，应向用户说明被拒的操作。遇到 `policy_invalid` 时，表示 Broker 策略文件损坏或非法（fail-closed）：提示用户修复或移除 `<runtime>/.local/policy.json`。不要将 `.local` 令牌、私钥和完整配置放入聊天、日志或提交中。不要为了修复连接而关闭 TLS 验证或 SPKI 固定校验。
 

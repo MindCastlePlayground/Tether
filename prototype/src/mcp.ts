@@ -29,6 +29,16 @@ class McpTools {
   static readonly NAVIGATE = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive(), url: z.string() });
   static readonly WAIT = z.object({sessionId:z.string(),pageId:z.string(),condition:z.enum(SupportMethod.Conditions),value:z.string().min(1).max(2000),timeoutMs:z.number().int().min(0).max(15000).optional()}).strict();
   static readonly RECORDS = z.object({op:z.enum(SupportMethod.RecordOps).optional()}).strict();
+  static readonly TRACE = z.object({op:z.enum(SupportMethod.TraceOps).optional(), offset:z.number().int().nonnegative().optional(), limit:z.number().int().min(1).max(100).optional()}).strict();
+  static readonly PRESET = z.object({
+    op:z.enum(SupportMethod.PresetOps), id:z.string().max(64).optional(), title:z.string().max(80).optional(),
+    steps:z.array(z.object({
+      kind:z.enum(SupportMethod.PresetKinds), url:z.string().max(2000).optional(), selector:z.string().max(2000).optional(),
+      role:z.string().max(64).optional(), name:z.string().max(200).optional(), value:z.string().max(16000).optional(),
+      condition:z.enum(SupportMethod.Conditions).optional(), expect:z.string().max(2000).optional(), timeoutMs:z.number().int().min(0).max(15000).optional(),
+    }).strict()).max(40).optional(),
+    sessionId:z.string().optional(), pageId:z.string().optional(), seq:z.number().int().positive().optional(),
+  }).strict();
 
 }
 
@@ -61,6 +71,8 @@ async function main(): Promise<void> {
     [SupportMethod.Wait, descriptions.wait, McpTools.WAIT],
     [SupportMethod.Assert, descriptions.assert, McpTools.WAIT],
     [SupportMethod.Records, descriptions.records, McpTools.RECORDS],
+    [SupportMethod.Trace, descriptions.trace, McpTools.TRACE],
+    [SupportMethod.Preset, descriptions.preset, McpTools.PRESET],
     ...BusinessApi.Names.map(name => [name, BusinessApi.Descriptions[name][I18n.language()==='zh-CN'?1:0], BusinessApi.Schemas[name]] as const),
   ] as const;
   server.setRequestHandler((await import("@modelcontextprotocol/sdk/types.js")).ListToolsRequestSchema, async () => ({ tools: tools.map(([name,description,schema]) => ({name,description,inputSchema:z.toJSONSchema(schema) as any})) }));
@@ -71,7 +83,8 @@ async function main(): Promise<void> {
     if (!item) throw new Error("unsupportedMethod");
     let parsed: Record<string, unknown>;
     const run = async () => {
-      if (name !== Method.Capabilities && name !== SupportMethod.Diagnose && name !== SupportMethod.Records) await wake.ready();
+      const offline = name === Method.Capabilities || name === SupportMethod.Diagnose || name === SupportMethod.Records || name === SupportMethod.Trace || (name === SupportMethod.Preset && parsed.op !== 'run');
+      if (!offline) await wake.ready();
       return client.call(name as typeof Rpc.METHODS[number], parsed);
     };
     let result;

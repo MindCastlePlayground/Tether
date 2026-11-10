@@ -30,7 +30,7 @@ export class BridgeClient {
   async call<T=any>(method:Method,params:Record<string,unknown>):Promise<T>{
     if(!(Rpc.METHODS as readonly string[]).includes(method))throw new ClientError('unsupportedMethod');
     await this.connect();const id=randomUUID();return new Promise<T>((resolve,reject)=>{
-      const timer=setTimeout(()=>{this.pending.delete(id);reject(new ClientError('outcome_unknown'));},25000);
+      const timer=setTimeout(()=>{this.pending.delete(id);reject(new ClientError('outcome_unknown'));},method==='preset'?120000:25000);
       this.pending.set(id,{resolve,reject,timer});this.ws!.send(JSON.stringify({jsonrpc:Rpc.JSONRPC,id,method,params}));
     });
   }
@@ -54,5 +54,7 @@ export class BridgeClient {
   wait(p:WaitParams){return this.call('wait',{...p});}
   assert(p:WaitParams){return this.call('assert',{...p});}
   records(p:RecordsParams={}){return this.call('records',{...p});}
+  trace(p:Record<string,unknown>={}){return this.call('trace',{...p});}
+  preset(p:Record<string,unknown>){return this.call('preset',{...p});}
 }
 export async function loadConfig(path:string):Promise<ClientConfig>{try{const c=JSON.parse((await readFile(path,'utf8')).replace(/^\uFEFF/,''));BridgeClient.validate(c);return c;}catch{throw new ClientError('invalidConfig');}}

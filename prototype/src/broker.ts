@@ -10,6 +10,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Config } from './config.js';
 import { Engine } from './engine.js';
 import { Support, Journal, Conditions } from './support.js';
+import { Trace, Presets } from './preset.js';
 import { BusinessApi } from './business-api.js';
 import { BusinessMethod } from './business.js';
 import { Method, Limit, Wire, Action, Effect, PolicyKey, Brand, BrokerControl as Control, Find, PUBLIC, WRITES, type RPC, type Params } from './protocol.js';
@@ -19,6 +20,8 @@ interface Ledger {high:number; records:Map<number,{body:string,result:Promise<an
 export class Broker {
   static { for(const method of BusinessApi.Names){PUBLIC.add(method);if(method!==BusinessApi.PopupCandidates)WRITES.add(method);} }
   private journal=new Journal();
+  private trace=new Trace();
+  private presets=new Presets();
   private host?:WebSocket; private clients=new Map<string,WebSocket>();
   private pending=new Map<string,Pending>();private ledger=new Map<string,Ledger>();
   private engine=new Engine((m,p)=>this.forward(m,p),(p,url)=>this.policy.check(Broker.identity(p.clientId),Action.Observe,url)!==Effect.Deny);
@@ -109,12 +112,14 @@ export class Broker {
   }
   async handle(clientId:string,msg:RPC):Promise<any>{
     const start=Date.now();
-    try{const result=await this.dispatch(clientId,msg);this.journal.add(Broker.identity(clientId),msg.method??'invalid',start,result);return result;}
-    catch(e){this.journal.add(Broker.identity(clientId),msg.method??'invalid',start,undefined,(e as Error).message);throw e;}
+    try{const result=await this.dispatch(clientId,msg);this.journal.add(Broker.identity(clientId),msg.method??'invalid',start,result);this.trace.note(Broker.identity(clientId),msg.method??'',msg.params??{},result);return result;}
+    catch(e){const message=(e as Error).message;this.journal.add(Broker.identity(clientId),msg.method??'invalid',start,undefined,message);this.trace.note(Broker.identity(clientId),msg.method??'',msg.params??{},undefined,message);throw e;}
   }
   private async dispatch(clientId:string,msg:RPC):Promise<any>{
     if(msg.jsonrpc!==Wire.Version||msg.id===undefined||!msg.method||!(PUBLIC.has(msg.method)||Support.Methods.includes(msg.method))||!msg.params||typeof msg.params!=='object'||Array.isArray(msg.params)||Object.hasOwn(msg.params,'clientId'))throw Error('invalid_request');
     if(msg.method===Support.Records)return this.journal.read(Broker.identity(clientId),msg.params.op??'list');
+    if(msg.method===Support.Trace)return this.trace.read(Broker.identity(clientId),msg.params);
+    if(msg.method===Support.Preset)return this.presets.execute(Broker.identity(clientId),msg.params,(method,params)=>this.handle(clientId,{jsonrpc:Wire.Version,id:msg.id,method,params}));
     if(msg.method===Support.Diagnose){
       let browser;let code;try{browser=await this.forward(Method.Capabilities,{clientId});}catch(e){code=(e as Error).message;}
       const versionMatch=browser?.version?browser.version===Brand.Version:null;

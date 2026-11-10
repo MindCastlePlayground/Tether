@@ -67,6 +67,9 @@ Use the MCP `network` tool, Node `client.network(params)`, or Python `client.net
 | `body` | `requestId`, `offset?`, `maxChars?` | Response text or base64; default 16000, maximum 30000 characters; continue using `nextOffset` |
 | `stop` | — | Stop collecting; retain captured records |
 | `clear` | — | Clear captured records |
+| `http` | `offset?`, `limit?`, `maxChars?` | Captured requests and responses as `.http` text; default 20 entries, maximum 20; each response body defaults to 4000 characters |
+
+`http` writes one section per captured exchange: the request line, headers and body, then the status line, response headers and body. A missing body is a `# response` note in that section. `offset` and `nextOffset` page through the capture. The file is the capture itself.
 
 Read request IDs from `list`. Body retrieval depends on Chrome retaining the completed response; a missing/evicted response returns an error. Respect `base64Encoded` when decoding binary responses. Network data may contain cookies, authorization headers and private payloads; handle it within the user's task scope and avoid logging it. `stop` preserves the shared debugger used by page actions; `release` ends authorization and deletes capture state.
 
@@ -91,7 +94,7 @@ class Task:
             client.close()
 ```
 
-Use the same request → approvalStatus → snapshot/html/action → release workflow via `call(method, params)`; ref values are opaque and must come from a fresh snapshot. Keep calls sequential and do not share an instance across threads. Node and Python raise `ClientError` with `code` and optional JSON-RPC `rpcCode`. Python support helpers are `diagnose()`, `wait(params)`, `assert_condition(params)`, `html(params)` and `records('export')`; Node uses `assert(params)` and `records({op:'export'})`.
+Use the same request → approvalStatus → snapshot/html/action → release workflow via `call(method, params)`; ref values are opaque and must come from a fresh snapshot. Keep calls sequential and do not share an instance across threads. Node and Python raise `ClientError` with `code` and optional JSON-RPC `rpcCode`. Python support helpers are `diagnose()`, `wait(params)`, `assert_condition(params)`, `html(params)`, `records('export')`, `trace(params)` and `preset(params)`; Node uses `assert(params)`, `records({op:'export'})`, `trace(params)` and `preset(params)`.
 
 ## Page reading
 

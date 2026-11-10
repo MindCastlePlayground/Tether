@@ -163,7 +163,7 @@ export class Failure {
 
 export class NetworkOp {
   static Start = 'start'; static List = 'list'; static Detail = 'detail';
-  static Body = 'body'; static Stop = 'stop'; static Clear = 'clear';
+  static Body = 'body'; static Stop = 'stop'; static Clear = 'clear'; static Http = 'http';
 }
 
 export class NetworkLimits {

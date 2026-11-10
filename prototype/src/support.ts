@@ -5,7 +5,9 @@ export class Support {
   static readonly Wait = 'wait';
   static readonly Assert = 'assert';
   static readonly Records = 'records';
-  static readonly Methods = [Support.Diagnose,Support.Wait,Support.Assert,Support.Records];
+  static readonly Trace = 'trace';
+  static readonly Preset = 'preset';
+  static readonly Methods = [Support.Diagnose,Support.Wait,Support.Assert,Support.Records,Support.Trace,Support.Preset];
   static readonly Conditions = ['text','url','visible','hidden','request'];
   static readonly Ops = ['list','export','clear'];
   static readonly Limit = 200;

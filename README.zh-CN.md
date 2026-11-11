@@ -45,7 +45,7 @@ Tether 面向个人浏览器任务和小团队流程，适合 Agent 或脚本在
 npm install --package-lock=false
 node bin/tether.mjs install
 ```
-版本号使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。详见 [3.3.0 发布说明](docs/RELEASE-v3.3.0.zh-CN.md)。
+版本号使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。详见 [3.4.0 发布说明](docs/RELEASE-v3.4.0.zh-CN.md)。
 安装器会自动检测受支持的 Agent 宿主，一条命令完成 runtime 准备与配置，并打开扩展管理页和扩展目录。安装器本身不启动 Broker；加载扩展后默认由 `auto` 模式管理，每 30 秒探测一次。MCP 与 Native Host 都可拉起同一 runtime 的 Broker；共享 runtime 模式为 `off` 时，MCP 不会重新拉起。默认策略全放行，需要精细控制时可用 `tether policy` 添加 allow/deny/ask 规则。生成的 runtime 凭据与私钥应留在本机。
 
 ## 第一次浏览器任务
@@ -99,7 +99,7 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 - [验收摘要](prototype/VERIFICATION.zh-CN.md) / [Verification summary](prototype/VERIFICATION.md)。
 
 - [开发与发布](docs/DEVELOPMENT.zh-CN.md) — `dev` 开发集成与 `main` 发布流程。
-- [Tether 3.3.0 发布说明](docs/RELEASE-v3.3.0.zh-CN.md) / [English](docs/RELEASE-v3.3.0.md)。
+- [Tether 3.4.0 发布说明](docs/RELEASE-v3.4.0.zh-CN.md) / [English](docs/RELEASE-v3.4.0.md)。
 
 ## Agent Skill
 
@@ -114,6 +114,8 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 在源码检出目录执行 `node bin/tether.mjs update --runtime "<运行时路径>"`，或在已安装的运行时目录双击 `update.cmd`。也可在那里运行 `node scripts/update.mjs zh-CN`。`--dry-run` 仅检查目标，不联网也不写文件。更新器跟随 `main`，而非 GitHub Releases，因此安装的是 `main` 上最新的已提交内容。
 
 更新后请重新连接已有 MCP 客户端，使其重新读取 Tether 工具定义。`.local/update.lock` 锁文件用于阻止并发更新。如果更新中断，先确认对应进程已停止，再删除遗留锁文件并重试。更新器会在成功或失败后清理临时检出目录和锁文件。
+
+就绪的 runtime 在替换文件前，会把上一份可运行副本（含构建产物和已安装的 Node 模块）保留在 `<runtime>/.rollback`，只保留这一份。`.local` 与 `.venv` 留在原处。若新版本无法使用，执行 `node bin/tether.mjs rollback --runtime "<运行时路径>"`，或双击 runtime 目录中的 `rollback.cmd`。这次换回是临时的：被换下的版本仍留在同一位置，再执行一次回退即回到该版本。下一次升级会替换这份保留副本。
 
 ## 状态
 

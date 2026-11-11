@@ -245,6 +245,7 @@ test('parse accepts auto, no-open, and upgrade', () => {
   assert.match(help, new RegExp(Cmd.UPGRADE));
   assert.match(help, new RegExp(Opt.NO_OPEN));
   assert.match(help, /auto/);
+  assert.match(help, /rollback/);
   assert.match(help, /检测到 Agent|省略或 auto/);
 });
 
@@ -336,13 +337,16 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
     Service.halt = root => { calls.push(['halt', root]); return true; };
     Service.resume = root => { calls.push(['resume', root]); return 'running'; };
     Service.scan = () => ({ broker: 1, host: 0, mcp: 2 });
-    assert.deepEqual(Runtime.upgrade(runtime, source, { language: 'en' }), { running: true, state: 'running', mcp: 2 });
+    assert.deepEqual(Runtime.upgrade(runtime, source, { language: 'en' }), { running: true, state: 'running', mcp: 2, rollback: '0.0.1' });
     assert.deepEqual(calls.filter(item => item[0] === 'halt' || item[0] === 'resume').map(item => item[0]), ['halt', 'halt', 'resume']);
     assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'new');
     assert.equal(Files.read(path.join(runtime, 'README.md')), 'new');
     assert.equal(fs.existsSync(path.join(runtime, 'src', 'stale.js')), false);
     assert.equal(Files.read(path.join(runtime, '.local', 'broker.json')), 'secret');
     assert.equal(Files.read(path.join(runtime, '.venv', 'pyvenv.cfg')), 'keep');
+    assert.equal(Files.read(path.join(runtime, '.rollback', 'tree', 'README.md')), 'old');
+    assert.equal(Files.read(path.join(runtime, '.rollback', 'tree', 'src', 'stale.js')), 'stale');
+    assert.equal(fs.existsSync(path.join(runtime, '.rollback', 'tree', '.local')), false);
     assert.equal(Files.json(path.join(runtime, Install.MARKER)).version, Install.VERSION);
     const manifest = Files.json(path.join(runtime, Install.MANIFEST));
     assert.equal(manifest.key, 'K');
@@ -351,6 +355,7 @@ test('upgrade replaces source, keeps local and venv, and mocks npm and python', 
     Runtime.upgrade(runtime, source, { language: 'en' });
     assert.equal(Files.read(path.join(runtime, 'src', 'mark.txt')), 'newer');
     assert.equal(Files.read(path.join(runtime, '.local', 'broker.json')), 'secret');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(runtime, '.rollback', 'meta.json'), 'utf8')).version, Install.VERSION);
     fs.writeFileSync(path.join(runtime, 'extension', 'personal.txt'), 'keep');
     fs.writeFileSync(path.join(source, 'extension', 'mark.txt'), 'forced');
     Runtime.upgrade(runtime, source, { language: 'en', force: true });

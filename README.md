@@ -45,7 +45,7 @@ Fresh Windows installation requires Node.js 22+ and Python 3.10+. After the inst
 npm install --package-lock=false
 node bin/tether.mjs install
 ```
-Versions follow `a.b.c`: major features or incompatible changes increment `a`, compatible features increment `b`, and fixes increment `c`. Major releases update all companion components and documentation. See the [3.3.0 release notes](docs/RELEASE-v3.3.0.md).
+Versions follow `a.b.c`: major features or incompatible changes increment `a`, compatible features increment `b`, and fixes increment `c`. Major releases update all companion components and documentation. See the [3.4.0 release notes](docs/RELEASE-v3.4.0.md).
 The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker for the same runtime. Shared runtime mode `off` prevents MCP from starting it again. The default policy allows all requests, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
 
 ## First browser task
@@ -99,7 +99,7 @@ The folded tether mark connects a navy stem with a teal loop. [Brand assets](ass
 - [Verification summary](prototype/VERIFICATION.md) / [验收摘要](prototype/VERIFICATION.zh-CN.md).
 
 - [Development and releases](docs/DEVELOPMENT.md) — `dev` integration and `main` release workflow.
-- [Tether 3.3.0 release notes](docs/RELEASE-v3.3.0.md) / [简体中文](docs/RELEASE-v3.3.0.zh-CN.md).
+- [Tether 3.4.0 release notes](docs/RELEASE-v3.4.0.md) / [简体中文](docs/RELEASE-v3.4.0.zh-CN.md).
 
 ## Agent skill
 
@@ -114,6 +114,8 @@ The installed runtime can update itself from the official GitHub repository's `m
 Run `node bin/tether.mjs update --runtime "<runtime path>"` from a source checkout, or double-click `update.cmd` in the installed runtime directory. You can also run `node scripts/update.mjs zh-CN` there. `--dry-run` checks the target without network access or writing files. The updater follows `main`, not GitHub Releases, so it installs the latest committed main-branch state.
 
 After an update, reconnect existing MCP clients so they reload Tether's tool definitions. An update lock at `.local/update.lock` prevents concurrent runs. If an update was interrupted, first verify its process has stopped; only then remove the stale lock and retry. The updater cleans its temporary checkout and lock when a run finishes or fails.
+
+A ready runtime keeps one previous runnable copy, including built files and installed Node modules, in `<runtime>/.rollback` before the files are replaced. `.local` and `.venv` stay where they are. If the new version cannot be used, run `node bin/tether.mjs rollback --runtime "<runtime path>"` or double-click `rollback.cmd` in the runtime directory. That swap is temporary: the replaced version remains in the same slot, and running rollback again returns to it. The next upgrade replaces the saved copy.
 
 ## Status
 

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { Agents } from './agents.mjs';
 import { Arg, Choice, Cmd, Install, InstallOption, Lang, Opt, Scope, State, Step } from './constants.mjs';
 import { Copy } from './text.mjs';
@@ -25,6 +26,7 @@ export class Wizard {
     if (action === Choice.DOCTOR) return [Cmd.DOCTOR];
     if (action === Choice.RUNTIME_ONLY) return [Cmd.UPGRADE];
     if (action === Choice.UPDATE) return [Cmd.UPDATE];
+    if (action === Choice.ROLLBACK) return [Cmd.ROLLBACK];
     if (action === Choice.EXTENSION) return [Cmd.EXTENSION, Wizard.flag(Install.OPTION.OPEN), Wizard.flag(Arg.BROWSER), await Wizard.browser(ui, env, t)];
     const args = await Wizard.install(ui, env, t);
     if (action === Choice.UPGRADE) args.push(Wizard.flag(InstallOption.UPGRADE));
@@ -51,7 +53,8 @@ export class Wizard {
     if (env.state === State.NEWER || env.state === State.FOREIGN) ui.warn(notes[env.state]);
     else ui.info(notes[env.state]);
     if (env.state === State.FOREIGN) ui.info(t.foreignStop);
-    const items = menus[env.state].map(value => Wizard.item(value, a[value]));
+    const saved = fs.existsSync(path.join(env.root, '.rollback', 'meta.json'));
+    const items = menus[env.state].flatMap(value => value === Choice.UPDATE && saved ? [value, Choice.ROLLBACK] : [value]).map(value => Wizard.item(value, a[value]));
     return ui.pick(Step.ACTION, t.action, items, items[0][0]);
   }
   static async browser(ui, env, t) {

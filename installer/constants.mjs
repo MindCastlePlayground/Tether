@@ -1,3 +1,5 @@
+import { Rollback } from '../prototype/scripts/rollback.mjs';
+
 export class Cmd {
   static INSTALL = 'install';
   static DOCTOR = 'doctor';
@@ -5,6 +7,7 @@ export class Cmd {
   static HELP = 'help';
   static UPGRADE = 'upgrade';
   static UPDATE = 'update';
+  static ROLLBACK = 'rollback';
   static POLICY = 'policy';
   static RECORDS = 'records';
 }
@@ -35,6 +38,7 @@ export class Step {
 
 export class Choice {
   static UPDATE = 'update';
+  static ROLLBACK = 'rollback';
   // Entry menu
   static INSTALL = 'install';
   static UPGRADE = 'upgrade';
@@ -72,6 +76,7 @@ export class Phase {
   static SETUP = 'setup';
   static LAUNCHERS = 'launchers';
   static STOP = 'stop';
+  static KEEP = 'keep';
   static SYNC = 'sync';
   static REGISTER = 'register';
   static AGENTS = 'agents';
@@ -177,21 +182,21 @@ export class Install {
   static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
-  static VERSION = '3.3.0';
+  static VERSION = '3.4.0';
   static RETRIES = 5;
   static RETRY_MS = 2000;
   static SERVER = 'tether';
   static HOST = 'com.freebird.browser_bridge';
-  static SOURCE = ['package.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/locales.mjs', 'scripts/launchers.ps1', 'scripts/register.ps1', 'scripts/update.mjs', 'update.cmd', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
+  static SOURCE = Rollback.SOURCE;
   static REQUIRED = ['dist/mcp.js', 'dist/broker.js', 'dist/host.js', 'dist/lifecycle.js', '.local/mcp.exe', '.local/host.exe', '.local/broker.exe', '.local/agent.json', '.local/broker.json', '.local/native-host.json', 'extension/manifest.json'];
   static VALUES = [Arg.AGENT, Arg.SCOPE, Arg.PROJECT, Arg.HOME, Arg.RUNTIME, Arg.BROWSER, Arg.LANGUAGE, Arg.PYTHON];
   static FLAGS = ['dry-run', 'open-browser', 'no-register', 'help', Opt.NO_OPEN, InstallOption.ONLINE];
   static EXTRA_FLAGS = [InstallOption.FORCE, InstallOption.UPGRADE];
-  static COMMANDS = [Cmd.INSTALL, Cmd.DOCTOR, Cmd.RECORDS, Cmd.EXTENSION, Cmd.HELP, Cmd.UPGRADE, Cmd.UPDATE, Cmd.POLICY];
+  static COMMANDS = [Cmd.INSTALL, Cmd.DOCTOR, Cmd.RECORDS, Cmd.EXTENSION, Cmd.HELP, Cmd.UPGRADE, Cmd.UPDATE, Cmd.ROLLBACK, Cmd.POLICY];
   static OPTION = { DRY: 'dry-run', OPEN: 'open-browser', NO_REGISTER: 'no-register', NO_OPEN: Opt.NO_OPEN };
   static BROWSERS = ['chrome', 'edge'];
   static LANGUAGES = [Lang.EN, Lang.ZH];
-  static EXCLUDE = ['.local', '.venv', '__pycache__', 'node_modules', 'dist'];
+  static EXCLUDE = ['.local', '.venv', '__pycache__', 'node_modules', 'dist', '.rollback', '.rollback-next', '.rollback-prev', '.rollback-hold'];
 }
 
 export class Policy {

@@ -5,6 +5,7 @@ import { Files } from './files.mjs';
 import { Service } from './service.mjs';
 import { Hint, Install, InstallOption, Mark, Phase } from './constants.mjs';
 import { Copy } from './text.mjs';
+import { Rollback } from '../prototype/scripts/rollback.mjs';
 
 export class Runtime {
   static shell() { return path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'); }
@@ -130,7 +131,13 @@ export class Runtime {
     Runtime.mark(root, { [Mark.READY]: false, [Mark.UPGRADE]: true, [Mark.PAUSED]: paused, [Mark.RUNNING]: Boolean(meta[Mark.RUNNING]) });
     const running = Service.halt(root) || (resumed && Boolean(meta[Mark.RUNNING]));
     Runtime.mark(root, { [Mark.READY]: false, [Mark.UPGRADE]: true, [Mark.PAUSED]: paused, [Mark.RUNNING]: running });
+    const save = !resumed && meta[Mark.READY] === true;
+    let kept;
     try {
+      if (save) {
+        Runtime.step(options, Phase.KEEP);
+        kept = Rollback.keep(root, meta[Mark.VERSION]);
+      }
       Runtime.step(options, Phase.COPY);
       Runtime.swap(root, source, options);
       Runtime.key(root);
@@ -153,7 +160,7 @@ export class Runtime {
     const again = Service.halt(root);
     const auto = Service.restore(root, paused);
     const restart = auto && (running || again);
-    return { running: running || again, state: restart ? Service.resume(root) : undefined, mcp: seen.mcp };
+    return { running: running || again, state: restart ? Service.resume(root) : undefined, mcp: seen.mcp, rollback: kept };
   }
   static mark(root, fields) {
     Files.write(path.join(root, Install.MARKER), `${JSON.stringify({ [Mark.VERSION]: Install.VERSION, ...fields })}\n`);

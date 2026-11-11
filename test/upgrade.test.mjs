@@ -78,7 +78,7 @@ test('upgrade keeps Broker auto-start off while building and restarts it afterwa
   const seen = [];
   await Bench.with(cwd => seen.push(Bench.mode(cwd)), async (calls, lines) => {
     const result = Runtime.upgrade(runtime, source, { language: 'en' });
-    assert.deepEqual(result, { running: true, state: ServiceKey.RUNNING, mcp: 1 });
+    assert.deepEqual(result, { running: true, state: ServiceKey.RUNNING, mcp: 1, rollback: '0.0.1' });
     assert.deepEqual(seen, [ServiceKey.OFF, ServiceKey.OFF]);
     assert.equal(Bench.mode(runtime), 'auto');
     assert.deepEqual(Files.json(path.join(runtime, Install.MARKER)), { [Mark.VERSION]: Install.VERSION, [Mark.READY]: true });
@@ -105,6 +105,8 @@ test('an interrupted upgrade stays paused and a rerun restores the original mode
     // npm failed twice: the retry stopped processes again and waited before trying once more.
     assert.deepEqual(calls.filter(c => c === 'npm' || c === 'nap'), ['npm', 'nap', 'npm']);
   });
+  const saved = JSON.parse(fs.readFileSync(path.join(runtime, '.rollback', 'meta.json'), 'utf8'));
+  assert.equal(saved.version, '0.0.1');
   assert.equal(Bench.mode(runtime), ServiceKey.OFF);
   const meta = Files.json(path.join(runtime, Install.MARKER));
   assert.equal(meta[Mark.READY], false);
@@ -119,6 +121,7 @@ test('an interrupted upgrade stays paused and a rerun restores the original mode
     assert.ok(calls.includes('resume'));
     assert.equal(Bench.mode(runtime), 'on');
     assert.equal(Files.json(path.join(runtime, Install.MARKER))[Mark.READY], true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(runtime, '.rollback', 'meta.json'), 'utf8')).version, '0.0.1');
   }, { broker: false, mcp: 0 });
 });
 

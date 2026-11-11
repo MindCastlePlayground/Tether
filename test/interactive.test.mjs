@@ -21,7 +21,7 @@ class Script {
     if (value instanceof Error) throw value;
     return value === undefined ? initial : value;
   }
-  async pick(id, message, items, initial) { return this.reply(id, initial); }
+  async pick(id, message, items, initial) { this.menus = this.menus || []; this.menus.push(items); return this.reply(id, initial); }
   async many(id, message, items, initial) { return this.reply(id, initial); }
   async ask(id, message, fallback = '') { return this.reply(id, fallback); }
   async ok(id, message, initial = true) { return this.reply(id, initial); }
@@ -101,6 +101,15 @@ test('menu follows the installed state', async () => {
   assert.deepEqual(await Wizard.run(new Script({ [Step.ACTION]: Choice.UPDATE }), current), ['update']);
   assert.equal(Cli.parse(await Wizard.run(new Script({ [Step.ACTION]: Choice.REPAIR }), current)).options.force, true);
   assert.equal(await Wizard.run(new Script({ [Step.ACTION]: Choice.EXIT }), current), null);
+  const slot = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-rollback-menu-'));
+  fs.mkdirSync(path.join(slot, '.rollback'), { recursive: true });
+  fs.writeFileSync(path.join(slot, '.rollback', 'meta.json'), JSON.stringify({ version: '3.3.0' }));
+  const offered = new Script({ [Step.ACTION]: Choice.ROLLBACK });
+  assert.deepEqual(await Wizard.run(offered, Env.make({ state: State.CURRENT, root: slot })), ['rollback']);
+  assert.ok(offered.menus[0].some(item => item[0] === Choice.ROLLBACK));
+  const plain = new Script({ [Step.ACTION]: Choice.EXIT });
+  await Wizard.run(plain, current);
+  assert.ok(plain.menus[0].every(item => item[0] !== Choice.ROLLBACK));
 });
 
 test('preflight offers upgrade for an older runtime at the chosen home', async () => {

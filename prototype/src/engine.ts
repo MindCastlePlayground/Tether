@@ -1,11 +1,12 @@
 import { chromium, type Browser, type Page, type ConnectOverCDPTransport } from 'playwright-core';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { Find, Limit, Method, type Params, type Forward } from './protocol.js';
+import { Find, Limit, Method, type Action, type Params, type Forward } from './protocol.js';
 import { Finder, Snapshot } from './locator.js';
 import { Business, BusinessMethod } from './business.js';
 import { Html } from './html.js';
+import { Execute } from './execute.js';
 
-interface Call { payload: boolean }
+interface Call { payload: boolean; origin?: string }
 
 class CDP {
   static readonly Version='Browser.getVersion'; static readonly Auto='Target.setAutoAttach';
@@ -38,8 +39,9 @@ export class TabTransport implements ConnectOverCDPTransport {
           default:throw Error('cdp_forbidden');
         }
       }else{
-        if(m.sessionId!==this.root){if(!this.childSessions.has(m.sessionId))throw Error('unsupported_frame');result=await this.sendRPC(Method.CDP,{...this.grant,childSessionId:m.sessionId,method:m.method,params:m.params??{}});}
-        else result=await this.sendRPC(Method.CDP,{...this.grant,method:m.method,params:m.params??{}});
+        const request={...this.grant,method:m.method,params:m.params??{},...(call?.origin?{expectedOrigin:call.origin}:{})};
+        if(m.sessionId!==this.root){if(!this.childSessions.has(m.sessionId))throw Error('unsupported_frame');result=await this.sendRPC(Method.CDP,{...request,childSessionId:m.sessionId});}
+        else result=await this.sendRPC(Method.CDP,request);
       }
       if(!this.closed)this.onmessage?.({id:m.id,sessionId:m.sessionId,result});
     }catch(error){
@@ -71,6 +73,11 @@ export class Engine {
     // Fill returns identity and structural metadata; refs remain actionable.
     for(const key of ['text','name','selector','context','actionable'])delete target[key];
     target.selectorUnique=false;
+  }
+  async script(p: Params, check: (url: string, actions?: Action[]) => void): Promise<Params> {
+    const page=await this.page(p);
+    const call={payload:false,origin:new URL(page.url()).origin};
+    return this.calls.run(call,()=>Execute.run(page,this.forward,p,check));
   }
   private key(p:Params):string{return `${p.clientId}/${p.sessionId}/${p.pageId}`;}
   async page(p:Params):Promise<Page>{

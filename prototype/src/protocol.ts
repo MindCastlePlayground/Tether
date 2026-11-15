@@ -1,6 +1,6 @@
 export class Brand {
   static readonly Name = 'tether';
-  static readonly Version = '3.4.0';
+  static readonly Version = '3.5.0';
 }
 export class NativeStatus {
   static readonly Type = 'native.status';
@@ -20,7 +20,7 @@ export class NativeStatus {
 }
 export enum Action {
   Session='session', Available='availableTabs', Observe='observe', Fill='fill', Click='click',
-  Navigate='navigate', Create='createTab', Close='closeTab'
+  Navigate='navigate', Create='createTab', Close='closeTab', Execute='execute'
 }
 export enum Effect { Allow='allow', Deny='deny', Ask='ask' }
 export class PolicyKey {
@@ -36,7 +36,7 @@ export enum Method {
   Close = 'closeTab', Release = 'release', Html = 'html', Fill = 'fill', Click = 'click',
   Navigate = 'navigate', Capabilities = 'capabilities', Attach = 'cdpAttach', CDP = 'cdp',
   Detach = 'cdpDetach', Event = 'cdpEvent', Heartbeat = 'heartbeat', Lost = 'clientLost', Available = 'availableTabs',
-  Snapshot = 'snapshot', Locate = 'locate', Network = 'network'
+  Snapshot = 'snapshot', Locate = 'locate', Network = 'network', Execute = 'execute'
 }
 export class Limit {
   static readonly Payload = 'payload_too_large';
@@ -59,8 +59,8 @@ export class Wire {
 export type Params = Record<string, any>;
 export interface RPC { jsonrpc: string; id?: string | number; method?: string; params?: Params; result?: any; error?: {code:number;message:string}; }
 export type Forward = (method: string, params: Params) => Promise<any>;
-export const PUBLIC = new Set<string>([Method.Request,Method.Status,Method.Tabs,Method.Create,Method.Close,Method.Release,Method.Html,Method.Fill,Method.Click,Method.Navigate,Method.Capabilities,Method.Available,Method.Snapshot,Method.Locate,Method.Network]);
-export const WRITES = new Set<string>([Method.Create,Method.Close,Method.Release,Method.Fill,Method.Click,Method.Navigate]);
+export const PUBLIC = new Set<string>([Method.Request,Method.Status,Method.Tabs,Method.Create,Method.Close,Method.Release,Method.Html,Method.Fill,Method.Click,Method.Navigate,Method.Capabilities,Method.Available,Method.Snapshot,Method.Locate,Method.Network,Method.Execute]);
+export const WRITES = new Set<string>([Method.Create,Method.Close,Method.Release,Method.Fill,Method.Click,Method.Navigate,Method.Execute]);
 export class Autostart {
   static readonly Client = 'BB_CLIENT_CONFIG';
   static readonly Flag = 'BB_BROKER_AUTOSTART';

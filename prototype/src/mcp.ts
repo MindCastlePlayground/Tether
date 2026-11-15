@@ -10,6 +10,8 @@ import { Autostart } from "./autostart.js";
 import { I18n, McpHint, McpText } from "./i18n.js";
 import { BrowserWake } from "./wake.js";
 
+import { ExecuteSpec } from "./execute.js";
+
 class McpTools {
   static readonly EMPTY = z.object({});
   static readonly SESSION = z.object({ mode: z.enum(["newGroup", "attachExisting"]), url: z.string().optional(), tabId: z.number().int().nonnegative().optional(), groupName: z.string().max(80).regex(/^[^\u0000-\u001f\u007f]+$/).trim().min(1).optional() });
@@ -18,6 +20,11 @@ class McpTools {
   static readonly RELEASE = z.object({ sessionId: z.string(), seq: z.number().int().positive() });
   static readonly CREATE = z.object({ sessionId: z.string(), seq: z.number().int().positive(), url: z.string().optional() });
   static readonly PAGE = z.object({ sessionId: z.string(), pageId: z.string(), seq: z.number().int().positive() });
+  static readonly EXECUTE = McpTools.PAGE.extend({
+    mode: z.enum([ExecuteSpec.Playwright, ExecuteSpec.JavaScript]),
+    code: z.string().min(1).max(ExecuteSpec.Code),
+    timeoutMs: z.number().int().min(1).max(ExecuteSpec.MaxTimeout).optional(),
+  }).strict();
   static readonly HTML = z.object({ sessionId:z.string(), pageId:z.string(), offset:z.number().int().nonnegative().optional(), maxChars:z.number().int().min(1).max(30000).optional(), captureId:z.string().min(1).max(100).optional() }).strict();
   static readonly NETWORK = z.object({ sessionId: z.string(), pageId: z.string(), op: z.enum(NetworkOp.All), requestId: z.string().optional(), url: z.string().optional(), type: z.string().optional(), offset: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional(), maxChars: z.number().int().min(1).max(30000).optional() }).strict().refine(p => !([NetworkOp.Detail, NetworkOp.Body] as string[]).includes(p.op) || !!p.requestId, {message: 'requestIdRequired'});
   static readonly TARGET = (o: { selector?: string; ref?: string }) => (o.selector === undefined) !== (o.ref === undefined);
@@ -58,6 +65,7 @@ async function main(): Promise<void> {
     ["createTab", descriptions.createTab, McpTools.CREATE],
     ["closeTab", descriptions.closeTab, McpTools.PAGE],
     ["release", descriptions.release, McpTools.RELEASE],
+    [Method.Execute, descriptions.execute, McpTools.EXECUTE],
     [Method.Html, descriptions.html, McpTools.HTML],
     ["fill", descriptions.fill, McpTools.FILL],
     ["click", descriptions.click, McpTools.CLICK],

@@ -41,8 +41,9 @@ export class Policy {
         const host=url.hostname.toLowerCase(),base=p.hostname.toLowerCase();
         if(url.protocol.toLowerCase()!==p.protocol.toLowerCase()||url.port!==p.port||(o.includes('://*.')?host!==base&&!host.endsWith('.'+base):host!==base))continue;
       }
+      if(action===Action.Execute&&r[K.Effect]===Effect.Allow&&!r[K.Actions].includes(Action.Execute))continue;
       return r[K.Effect];
     }
-    return this.data[K.Default];
+    return action===Action.Execute?Effect.Deny:this.data[K.Default];
   }
 }

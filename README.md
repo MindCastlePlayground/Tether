@@ -16,6 +16,7 @@ The extension popup supports English and Simplified Chinese through Chrome local
 
 ## Features
 
+- Run a Playwright sequence or page JavaScript on an authorized tab with `execute`. [Enable and use execute](skills/tether-browser/SKILL.md#execute-scripts).
 - [Messenger test sandbox](sandbox/README.md): autonomous extension testing through eight MCP tools, with container shell, Playwright, screenshots and unrestricted CDP inside a dedicated browser.
 - Network inspection (`network`): capture requests on an authorized page, inspect headers, payloads, response status and bodies, with URL/type filters and pagination. `op: "http"` returns the captured requests and responses as `.http` text.
 - Support tools (`diagnose`, `wait`, `assert`, `records`) report runtime state, wait for page conditions, and export up to 200 identity-isolated in-memory metadata records. `trace` keeps navigate, click, fill, wait and assert entries, including filled values. `preset` saves steps, exports a Playwright script, and runs a saved preset on an authorized page.
@@ -45,8 +46,8 @@ Fresh Windows installation requires Node.js 22+ and Python 3.10+. After the inst
 npm install --package-lock=false
 node bin/tether.mjs install
 ```
-Versions follow `a.b.c`: major features or incompatible changes increment `a`, compatible features increment `b`, and fixes increment `c`. Major releases update all companion components and documentation. See the [3.4.0 release notes](docs/RELEASE-v3.4.0.md).
-The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker for the same runtime. Shared runtime mode `off` prevents MCP from starting it again. The default policy allows all requests, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
+Versions follow `a.b.c`: major features or incompatible changes increment `a`, compatible features increment `b`, and fixes increment `c`. Major releases update all companion components and documentation. See the [3.5.0 release notes](docs/RELEASE-v3.5.0.md).
+The installer auto-detects supported agent hosts, and a single command prepares the runtime, configures them, and opens the extension manager page and folder. The installer itself does not start Broker; once loaded, the extension manages it in default `auto` mode and probes every 30 seconds. MCP and Native Host can start Broker for the same runtime. Shared runtime mode `off` prevents MCP from starting it again. The default policy allows ordinary requests; `execute` requires an explicit rule, and `tether policy` adds fine-grained allow/deny/ask rules when wanted. Keep generated runtime credentials and private keys on this machine.
 
 ## First browser task
 
@@ -99,7 +100,7 @@ The folded tether mark connects a navy stem with a teal loop. [Brand assets](ass
 - [Verification summary](prototype/VERIFICATION.md) / [验收摘要](prototype/VERIFICATION.zh-CN.md).
 
 - [Development and releases](docs/DEVELOPMENT.md) — `dev` integration and `main` release workflow.
-- [Tether 3.4.0 release notes](docs/RELEASE-v3.4.0.md) / [简体中文](docs/RELEASE-v3.4.0.zh-CN.md).
+- [Tether 3.5.0 release notes](docs/RELEASE-v3.5.0.md) / [简体中文](docs/RELEASE-v3.5.0.zh-CN.md).
 
 ## Agent skill
 

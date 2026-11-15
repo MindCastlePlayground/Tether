@@ -82,13 +82,13 @@ node bin/tether.mjs extension --runtime "$env:LOCALAPPDATA\Tether\runtime" --bro
 
 ## 权限策略
 
-Broker 默认由策略托管：策略文件为 `<runtime>/.local/policy.json`，文件不存在表示全放行。文件热加载，修改后立即生效。规则按 first-match 匹配：
+Broker 默认由策略托管：策略文件为 `<runtime>/.local/policy.json`，文件不存在时普通操作默认放行。文件热加载，修改后立即生效。规则按 first-match 匹配：
 
 - `version` — 必须为 `1`。
 - `id` — 规则唯一标识。
 - `client` — `"*"` 或客户端身份。
 - `origin` — `"*"` 或 `scheme://host[:port]`；host 前导 `*.` 匹配子域和裸域。
-- `actions` — `session`、`availableTabs`、`observe`（同时覆盖 `snapshot` 与 `locate`）、`fill`、`click`、`navigate`、`createTab`、`closeTab` 或 `"*"`。
+- `actions` — `session`、`availableTabs`、`observe`（同时覆盖 `snapshot` 与 `locate`）、`fill`、`click`、`navigate`、`createTab`、`closeTab`、`execute` 或 `"*"`。
 - `effect` — `allow`、`deny` 或 `ask`；`ask` 仅适用于 `actions: ["session"]`。
 - `default` — 无规则匹配时为 `allow` 或 `deny`。
 
@@ -102,6 +102,8 @@ Broker 默认由策略托管：策略文件为 `<runtime>/.local/policy.json`，
   ]
 }
 ```
+
+`execute` 需要明确写出该动作的 allow 规则。默认效果和动作通配符放行均不授予脚本权限。授权时可限定客户端和站点来源。
 
 被拒请求返回 `policy_denied`。文件损坏或非法时，除 `capabilities` 外全部拒绝，错误为 `policy_invalid`（fail-closed）；`capabilities` 返回 `policy: {default, rules, valid}`。排队的写操作在执行时按页面当前 origin 重新检查。`ask` 命中的会话请求不会自动批准，需在弹窗中人工批准。
 

@@ -29,7 +29,7 @@ test('policy list prints the built-in default when unconfigured', async () => {
   const { code, out } = await Fixture.run(['policy', 'list', '--runtime', runtime, '--language', 'zh-CN']);
   assert.equal(code, 0);
   assert.deepEqual(JSON.parse(out.split('未配置')[0]), Policy.FALLBACK);
-  assert.match(out, /未配置，默认全放行/);
+  assert.match(out, /execute 需要显式授权/);
   assert.ok(!fs.existsSync(Fixture.file(runtime)));
 });
 

@@ -182,7 +182,7 @@ export class Install {
   static ANCHOR = '【选择此目录加载Tether扩展】.txt';
   static LOCATION = 'installation.json';
   static EXTENSION_LOCATION = 'extension-location.json';
-  static VERSION = '3.4.0';
+  static VERSION = '3.5.0';
   static RETRIES = 5;
   static RETRY_MS = 2000;
   static SERVER = 'tether';
@@ -214,6 +214,6 @@ export class Policy {
   static FLAGS = ['first'];
   static EFFECTS = [Policy.ALLOW, Policy.DENY, Policy.ASK];
   static DEFAULTS = [Policy.ALLOW, Policy.DENY];
-  static ACTIONS = [Policy.SESSION, 'availableTabs', 'observe', 'fill', 'click', 'navigate', 'createTab', 'closeTab'];
+  static ACTIONS = [Policy.SESSION, 'availableTabs', 'observe', 'fill', 'click', 'navigate', 'createTab', 'closeTab', 'execute'];
   static FALLBACK = { [Policy.KEY.VERSION]: Policy.VERSION, [Policy.KEY.DEFAULT]: Policy.ALLOW, [Policy.KEY.RULES]: [] };
 }

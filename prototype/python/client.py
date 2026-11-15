@@ -23,8 +23,9 @@ class Rpc:
     HTML = "html"
     NETWORK = "network"
     DIAGNOSE, WAIT, ASSERT, RECORDS, TRACE, PRESET = "diagnose", "wait", "assert", "records", "trace", "preset"
+    EXECUTE = "execute"
     BUSINESS = ("uploadStart", "uploadChunk", "uploadFinish", "uploadDrop", "downloadStart", "downloadRead", "downloadDrop", "dialog", "popupCandidates", "adoptPopup")
-    METHODS = frozenset(("requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", HTML, "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", NETWORK, DIAGNOSE, WAIT, ASSERT, RECORDS, TRACE, PRESET) + BUSINESS)
+    METHODS = frozenset(("requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", HTML, "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", NETWORK, DIAGNOSE, WAIT, ASSERT, RECORDS, TRACE, PRESET, EXECUTE) + BUSINESS)
 
 
 class PinnedContext(ssl.SSLContext):
@@ -107,6 +108,7 @@ class BridgeClient:
     def assert_condition(self, params: dict): return self.call(Rpc.ASSERT, params)
     def records(self, op="list"): return self.call(Rpc.RECORDS, {"op": op})
     def trace(self, params=None): return self.call(Rpc.TRACE, params or {"op": "list"})
+    def execute(self, params: dict): return self.call(Rpc.EXECUTE, params)
     def preset(self, params): return self.call(Rpc.PRESET, params)
 
     def call(self, method: str, params: dict):

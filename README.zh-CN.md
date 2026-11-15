@@ -16,6 +16,7 @@ Tether 面向个人浏览器任务和小团队流程，适合 Agent 或脚本在
 
 ## 功能
 
+- 在已授权标签页运行 Playwright 操作序列或页面 JavaScript（`execute`）。[开启并使用 execute](skills/tether-browser/SKILL.zh-CN.md#执行脚本)。
 - [信使测试沙箱](sandbox/README.md)：通过八个 MCP 工具无人值守测试扩展，提供容器命令、Playwright、截图和专用浏览器的完整 CDP 控制。
 - 网络流量检查（`network`）：监听已授权页面的请求，查看请求头、请求正文、响应状态和响应正文，按 URL/类型筛选与分页读取。`op: "http"` 把已采集的请求和响应导出为 `.http` 文本。
 - 支持工具（`diagnose`、`wait`、`assert`、`records`）可报告运行状态、等待页面条件，并导出最多 200 条按身份隔离的内存元数据。`trace` 保留 navigate、click、fill、wait、assert 条目，包含填写值。`preset` 保存步骤、导出 Playwright 脚本，并在已授权页面上执行已保存的预设。
@@ -45,8 +46,8 @@ Tether 面向个人浏览器任务和小团队流程，适合 Agent 或脚本在
 npm install --package-lock=false
 node bin/tether.mjs install
 ```
-版本号使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。详见 [3.4.0 发布说明](docs/RELEASE-v3.4.0.zh-CN.md)。
-安装器会自动检测受支持的 Agent 宿主，一条命令完成 runtime 准备与配置，并打开扩展管理页和扩展目录。安装器本身不启动 Broker；加载扩展后默认由 `auto` 模式管理，每 30 秒探测一次。MCP 与 Native Host 都可拉起同一 runtime 的 Broker；共享 runtime 模式为 `off` 时，MCP 不会重新拉起。默认策略全放行，需要精细控制时可用 `tether policy` 添加 allow/deny/ask 规则。生成的 runtime 凭据与私钥应留在本机。
+版本号使用 `a.b.c`：大功能或破坏性更新递增 `a`，兼容功能递增 `b`，修复递增 `c`。大版本必须同步更新所有配套组件和文档。详见 [3.5.0 发布说明](docs/RELEASE-v3.5.0.zh-CN.md)。
+安装器会自动检测受支持的 Agent 宿主，一条命令完成 runtime 准备与配置，并打开扩展管理页和扩展目录。安装器本身不启动 Broker；加载扩展后默认由 `auto` 模式管理，每 30 秒探测一次。MCP 与 Native Host 都可拉起同一 runtime 的 Broker；共享 runtime 模式为 `off` 时，MCP 不会重新拉起。普通操作默认放行，`execute` 需显式授权，需要精细控制时可用 `tether policy` 添加 allow/deny/ask 规则。生成的 runtime 凭据与私钥应留在本机。
 
 ## 第一次浏览器任务
 
@@ -99,7 +100,7 @@ Logo 以青绿色连接环绕过深蓝色竖笔，形成小写 t。[品牌资源
 - [验收摘要](prototype/VERIFICATION.zh-CN.md) / [Verification summary](prototype/VERIFICATION.md)。
 
 - [开发与发布](docs/DEVELOPMENT.zh-CN.md) — `dev` 开发集成与 `main` 发布流程。
-- [Tether 3.4.0 发布说明](docs/RELEASE-v3.4.0.zh-CN.md) / [English](docs/RELEASE-v3.4.0.md)。
+- [Tether 3.5.0 发布说明](docs/RELEASE-v3.5.0.zh-CN.md) / [English](docs/RELEASE-v3.5.0.md)。
 
 ## Agent Skill
 

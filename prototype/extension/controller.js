@@ -703,7 +703,8 @@ export class ExtensionController {
   }
 
   async cdp({ page }, p) {
-    await this.checkPage(page);
+    const tab = await this.checkPage(page);
+    if (p.expectedOrigin !== undefined && new URL(tab.url).origin !== p.expectedOrigin) throw new Error(Failure.Forbidden);
     if (!page.attached) throw new Error(Failure.Forbidden);
     if (p.childSessionId) {
       const targetId=this.childTargets.get(page.pageId)?.get(p.childSessionId);
@@ -885,6 +886,7 @@ export class ExtensionController {
     this.checkGroup(page, tab);
     if(tab.url===BrowserAction.NewTab&&!(allowBlank&&page.owned))throw new Error(Failure.Forbidden);
     this.safeUrl(tab.url, allowBlank && page.owned);
+    return tab;
   }
 
   checkGroup(page, tab) {

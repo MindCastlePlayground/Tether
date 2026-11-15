@@ -2,7 +2,7 @@ export class Rpc {
   static readonly JSONRPC = "2.0";
   static readonly AUTH = "Authorization";
   static readonly BEARER = "Bearer";
-  static readonly METHODS = ["requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", "html", "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", "network", "diagnose", "wait", "assert", "records", "trace", "preset", "uploadStart", "uploadChunk", "uploadFinish", "uploadDrop", "downloadStart", "downloadRead", "downloadDrop", "dialog", "popupCandidates", "adoptPopup"] as const;
+  static readonly METHODS = ["requestSession", "approvalStatus", "listTabs", "createTab", "closeTab", "release", "html", "fill", "click", "navigate", "capabilities", "availableTabs", "snapshot", "locate", "execute", "network", "diagnose", "wait", "assert", "records", "trace", "preset", "uploadStart", "uploadChunk", "uploadFinish", "uploadDrop", "downloadStart", "downloadRead", "downloadDrop", "dialog", "popupCandidates", "adoptPopup"] as const;
 }
 
 export class SupportMethod { static readonly Diagnose='diagnose'; static readonly Wait='wait'; static readonly Assert='assert'; static readonly Records='records'; static readonly Trace='trace'; static readonly Preset='preset'; static readonly Conditions=['text','url','visible','hidden','request'] as const; static readonly RecordOps=['list','export','clear'] as const; static readonly TraceOps=['list','export','clear'] as const; static readonly PresetOps=['save','get','list','delete','export','run'] as const; static readonly PresetKinds=['navigate','click','fill','check'] as const; }

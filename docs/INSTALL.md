@@ -82,13 +82,13 @@ After installation, restart/reload the agent and open the Tether toolbar popup. 
 
 ## Permission policy
 
-Broker is managed by default: the policy file is `<runtime>/.local/policy.json`, and its absence means all requests are allowed. The file is hot-reloaded, so edits take effect immediately. Rules are evaluated first-match:
+Broker is managed by default: the policy file is `<runtime>/.local/policy.json`, and its absence permits ordinary actions. The file is hot-reloaded, so edits take effect immediately. Rules are evaluated first-match:
 
 - `version` — must be `1`.
 - `id` — unique rule identifier.
 - `client` — `"*"` or a client identity.
 - `origin` — `"*"` or `scheme://host[:port]`; a leading `*.` in the host matches subdomains and the bare domain.
-- `actions` — `session`, `availableTabs`, `observe` (also covers `snapshot` and `locate`), `fill`, `click`, `navigate`, `createTab`, `closeTab`, or `"*"`.
+- `actions` — `session`, `availableTabs`, `observe` (also covers `snapshot` and `locate`), `fill`, `click`, `navigate`, `createTab`, `closeTab`, `execute`, or `"*"`.
 - `effect` — `allow`, `deny`, or `ask`; `ask` is only valid with `actions: ["session"]`.
 - `default` — `allow` or `deny` when no rule matches.
 
@@ -102,6 +102,8 @@ Broker is managed by default: the policy file is `<runtime>/.local/policy.json`,
   ]
 }
 ```
+
+Scripts require an explicit `execute` allow rule. The default effect and wildcard allow rules do not grant scripting. Match a specific client and origin when granting script access.
 
 A denied request returns `policy_denied`. A corrupt or invalid file rejects everything except `capabilities` with `policy_invalid` (fail-closed); `capabilities` reports `policy: {default, rules, valid}`. A queued write is re-checked against the page's current origin when it executes. With `ask`, that session request is not auto-approved and needs manual approval in the popup.
 

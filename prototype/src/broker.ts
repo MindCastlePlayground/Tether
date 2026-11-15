@@ -9,6 +9,7 @@ import { Policy } from './policy.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Config } from './config.js';
 import { Engine } from './engine.js';
+import { ExecuteSpec } from './execute.js';
 import { Support, Journal, Conditions } from './support.js';
 import { Trace, Presets } from './preset.js';
 import { BusinessApi } from './business-api.js';
@@ -129,11 +130,12 @@ export class Broker {
     if(msg.method===Method.Capabilities)return {prototype:'M0',version:Brand.Version,browserConnected:!!this.host,engine:'playwright-core-1.64.0',available:[...PUBLIC,...Support.Methods],locators:['ref','selector','role','text','xpath-text-rewrite','actionable-ancestor'],unsupported:['rawCDP'],policy:this.policy.summary()};
     if(BusinessApi.Names.includes(msg.method))BusinessApi.valid(msg.method,msg.params);
     const params:Params={...msg.params,clientId};
+    if(msg.method===Method.Execute)ExecuteSpec.validate(params);
     const who=Broker.identity(clientId);this.policy.check(who,null,null);
     const action=msg.method===Method.Request?Action.Session:Find.Reads.has(msg.method)||msg.method===Method.Network?Action.Observe:Object.values(Action).find(a=>a===msg.method)??null;
     let origin:string|null=null;let pages:Params[]|undefined;
     if(action===Action.Navigate||action===Action.Create||(action===Action.Session&&params.mode===PolicyKey.New))origin=params.url??null;
-    else if([Action.Observe,Action.Fill,Action.Click,Action.Close].includes(action as Action)||(action===Action.Session&&params.mode===PolicyKey.Attach)){
+    else if([Action.Observe,Action.Fill,Action.Click,Action.Close,Action.Execute].includes(action as Action)||(action===Action.Session&&params.mode===PolicyKey.Attach)){
       try{
         const tabs=await this.forward(action===Action.Session?Method.Available:Method.Tabs,{clientId,sessionId:params.sessionId});
         pages=Array.isArray(tabs)?tabs:(tabs?.pages??tabs?.tabs??[]);
@@ -164,6 +166,20 @@ export class Broker {
     l.tail=dialog?Promise.allSettled([l.tail,result]).then(()=>{}):result;l.records.set(params.seq,{body,result,at:Date.now()});return result;
   }
   private async run(method:string,p:Params,known?:Params[]):Promise<any>{
+    if(method===Method.Execute){
+      const check=(url:string,actions:Action[]=[]):void=>{
+        if(!this.clients.has(p.clientId))throw Error('client_disconnected');
+        const identity=Broker.identity(p.clientId);
+        if(!/^https?:\/\//.test(url)||[Action.Execute,...actions].some(action=>this.policy.check(identity,action,url)!==Effect.Allow))
+          throw Error(PolicyKey.Denied);
+      };
+      const tabs=await this.forward(Method.Tabs,{clientId:p.clientId,sessionId:p.sessionId});
+      const pages:Params[]=Array.isArray(tabs)?tabs:(tabs.pages??tabs.tabs??[]);
+      const page=pages.find(tab=>tab.pageId===p.pageId);
+      if(!page)throw Error('page_forbidden');
+      check(page.url??'');
+      return this.engine.script(p,check);
+    }
     if(method===BusinessApi.PopupCandidates||method===BusinessApi.AdoptPopup){
       const candidates=await this.forward(BusinessApi.PopupCandidates,{clientId:p.clientId,sessionId:p.sessionId});
       const tabs=(candidates.tabs??[]).filter((tab:Params)=>this.policy.check(Broker.identity(p.clientId),Action.Create,tab.url??null)!==Effect.Deny);

@@ -43,6 +43,7 @@ export class BridgeClient {
   closeTab(p:{sessionId:string;pageId:string;seq:number}){return this.call('closeTab',p);}
   release(p:{sessionId:string;seq:number}){return this.call('release',p);}
   html(p:{sessionId:string;pageId:string;offset?:number;maxChars?:number;captureId?:string}){return this.call('html',p);}
+  execute(p:{sessionId:string;pageId:string;seq:number;mode:'playwright'|'javascript';code:string;timeoutMs?:number}){return this.call('execute',p);}
   fill(p:{sessionId:string;pageId:string;seq:number;selector?:string;ref?:string;value:string;observe?:{scope?:string;scopeRef?:string;maxChars?:number}}){return this.call('fill',p);}
   click(p:{sessionId:string;pageId:string;seq:number;selector?:string;ref?:string;observe?:{scope?:string;scopeRef?:string;maxChars?:number}}){return this.call('click',p);}
   snapshot(p:{sessionId:string;pageId:string;scope?:string;scopeRef?:string;outline?:boolean;depth?:number;maxChars?:number}){return this.call('snapshot',p);}

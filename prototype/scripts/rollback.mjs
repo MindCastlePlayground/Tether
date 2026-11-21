@@ -15,7 +15,7 @@ export class Rollback {
   static MARKER = '.tether-install.json';
   static LOCATION = 'extension-location.json';
   static STATE = '.local/broker-state.json';
-  static SOURCE = ['package.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/locales.mjs', 'scripts/launchers.ps1', 'scripts/register.ps1', 'scripts/update.mjs', 'scripts/rollback.mjs', 'update.cmd', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
+  static SOURCE = ['package.json', 'tsconfig.json', 'src', 'extension', 'python', 'scripts/setup.py', 'scripts/certificate.py', 'scripts/locales.mjs', 'scripts/launchers.ps1', 'scripts/register.ps1', 'scripts/update.mjs', 'scripts/rollback.mjs', 'update.cmd', 'README.md', 'README.zh-CN.md', 'VERIFICATION.md', 'VERIFICATION.zh-CN.md'];
   static EXTRA = ['dist', 'node_modules'];
   static SKIP = new Set([Rollback.DIR, Rollback.NEXT, Rollback.PREV, Rollback.HOLD, '.local']);
   static MODES = ['auto', 'on', 'off'];

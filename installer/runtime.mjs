@@ -29,11 +29,21 @@ export class Runtime {
     if (path.resolve(native.path).toLowerCase() !== path.join(root, '.local', 'host.exe').toLowerCase()) throw new Error('Native host points to another runtime; regenerate its launchers/configuration before use.');
   }
   static prepare(root, source, options) {
+    if (options[InstallOption.NO_CERTIFICATE]) {
+      if (process.env.BB_LAN_IP) throw new Error('--no-certificate requires loopback; unset BB_LAN_IP.');
+      const broker = path.join(root, '.local', 'broker.json');
+      if (fs.existsSync(broker) && Files.json(broker).transport !== InstallOption.LOCAL_TRANSPORT) {
+        throw new Error('--no-certificate requires a fresh install with a new --home.');
+      }
+    }
     if (options.runtime && !options[InstallOption.UPGRADE] && !options[InstallOption.FORCE]) { Runtime.check(root); return; }
     const marker = path.join(root, Install.MARKER);
     if (fs.existsSync(root)) {
       if (!fs.existsSync(marker)) throw new Error(`Runtime directory already exists: ${root}. Use --runtime for a configured checkout, or choose a new --home.`);
       const meta = Files.json(marker);
+      if (!meta[Mark.READY] && meta[InstallOption.NO_CERTIFICATE]) {
+        options = { ...options, [InstallOption.NO_CERTIFICATE]: true };
+      }
       const version = meta[Mark.VERSION];
       if (version !== Install.VERSION && !options[InstallOption.UPGRADE] && !options[InstallOption.FORCE]) throw new Error(`Runtime ${root} is version ${version}. Run ${Hint.UPGRADE} or install --upgrade.`);
       // An interrupted upgrade resumes as an upgrade; an interrupted first install finishes setup.
@@ -48,7 +58,10 @@ export class Runtime {
     }
     fs.mkdirSync(root, { recursive: true });
     // The marker permits resuming a failed first install without erasing any credentials.
-    Runtime.mark(root, { [Mark.READY]: false });
+    Runtime.mark(root, {
+      [Mark.READY]: false,
+      ...(options[InstallOption.NO_CERTIFICATE] ? { [InstallOption.NO_CERTIFICATE]: true } : {})
+    });
     Runtime.step(options, Phase.COPY);
     for (const name of Install.SOURCE) Files.copy(path.join(source, name), path.join(root, name));
     Runtime.finish(root, options);
@@ -75,6 +88,11 @@ export class Runtime {
     Runtime.npm(['run', 'build'], root);
   }
   static pip(root) { Runtime.run(Runtime.py(root), ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', path.join(root, 'python', 'requirements.txt')], root); }
+  static setup(root, options) {
+    const args = ['-B', path.join(root, 'scripts', 'setup.py')];
+    if (options[InstallOption.NO_CERTIFICATE]) args.push(`--${InstallOption.NO_CERTIFICATE}`);
+    Runtime.run(Runtime.py(root), args, root, { ...process.env, BB_LANGUAGE: options.language });
+  }
   static swap(root, source, options = {}) {
     const a = path.resolve(root), b = path.resolve(source);
     if (a === b || a.startsWith(`${b}${path.sep}`) || b.startsWith(`${a}${path.sep}`)) throw new Error('Runtime source and destination must be separate, non-nested directories.');
@@ -107,7 +125,7 @@ export class Runtime {
     Runtime.pip(root);
     const env = { ...process.env, BB_LANGUAGE: options.language };
     Runtime.step(options, Phase.SETUP);
-    Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+    Runtime.setup(root, options);
     Runtime.step(options, Phase.LAUNCHERS);
     Runtime.ps(path.join(root, 'scripts', 'launchers.ps1'), root, env);
     Runtime.check(root);
@@ -128,9 +146,16 @@ export class Runtime {
     if (seen.broker || seen.host) console.log(t.busy.service);
     if (seen.mcp) console.log(t.busy.mcp(seen.mcp));
     const paused = resumed ? meta[Mark.PAUSED] ?? null : Service.pause(root);
-    Runtime.mark(root, { [Mark.READY]: false, [Mark.UPGRADE]: true, [Mark.PAUSED]: paused, [Mark.RUNNING]: Boolean(meta[Mark.RUNNING]) });
+    const noCertificate = options[InstallOption.NO_CERTIFICATE] || meta[InstallOption.NO_CERTIFICATE];
+    const upgrading = {
+      [Mark.READY]: false,
+      [Mark.UPGRADE]: true,
+      [Mark.PAUSED]: paused,
+      ...(noCertificate ? { [InstallOption.NO_CERTIFICATE]: true } : {})
+    };
+    Runtime.mark(root, { ...upgrading, [Mark.RUNNING]: Boolean(meta[Mark.RUNNING]) });
     const running = Service.halt(root) || (resumed && Boolean(meta[Mark.RUNNING]));
-    Runtime.mark(root, { [Mark.READY]: false, [Mark.UPGRADE]: true, [Mark.PAUSED]: paused, [Mark.RUNNING]: running });
+    Runtime.mark(root, { ...upgrading, [Mark.RUNNING]: running });
     const save = !resumed && meta[Mark.READY] === true;
     let kept;
     try {
@@ -145,9 +170,8 @@ export class Runtime {
       Runtime.deps(root);
       Runtime.step(options, Phase.PIP);
       Runtime.pip(root);
-      // setup.py returns immediately when .local/broker.json already exists.
-      const env = { ...process.env, BB_LANGUAGE: options.language };
-      Runtime.run(Runtime.py(root), [path.join(root, 'scripts', 'setup.py')], root, env);
+      // Preserve credentials and enable renewal for eligible existing certificates.
+      Runtime.setup(root, { ...options, [InstallOption.NO_CERTIFICATE]: noCertificate });
       Runtime.step(options, Phase.SYNC);
       Runtime.sync(root, { ...options, [InstallOption.UPGRADE]: true });
     } catch (error) {

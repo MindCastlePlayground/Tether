@@ -78,7 +78,11 @@ node bin/tether.mjs extension --runtime "$env:LOCALAPPDATA\Tether\runtime" --bro
 
 启用开发者模式，选择**加载已解压的扩展程序**，再选择包含 `manifest.json` 和 `【选择此目录加载Tether扩展】.txt` 的扩展目录。必须选择该目录本身，不要选择父目录或 manifest 文件。这一步需要在浏览器中手动完成；Tether 不会静默安装扩展，也不会发布到浏览器商店。`--browser chrome|edge` 选择打开哪个管理页。
 
-安装后重启/重新加载 Agent，并打开 Tether 工具栏弹窗，可手动开启或关闭扩展管理。默认 `auto` 模式每 30 秒探测；证书过期时应更新配套证书和 pin，并保持 TLS 验证开启。连接故障排查和有意保留的手动配置备用流程见[设置参考](../skills/tether-browser/references/setup.zh-CN.md)和[原型指南](../prototype/README.zh-CN.md)。
+安装后重启或重新加载 Agent，并打开 Tether 工具栏弹窗，可手动开启或关闭扩展管理。默认 `auto` 模式每 30 秒探测。连接故障排查和手动配置见[设置参考](../skills/tether-browser/references/setup.zh-CN.md)和[原型指南](../prototype/README.zh-CN.md)。
+
+**证书自动续期。** 默认安装在每台设备上独立生成私钥、证书和 pin。Broker 仅在启动或收到新连接时检查证书，到期后即时续期。空闲时没有定时检查。续期沿用私钥和 pin，运行中的 Broker 热加载新证书，现有连接无需断开。旧版本由 Tether 生成的本机证书在升级时纳入自动续期，过期证书也可以续发。使用局域网配置或自备证书时，由管理员管理证书并更新远端客户端的信任配置。
+
+**本机无证书模式。** 全新安装时加上 `--no-certificate`，例如 `.\install.bat install --agent codex --no-certificate`。该模式只监听 `127.0.0.1`，继续使用 token 认证客户端。连接使用明文，本机上能监听流量或抢占 Broker 端口的进程可能获取 token，因此默认使用 TLS。已有 TLS 安装若要切换，先关闭旧 Broker 的自动启动并停止它，再用新的 `--home` 安装并加载新扩展。两个 runtime 使用同一个本机端口。
 
 ## 权限策略
 

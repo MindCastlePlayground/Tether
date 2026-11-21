@@ -78,7 +78,11 @@ node bin/tether.mjs extension --runtime "$env:LOCALAPPDATA\Tether\runtime" --bro
 
 Enable Developer mode, choose **Load unpacked**, and select the shown extension folder containing `manifest.json` and `【选择此目录加载Tether扩展】.txt`. Select the directory itself, not its parent or the manifest file. This is a manual browser step; Tether does not silently install an extension or publish it to a browser store. `--browser chrome|edge` selects which manager opens.
 
-After installation, restart/reload the agent and open the Tether toolbar popup. Use the popup to enable or disable extension management. In default `auto` mode it probes every 30 seconds. Renew expired certificates with the matching pin; keep TLS verification enabled. For connection troubleshooting and the deliberate manual setup fallback, see [the setup reference](../skills/tether-browser/references/setup.md) and [prototype guide](../prototype/README.md).
+After installation, restart or reload the agent and open the Tether toolbar popup. Use the popup to enable or disable extension management. In default `auto` mode it probes every 30 seconds. For troubleshooting and manual setup, see [the setup reference](../skills/tether-browser/references/setup.md) and [prototype guide](../prototype/README.md).
+
+**Automatic certificate renewal.** By default, each installation generates its own private key, certificate, and pin. The Broker checks its certificate at startup and when accepting a new connection. It renews expired certificates on demand, keeping the private key and pin and hot-loading the replacement without interrupting existing connections. Upgrading enrolls eligible Tether-generated loopback certificates, including expired ones. LAN and custom certificates remain administrator-managed so remote clients can update their trust configuration.
+
+**Certificate-free loopback mode.** Pass `--no-certificate` on a fresh install, for example `.\install.bat install --agent codex --no-certificate`. The Broker listens only on `127.0.0.1` and still authenticates clients with tokens. This connection is plaintext, so local software that can observe traffic or impersonate the Broker on its port could capture a token. TLS is the default. To switch an existing TLS installation, disable auto-start and stop the old Broker, install with a new `--home`, and load the new extension. Both runtimes use the same local port.
 
 ## Permission policy
 

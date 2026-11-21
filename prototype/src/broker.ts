@@ -1,7 +1,8 @@
-import { createServer, type Server } from 'node:https';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createServer as createSecureServer, Server as SecureServer } from 'node:https';
+import { createServer as createPlainServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual, X509Certificate } from 'node:crypto';
 import { BlockList } from 'node:net';
 import { pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -29,13 +30,17 @@ export class Broker {
   private servers:Server[]=[];private sockets=new Set<WebSocket>();
   private timer?:NodeJS.Timeout;
   private policy:Policy;
-  constructor(private cfg:any,file?:string){this.policy=new Policy(cfg.policyFile??join(file?dirname(file):process.cwd(),PolicyKey.File));}
+  constructor(private cfg:any,private file?:string){this.policy=new Policy(cfg.policyFile??join(file?dirname(file):process.cwd(),PolicyKey.File));}
   async start():Promise<void>{
+    const plain = this.cfg.transport === Config.LocalTransport;
+    if ((this.cfg.transport !== undefined && !plain) || (plain && this.cfg.lan)) throw Error('invalid_transport');
+    const renew = !plain && !this.cfg.lan && this.cfg.autoCertificate === true;
     const binds=[{ip:'127.0.0.1',port:this.cfg.port,cidrs:['127.0.0.1/32']}];
     if(this.cfg.lan){if(!Config.privateIP(this.cfg.lan.ip)||this.cfg.lan.ip==='127.0.0.1'||!this.cfg.lan.cidrs?.length)throw Error('invalid_lan');binds.push(this.cfg.lan);}
     try { for(const bind of binds){
       const allow=new BlockList();for(const cidr of bind.cidrs){const [ip,bits]=cidr.split('/');if(!Config.privateIP(ip)||!/^\d+$/.test(bits)||+bits<8||+bits>32)throw Error('invalid_cidr');allow.addSubnet(ip,+bits,'ipv4');}
-      const server=createServer({key:readFileSync(this.cfg.keyFile),cert:readFileSync(this.cfg.certFile),minVersion:'TLSv1.2'},(req,res)=>this.control(req,res));
+      const control = (req: IncomingMessage, res: ServerResponse) => this.control(req, res);
+      const server = plain ? createPlainServer(control) : this.secureServer(control, renew);
       const wss=new WebSocketServer({noServer:true,maxPayload:Limit.Frame,perMessageDeflate:false});
       server.on('upgrade',(req,socket,head)=>{
         const ip=req.socket.remoteAddress??'';const auth=req.headers[Wire.Auth];
@@ -51,6 +56,40 @@ export class Broker {
       await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(bind.port,bind.ip,()=>resolve());});this.servers.push(server);
     } } catch (err) { await this.stop(); throw err; }
     this.timer=setInterval(()=>this.heartbeat(),Limit.Heartbeat);
+  }
+  private secureServer(control: (req: IncomingMessage, res: ServerResponse) => void, renew: boolean): SecureServer {
+    let credentials = this.credentials();
+    if (!renew) return createSecureServer(credentials, control);
+    const expired = () => Date.now() >= expiry;
+    let expiry = new X509Certificate(credentials.cert).validToDate.getTime();
+    if (expired()) {
+      credentials = this.renewCertificate();
+      expiry = new X509Certificate(credentials.cert).validToDate.getTime();
+    }
+    const server = createSecureServer(credentials, control);
+    // Run before Node wraps the socket in TLS so even IP clients without SNI get the new certificate.
+    server.prependListener('connection', socket => {
+      if (!expired()) return;
+      try {
+        const next = this.renewCertificate();
+        server.setSecureContext(next);
+        expiry = new X509Certificate(next.cert).validToDate.getTime();
+      } catch {
+        socket.destroy();
+        process.stderr.write('broker_certificate_renewal_failed\n');
+      }
+    });
+    return server;
+  }
+  private credentials() {
+    return {key:readFileSync(this.cfg.keyFile), cert:readFileSync(this.cfg.certFile), minVersion:'TLSv1.2' as const};
+  }
+  private renewCertificate() {
+    if (!this.file) throw Error('certificate_runtime_required');
+    const root = dirname(dirname(this.file));
+    const python = process.platform === 'win32' ? join(root,'.venv','Scripts','python.exe') : join(root,'.venv','bin','python');
+    execFileSync(python, ['-B', join(root,'scripts','setup.py'), '--renew'], {windowsHide:true, timeout:15000});
+    return this.credentials();
   }
   private heartbeat():void{
     const host=this.host;

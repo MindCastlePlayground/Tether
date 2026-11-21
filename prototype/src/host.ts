@@ -17,7 +17,7 @@ export class NativeHost {
   constructor(private cfg:any,origin:string,file:string){
     if(origin!==`chrome-extension://${cfg.extensionId}/`)throw Error(Status.Origin);
     if(new URL(cfg.url).hostname!=='127.0.0.1')throw Error(Status.Config);
-    Config.tls(cfg);
+    Config.endpoint(cfg);
     this.life=new BrokerLifecycle(file);
     this.file=file;
     process.stdin.on('data',(data:Buffer)=>this.feed(data));
@@ -34,16 +34,18 @@ export class NativeHost {
     const state=change ? await this.life.set(mode!) : prior.mode===C.Auto ? await this.life.ensure() : await this.life.inspect();
     const policy=this.life.policy();const build=this.build();
     NativeHost.write(Buffer.from(JSON.stringify({type:C.Status,...state,...(policy?{[PolicyKey.Summary]:policy}:{}),...(build?{[C.Extension]:{[C.Build]:build}}:{})})));
-    if(state.state===C.Running){this.connect();return;}
+    if(state.state===C.Running){await this.connect();return;}
     if(state.mode!==C.Off)this.later();
     if(state.state===C.Starting&&this.ws?.readyState===WebSocket.OPEN)return;
     if(this.ws){this.ws.terminate();this.ws=undefined;}
     this.queue=[];
     NativeHost.status(Status.Error,state.code??(state.mode===C.Off?C.Disabled:Status.Offline));
   }
-  private connect():void {
+  private async connect():Promise<void> {
     if(this.stopped||this.ws?.readyState===WebSocket.OPEN||this.ws?.readyState===WebSocket.CONNECTING)return;
-    const ws=new WebSocket(this.cfg.url,{...Config.tls(this.cfg),handshakeTimeout:Status.Timeout});this.ws=ws;
+    await Config.prepare(this.cfg);
+    if(this.stopped)return;
+    const ws=new WebSocket(this.cfg.url,{...Config.connection(this.cfg),handshakeTimeout:Status.Timeout});this.ws=ws;
     ws.on('open',()=>{if(this.ws!==ws)return;this.delay=C.RetryMs;NativeHost.status(Status.Connected);for(const body of this.queue)ws.send(body.toString('utf8'));this.queue=[];});
     ws.on('message',data=>{const body=Buffer.from(data.toString());if(body.length>Limit.Frame)return this.stop(Status.Frame);NativeHost.write(body);});
     let reported=false;

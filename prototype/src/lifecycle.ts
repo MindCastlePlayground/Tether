@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { request } from 'node:https';
+import { request as secureRequest } from 'node:https';
+import { request as plainRequest } from 'node:http';
 import { connect } from 'node:net';
 import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -71,10 +72,10 @@ export class BrokerLifecycle {
       let s = this.state();
       if (s.mode === C.Off || s.state === C.Blocked || Date.now() < s.retryAt) return s;
       const cfg = Config.load(this.cfgPath);
-      const target = new URL(cfg.url);
+      const target = Config.endpoint(cfg);
       const brokerFile = join(dirname(this.cfgPath), Opt.Broker);
       const broker = Config.load(brokerFile);
-      if (target.hostname !== Opt.Host || Number(target.port) !== broker.port) return this.fail(s, C.Error);
+      if (target.hostname !== Opt.Host || Number(target.port) !== broker.port || cfg.transport !== broker.transport) return this.fail(s, C.Error);
       // A listening socket alone does not prove that this is our Broker.
       if (await this.listening()) {
         try { await this.control(C.Health); return this.running(s); }
@@ -130,11 +131,15 @@ export class BrokerLifecycle {
       sock.setTimeout(C.ProbeMs, () => end(false)); sock.once('connect', () => end(true)); sock.once('error', () => end(false));
     });
   }
-  private control(path: string, host = false): Promise<void> {
+  private async control(path: string, host = false): Promise<void> {
     const cfg = Config.load(host ? join(dirname(this.cfgPath), C.HostFile) : this.cfgPath);
-    const url = new URL(cfg.url); url.protocol=C.Https; url.pathname = path;
+    const url = Config.endpoint(cfg);
+    const plain = url.protocol === Config.PlainWebSocket;
+    const request = plain ? plainRequest : secureRequest;
+    url.protocol = plain ? 'http:' : C.Https; url.pathname = path;
+    await Config.prepare(cfg);
     return new Promise((resolve, reject) => {
-      const req = request(url, { ...Config.tls(cfg), method: host ? C.Post : C.Get }, res => {
+      const req = request(url, { ...Config.connection(cfg), method: host ? C.Post : C.Get }, res => {
         let body = '';
         res.on('data', data => { body += data; if (body.length > C.ReadLimit) req.destroy(Error(C.Port)); });
         res.on('end', () => {

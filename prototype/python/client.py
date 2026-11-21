@@ -1,4 +1,5 @@
 import base64
+import datetime
 import hashlib
 import ipaddress
 import json
@@ -45,6 +46,8 @@ class PinnedContext(ssl.SSLContext):
 
 
 class BridgeClient:
+    LOCAL_TRANSPORT = "loopback"
+    LOOPBACK = "127.0.0.1"
     def __init__(self, config: dict):
         self.config = config
         self._validate()
@@ -64,10 +67,15 @@ class BridgeClient:
         try:
             u = urlsplit(self.config["url"])
             ip = ipaddress.ip_address(u.hostname or "")
-            pin = self.config["pin"]
-            decoded = base64.b64decode(pin, validate=True)
+            if u.path != "/bridge" or u.query or u.fragment or u.username is not None or u.password is not None or not self.config["token"]:
+                raise ClientError("invalidConfig")
+            if self.config.get("transport") == self.LOCAL_TRANSPORT:
+                if u.scheme != "ws" or str(ip) != self.LOOPBACK or not u.port:
+                    raise ClientError("invalidConfig")
+                return
+            decoded = base64.b64decode(self.config["pin"], validate=True)
             good = str(ip) == "127.0.0.1" or ip in ipaddress.ip_network("10.0.0.0/8") or ip in ipaddress.ip_network("172.16.0.0/12") or ip in ipaddress.ip_network("192.168.0.0/16")
-            if u.scheme != "wss" or u.path != "/bridge" or u.query or not isinstance(ip, ipaddress.IPv4Address) or not good or u.username or u.password or not self.config["token"] or not self.config["caFile"] or len(decoded) != 32:
+            if "transport" in self.config or u.scheme != "wss" or not isinstance(ip, ipaddress.IPv4Address) or not good or not self.config["caFile"] or len(decoded) != 32:
                 raise ClientError("invalidConfig")
         except (KeyError, TypeError, ValueError) as exc:
             raise ClientError("invalidConfig") from exc
@@ -75,18 +83,37 @@ class BridgeClient:
     def open(self):
         if self.ws is not None:
             return
-        try:
-            ctx = PinnedContext(ssl.PROTOCOL_TLS_CLIENT)
-            ctx.load_verify_locations(cafile=self.config["caFile"])
-        except (OSError, ValueError):
-            raise ClientError("invalidConfig") from None
-        ctx.pin = self.config["pin"]
+        ctx = None
+        if self.config.get("transport") != self.LOCAL_TRANSPORT:
+            try:
+                self._prepare_certificate()
+                ctx = PinnedContext(ssl.PROTOCOL_TLS_CLIENT)
+                ctx.load_verify_locations(cafile=self.config["caFile"])
+            except (OSError, ValueError):
+                raise ClientError("invalidConfig") from None
+            ctx.pin = self.config["pin"]
         try:
             self.ws = connect(self.config["url"], ssl=ctx, additional_headers={"Authorization": "Bearer " + self.config["token"]}, proxy=None, max_size=512*1024)
         except ClientError:
             raise
         except Exception as exc:
             raise ClientError(self._code(exc)) from None
+
+    def _prepare_certificate(self):
+        url = urlsplit(self.config["url"])
+        if url.hostname != self.LOOPBACK:
+            return
+        from cryptography import x509
+        cert = x509.load_pem_x509_certificate(Path(self.config["caFile"]).read_bytes())
+        if cert.not_valid_after_utc > datetime.datetime.now(datetime.timezone.utc):
+            return
+        # Complete an empty TCP connection so Broker can renew before TLS loads its trust file.
+        try:
+            with socket.create_connection((url.hostname, url.port or 443), timeout=5) as probe:
+                probe.shutdown(socket.SHUT_WR)
+                probe.recv(1)
+        except OSError:
+            pass  # The normal TLS connection reports the actual failure.
 
     @staticmethod
     def _code(exc):

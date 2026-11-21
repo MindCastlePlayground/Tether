@@ -26,6 +26,7 @@ export class Cli {
     if (options.action === Policy.ACTION.DEFAULT && args[0] && !args[0].startsWith('--')) options.value = args.shift();
     const values = policy ? [...Install.VALUES, ...Policy.VALUES] : command === Cmd.RECORDS ? [Arg.RUNTIME, Arg.HOME, InstallOption.OUTPUT] : [...Install.VALUES, InstallOption.EXTENSION_DIR];
     const flags = policy ? [...Install.FLAGS, ...Policy.FLAGS] : [...Install.FLAGS, ...Install.EXTRA_FLAGS];
+    if (command === Cmd.INSTALL) flags.push(InstallOption.NO_CERTIFICATE);
     while (args.length) {
       const token = args.shift();
       if (!token.startsWith('--')) throw new Error(`Unexpected argument: ${token}`);
@@ -37,9 +38,15 @@ export class Cli {
     if (options.scope !== undefined && ![Scope.PROJECT, Scope.USER].includes(options.scope)) throw new Error('Scope must be project or user');
     if (!Install.LANGUAGES.includes(options.language)) throw new Error('Language must be en or zh-CN');
     if (!Install.BROWSERS.includes(options.browser)) throw new Error('Browser must be chrome or edge');
+    if (options[InstallOption.NO_CERTIFICATE] && (options.runtime || options[InstallOption.UPGRADE])) {
+      throw new Error('--no-certificate requires a fresh install with a new --home.');
+    }
     return { command: options.help ? Cmd.HELP : command, options };
   }
   static help(language) {
+    console.log(language === 'zh-CN'
+      ? 'tether install --no-certificate [--home PATH]：全新安装时仅在本机使用无证书连接。'
+      : 'tether install --no-certificate [--home PATH]: use a certificate-free loopback connection on a fresh install.');
     console.log(language === 'zh-CN' ? 'tether update [--runtime PATH | --home PATH]：从官方 main 拉取并更新安装（需要 Git）。' : 'tether update [--runtime PATH | --home PATH]: fetch official main and update installation (requires Git).');
     console.log(language === 'zh-CN' ? 'tether rollback [--runtime PATH | --home PATH]：临时回到最近一次升级前保留的版本；再执行一次则回到被换下的版本。' : 'tether rollback [--runtime PATH | --home PATH]: temporarily return to the version saved before the latest upgrade; run it again to return to the replaced version.');
     if (language === 'zh-CN') {

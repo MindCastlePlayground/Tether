@@ -46,7 +46,7 @@ npm run build
 
 Load `prototype/extension/` as an unpacked extension in the existing browser. Fresh setup generates a local extension key/ID and updates `manifest.json`; use that machine's generated ID, not a historical README ID. Setup preserves existing configuration. The internal Native Messaging identifier remains `com.freebird.browser_bridge` for registration compatibility.
 
-Do not execute setup merely as a health check: it creates private material and can update the manifest on fresh installs. Certificates last 30 days and have no automatic rotation. Host registration is current-user Windows registry state. Existing launcher executables are preserved; regeneration requires stopping affected processes and replacing only the intended generated executable.
+Use `doctor --online` to check connectivity. Default loopback certificates last 30 days. At startup or on a new connection, the Broker renews expired certificates using the same private key and pin. Administrators manage LAN and custom certificates. Host registration uses the current user's Windows registry. Stop affected processes before regenerating launchers.
 
 ## Diagnose the failing layer
 
